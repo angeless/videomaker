@@ -150,25 +150,72 @@ results = search.search_by_resolution(min_width=1920)
 
 ## 常用操作
 
-### 生成剪映草稿
+### 全自动渲染（推荐）
+
+使用 FFmpeg 本地渲染，无需手动导入剪映：
+
+```bash
+python scripts/auto_render.py \
+    --script script.json \
+    --materials materials_index.json \
+    --output final_video.mp4 \
+    --width 1080 --height 1920
+```
+
+**功能：**
+- ✅ 视频拼接与转场
+- ✅ 双语字幕硬压制
+- ✅ BGM + 旁白音频混合
+- ✅ 磨皮滤镜（检测到人脸时）
+- ✅ 调色 LUT 应用
+
+### 剧本自适应重写
+
+当素材不足时，自动调整剧本而非强行匹配：
+
+```bash
+python scripts/adaptive_rewriter.py \
+    --script script.json \
+    --materials materials_index.json \
+    --output script_rewritten.json
+```
+
+**触发条件：**
+- 素材匹配度 < 0.6
+- 素材缺失
+- 时长不匹配
+
+### 三级确认流
+
+带超时熔断的阻塞式确认：
 
 ```python
-# 使用脚本生成标准剪映草稿文件
+from scripts.orchestrator import WorkflowOrchestrator, Stage
+
+orchestrator = WorkflowOrchestrator(
+    timeout_seconds=600,  # 10分钟超时
+    default_strategy="conservative"
+)
+
+# 运行完整工作流
+result = orchestrator.run_full_workflow(
+    initial_context={"project_name": "冰岛之旅"},
+    user_input_func=get_user_input  # 你的输入函数
+)
+```
+
+**确认点：**
+1. **策划确认** - 大纲 + 素材清单
+2. **素材确认** - 匹配结果 + 重写建议
+3. **渲染确认** - 最终参数
+
+### 传统方式（剪映草稿）
+
+如需剪映手动调整，仍可生成 JSON 草稿：
+
+```bash
 python scripts/generate_jianying_json.py \
     --script script.json \
     --materials materials_index.json \
     --output draft.json
 ```
-
-### 添加双语字幕
-
-字幕轨道格式遵循剪映 JSON 规范，包含：
-- 时间轴对齐
-- 中文主字幕 + 英文副字幕
-- 样式配置（字体、大小、位置）
-
-### 素材语义搜索
-
-调用「视频素材整理 skill」进行：
-- 素材语义标注
-- 基于脚本内容的智能匹配

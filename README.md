@@ -27,7 +27,7 @@ pip install -r requirements.txt
 ffmpeg -version
 ```
 
-### 完整工作流
+### 完整工作流（全自动渲染）
 
 ```bash
 # 1. 分析素材（manage-videos）
@@ -40,11 +40,32 @@ python .agents/skills/video-editor/scripts/convert_index.py \
     --input results/video_analysis_*.json \
     --output materials_index.json
 
-# 3. 生成剪映草稿（video-editor）
+# 3. 剧本自适应重写（video-editor）
+python .agents/skills/video-editor/scripts/adaptive_rewriter.py \
+    --script script.json \
+    --materials materials_index.json \
+    --output script_final.json
+
+# 4. 全自动渲染（video-editor）- 无需剪映！
+python .agents/skills/video-editor/scripts/auto_render.py \
+    --script script_final.json \
+    --materials materials_index.json \
+    --output final_video.mp4 \
+    --width 1080 --height 1920
+
+# ✅ 完成！直接得到成品视频
+```
+
+### 传统方式（剪映草稿）
+
+如需剪映手动调整：
+
+```bash
 python .agents/skills/video-editor/scripts/generate_jianying_json.py \
     --script your-script.json \
     --materials materials_index.json \
     --output draft.json
+# 然后在剪映中导入 draft.json
 ```
 
 ## 📁 项目结构
