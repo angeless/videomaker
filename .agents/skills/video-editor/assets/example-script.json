@@ -1,0 +1,77 @@
+{
+  "title": "2024 冰岛之旅",
+  "description": "记录冰岛 ring road 自驾游的精彩瞬间",
+  "duration": 60,
+  "resolution": {
+    "width": 1080,
+    "height": 1920
+  },
+  "clips": [
+    {
+      "id": "clip_001",
+      "path": "./素材/冰岛/航拍/DJI_0001.mp4",
+      "start_time": 0,
+      "end_time": 8,
+      "source_start": 5,
+      "source_end": 13,
+      "description": "黑沙滩航拍，海浪拍打",
+      "tags": ["航拍", "黑沙滩", "海浪", "冰岛"]
+    },
+    {
+      "id": "clip_002",
+      "path": "./素材/冰岛/风景/DSC_0002.mp4",
+      "start_time": 7.5,
+      "end_time": 15,
+      "description": "塞里雅兰瀑布全景",
+      "tags": ["瀑布", "风景", "冰岛"],
+      "transition": {
+        "type": "fade",
+        "duration": 0.5
+      }
+    },
+    {
+      "id": "clip_003",
+      "path": "./素材/冰岛/人物/IMG_0003.mp4",
+      "start_time": 14.5,
+      "end_time": 22,
+      "description": "我在冰川前",
+      "tags": ["人物", "冰川", "自拍"]
+    }
+  ],
+  "subtitles": [
+    {
+      "id": "sub_001",
+      "start_time": 0,
+      "end_time": 8,
+      "cn_text": "冰岛的黑沙滩，\n大自然的鬼斧神工",
+      "en_text": "Iceland's black sand beach,\nNature's masterpiece"
+    },
+    {
+      "id": "sub_002",
+      "start_time": 8,
+      "end_time": 15,
+      "cn_text": "塞里雅兰瀑布\n高达60米的壮丽景观",
+      "en_text": "Seljalandsfoss\n60 meters of magnificence"
+    },
+    {
+      "id": "sub_003",
+      "start_time": 15,
+      "end_time": 22,
+      "cn_text": "站在这里\n感受到了人类的渺小",
+      "en_text": "Standing here\nI feel how small we are"
+    }
+  ],
+  "bgm": {
+    "path": "./素材/音乐/epic-landscape.mp3",
+    "start_time": 0,
+    "end_time": 60,
+    "volume": 0.35,
+    "mood": "史诗",
+    "fade_in": 2,
+    "fade_out": 3
+  },
+  "narration": {
+    "type": "recorded",
+    "path": "./素材/配音/narration_iceland.mp3"
+  }
+}

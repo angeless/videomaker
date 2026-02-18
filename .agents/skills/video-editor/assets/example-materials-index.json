@@ -1,0 +1,207 @@
+{
+  "version": "1.0",
+  "created_at": "2024-06-15T08:30:00",
+  "total_videos": 150,
+  "base_path": "/Users/username/素材库",
+  "categories": {
+    "冰岛": {
+      "count": 45,
+      "tags": ["航拍", "风景", "人物"]
+    },
+    "日本": {
+      "count": 65,
+      "tags": ["城市", "美食", "人文"]
+    },
+    "新西兰": {
+      "count": 40,
+      "tags": ["自然风光", "极限运动"]
+    }
+  },
+  "videos": {
+    "vid_001_abc123": {
+      "file_info": {
+        "filename": "DJI_0001.mp4",
+        "path": "/Users/username/素材库/冰岛/航拍/DJI_0001.mp4",
+        "relative_path": "冰岛/航拍/DJI_0001.mp4",
+        "file_size": 1234567890,
+        "file_size_human": "1.2 GB",
+        "created_time": "2024-06-15T08:30:00",
+        "modified_time": "2024-06-15T08:30:00"
+      },
+      "technical_summary": {
+        "duration": 45.5,
+        "duration_formatted": "00:00:45",
+        "resolution": "3840x2160",
+        "width": 3840,
+        "height": 2160,
+        "fps": 30,
+        "bitrate": "50000k",
+        "codec": "h264",
+        "has_audio": true,
+        "quality_score": 9.2,
+        "quality_level": "优秀"
+      },
+      "content_summary": {
+        "description": "无人机航拍冰岛黑沙滩，白色海浪拍打着黑色沙滩，壮观的海岸线",
+        "mood": "史诗、壮观、宁静",
+        "location": "冰岛 - Reynisfjara Beach",
+        "objects": ["海滩", "海浪", "悬崖", "天空"],
+        "notes": ["适合开场", "4K高清", "光线良好"]
+      },
+      "index_data": {
+        "tags": ["航拍", "冰岛", "海滩", "4K", "自然风光", "黑沙滩"],
+        "search_keywords": ["drone", "beach", "iceland", "waves", "black sand", "aerial"],
+        "preview_info": {
+          "thumbnail_path": "./thumbnails/DJI_0001.jpg",
+          "preview_frame": 450,
+          "duration": 45.5,
+          "resolution": "3840x2160",
+          "has_audio": true
+        }
+      },
+      "editing_info": {
+        "usable_segments": [
+          {
+            "start": 5.0,
+            "end": 13.0,
+            "duration": 8.0,
+            "description": "最佳航拍镜头，海浪拍打",
+            "quality_score": 9.5,
+            "suggested_for": ["开场", "转场"]
+          }
+        ],
+        "suggested_usage": ["开场", "过渡"],
+        "color_profile": {
+          "dominant_colors": ["#1a1a2e", "#16213e", "#ffffff"],
+          "color_temperature": "冷色调",
+          "brightness": "适中"
+        }
+      }
+    },
+    "vid_002_def456": {
+      "file_info": {
+        "filename": "DSC_0002.mp4",
+        "path": "/Users/username/素材库/冰岛/风景/DSC_0002.mp4",
+        "relative_path": "冰岛/风景/DSC_0002.mp4",
+        "file_size": 987654321,
+        "file_size_human": "943 MB",
+        "created_time": "2024-06-15T10:15:00",
+        "modified_time": "2024-06-15T10:15:00"
+      },
+      "technical_summary": {
+        "duration": 32.0,
+        "duration_formatted": "00:00:32",
+        "resolution": "1920x1080",
+        "width": 1920,
+        "height": 1080,
+        "fps": 60,
+        "bitrate": "25000k",
+        "codec": "h264",
+        "has_audio": true,
+        "quality_score": 8.8,
+        "quality_level": "优秀"
+      },
+      "content_summary": {
+        "description": "塞里雅兰瀑布正面全景，水雾弥漫，阳光照射形成彩虹",
+        "mood": "清新、自然、壮观",
+        "location": "冰岛 - Seljalandsfoss",
+        "objects": ["瀑布", "彩虹", "水雾", "岩石"],
+        "notes": ["60fps 适合慢动作", "有彩虹"]
+      },
+      "index_data": {
+        "tags": ["瀑布", "风景", "冰岛", "慢动作", "彩虹"],
+        "search_keywords": ["waterfall", "iceland", "seljalandsfoss", "rainbow", "slow motion"],
+        "preview_info": {
+          "thumbnail_path": "./thumbnails/DSC_0002.jpg",
+          "preview_frame": 960,
+          "duration": 32.0,
+          "resolution": "1920x1080",
+          "has_audio": true
+        }
+      },
+      "editing_info": {
+        "usable_segments": [
+          {
+            "start": 0,
+            "end": 7.5,
+            "duration": 7.5,
+            "description": "瀑布全景+彩虹",
+            "quality_score": 9.0,
+            "suggested_for": ["中段", "高潮"]
+          }
+        ],
+        "suggested_usage": ["中段展示"],
+        "color_profile": {
+          "dominant_colors": ["#4a90d9", "#87ceeb", "#ffffff"],
+          "color_temperature": "冷色调",
+          "brightness": "明亮"
+        }
+      }
+    },
+    "vid_003_ghi789": {
+      "file_info": {
+        "filename": "IMG_0003.mp4",
+        "path": "/Users/username/素材库/冰岛/人物/IMG_0003.mp4",
+        "relative_path": "冰岛/人物/IMG_0003.mp4",
+        "file_size": 543210987,
+        "file_size_human": "518 MB",
+        "created_time": "2024-06-16T14:20:00",
+        "modified_time": "2024-06-16T14:20:00"
+      },
+      "technical_summary": {
+        "duration": 18.5,
+        "duration_formatted": "00:00:18",
+        "resolution": "1920x1080",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30,
+        "bitrate": "20000k",
+        "codec": "h264",
+        "has_audio": true,
+        "quality_score": 8.5,
+        "quality_level": "良好"
+      },
+      "content_summary": {
+        "description": "人物站在冰川前，背景是巨大的蓝色冰川，人物穿着红色冲锋衣",
+        "mood": "冒险、震撼、人文",
+        "location": "冰岛 - Vatnajökull Glacier",
+        "objects": ["人物", "冰川", "雪山"],
+        "notes": ["有人物出镜", "需要磨皮", "红色衣服对比鲜明"]
+      },
+      "index_data": {
+        "tags": ["人物", "冰川", "自拍", "冰岛", "出镜"],
+        "search_keywords": ["person", "glacier", "vatnajokull", "self", "portrait", "iceland"],
+        "preview_info": {
+          "thumbnail_path": "./thumbnails/IMG_0003.jpg",
+          "preview_frame": 300,
+          "duration": 18.5,
+          "resolution": "1920x1080",
+          "has_audio": false
+        }
+      },
+      "editing_info": {
+        "usable_segments": [
+          {
+            "start": 2.0,
+            "end": 9.5,
+            "duration": 7.5,
+            "description": "人物最佳镜头",
+            "quality_score": 8.8,
+            "suggested_for": ["人文段落", "结尾"]
+          }
+        ],
+        "suggested_usage": ["人文展示", "情感段落"],
+        "color_profile": {
+          "dominant_colors": ["#1e3a5f", "#4a90d9", "#c41e3a"],
+          "color_temperature": "冷色调",
+          "brightness": "适中"
+        },
+        "post_processing": {
+          "needs_skin_smoothing": true,
+          "needs_color_grading": true,
+          "notes": "人物占比约30%，适合磨皮处理"
+        }
+      }
+    }
+  }
+}
