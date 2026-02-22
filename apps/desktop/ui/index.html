@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>视频制作助手</title>
+  <link rel="stylesheet" href="styles.css" />
+  <!-- Alpine.js -->
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <!-- Alpine 数据组件 -->
+  <script src="app.js"></script>
+</head>
+<body>
+
+<div id="app" x-data="app" x-cloak>
+
+  <!-- ──────────────────────────────────────────────────────────
+       顶部标题栏
+  ─────────────────────────────────────────────────────────────-->
+  <div class="titlebar">
+    <span class="title">视频制作助手</span>
+    <span class="project-path" x-text="projectDir || '未选择项目'"></span>
+    <div style="display:flex;gap:8px;margin-left:16px">
+      <button class="btn" :class="topModule==='analysis' ? 'btn-primary' : 'btn-ghost'"
+              style="font-size:12px;padding:5px 12px"
+              @click="switchModule('analysis')">
+        素材语义分析
+      </button>
+      <button class="btn" :class="topModule==='production' ? 'btn-primary' : 'btn-ghost'"
+              style="font-size:12px;padding:5px 12px"
+              @click="switchModule('production')">
+        制作视频
+      </button>
+    </div>
+    <span class="badge badge-warn" x-show="isHeavyBusy" style="margin-left:10px">重任务运行中</span>
+    <div style="display:flex;gap:8px;margin-left:auto">
+      <button class="btn btn-ghost" style="font-size:12px;padding:5px 10px"
+              @click="initMode='new'; showInit=true">
+        ＋ 新建
+      </button>
+      <button class="btn btn-ghost" style="font-size:12px;padding:5px 10px"
+              @click="initMode='open'; showInit=true">
+        ↗ 打开
+      </button>
+    </div>
+  </div>
+
+  <!-- ──────────────────────────────────────────────────────────
+       新建/打开项目 对话框（全屏遮罩）
+  ─────────────────────────────────────────────────────────────-->
+  <div x-show="showInit" style="
+    position:fixed;inset:0;z-index:100;
+    background:rgba(0,0,0,0.7);
+    display:flex;align-items:center;justify-content:center;
+  " x-transition.opacity>
+    <div class="card fade-in" style="width:480px;max-width:90vw">
+      <!-- Tab 切换 -->
+      <div style="display:flex;gap:0;margin-bottom:20px;border-bottom:1px solid var(--border)">
+        <button class="btn" :class="initMode==='new' ? 'btn-primary' : 'btn-ghost'"
+                style="border-radius:8px 0 0 0"
+                @click="initMode='new'; initError=''">新建项目</button>
+        <button class="btn" :class="initMode==='open' ? 'btn-primary' : 'btn-ghost'"
+                style="border-radius:0 8px 0 0"
+                @click="initMode='open'; initError=''">打开项目</button>
+      </div>
+
+      <!-- 新建项目 -->
+      <div x-show="initMode==='new'" class="fade-in">
+        <div class="form-field" style="margin-bottom:14px">
+          <div class="input-label">素材目录 *</div>
+          <div style="display:flex;gap:8px">
+            <input class="input" type="text" placeholder="/path/to/clips"
+                   x-model="initVideosDir" />
+            <button class="btn btn-ghost" @click="pickFolder('initVideosDir')">选择…</button>
+          </div>
+        </div>
+        <div class="form-field" style="margin-bottom:14px">
+          <div class="input-label">项目目录（可选，留空自动生成）</div>
+          <div style="display:flex;gap:8px">
+            <input class="input" type="text" placeholder="自动: 素材目录/../proj_xxx"
+                   x-model="initProjectDir" />
+            <button class="btn btn-ghost" @click="pickFolder('initProjectDir')">选择…</button>
+          </div>
+        </div>
+        <div x-show="initError" class="badge badge-danger" style="margin-bottom:10px" x-text="initError"></div>
+        <div style="display:flex;justify-content:flex-end;gap:8px">
+          <button class="btn btn-ghost" @click="showInit=false" :disabled="initLoading">取消</button>
+          <button class="btn btn-primary" @click="createProject()" :disabled="initLoading || !initVideosDir">
+            <span x-show="!initLoading">▶ 创建并开始</span>
+            <span x-show="initLoading">处理中…</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 打开项目 -->
+      <div x-show="initMode==='open'" class="fade-in">
+        <div class="form-field" style="margin-bottom:14px">
+          <div class="input-label">项目目录（含 workflow.json）</div>
+          <div style="display:flex;gap:8px">
+            <input class="input" type="text" placeholder="/path/to/project"
+                   x-model="initOpenDir" />
+            <button class="btn btn-ghost" @click="pickFolder('initOpenDir')">选择…</button>
+          </div>
+        </div>
+        <div x-show="initError" class="badge badge-danger" style="margin-bottom:10px" x-text="initError"></div>
+        <div style="display:flex;justify-content:flex-end;gap:8px">
+          <button class="btn btn-ghost" @click="showInit=false" :disabled="initLoading">取消</button>
+          <button class="btn btn-primary" @click="openProject()" :disabled="initLoading || !initOpenDir">
+            <span x-show="!initLoading">↗ 打开</span>
+            <span x-show="initLoading">加载中…</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ──────────────────────────────────────────────────────────
+       主体布局
+  ─────────────────────────────────────────────────────────────-->
+  <div class="content" x-show="topModule==='analysis'" style="padding:22px">
+    <div class="card-title">
+      <span>🧠</span>
+      <span>素材语义分析模块</span>
+    </div>
+
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-title">全局素材库统计</div>
+      <div style="display:flex;gap:20px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:11px;color:var(--muted)">素材总数</div>
+          <div style="font-size:22px;font-weight:700" x-text="libraryStats.total_assets || 0"></div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted)">可用素材</div>
+          <div style="font-size:22px;font-weight:700" x-text="libraryStats.available_assets || 0"></div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted)">本地来源</div>
+          <div style="font-size:22px;font-weight:700" x-text="libraryStats.local_assets || 0"></div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted)">Google Drive 来源</div>
+          <div style="font-size:22px;font-weight:700" x-text="libraryStats.gdrive_assets || 0"></div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted)">语义维度模板</div>
+          <div style="font-size:22px;font-weight:700" x-text="libraryStats.semantic_dimensions_supported || 0"></div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted)">语义已就绪</div>
+          <div style="font-size:22px;font-weight:700" x-text="libraryStats.semantic_ready_assets || 0"></div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted)">语义待升级</div>
+          <div style="font-size:22px;font-weight:700" x-text="libraryStats.semantic_pending_assets || 0"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-title">新增素材来源</div>
+      <div class="form-grid">
+        <div class="form-field full">
+          <div class="input-label">本地目录</div>
+          <div style="display:flex;gap:8px">
+            <input class="input" type="text" x-model="ingestLocalPath" placeholder="/path/to/videos" />
+            <button class="btn btn-ghost" @click="pickFolder('ingestLocalPath')">选择…</button>
+            <button class="btn btn-ghost" @click="previewLocalSource()" :disabled="isHeavyBusy || !ingestLocalPath">
+              预览目录
+            </button>
+            <button class="btn btn-primary" @click="ingestLocalSource()" :disabled="isHeavyBusy || !ingestLocalPath">
+              分析本地素材
+            </button>
+          </div>
+          <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--muted);font-size:12px">
+            <span>本次最多分析</span>
+            <input class="input" type="number" min="1" max="5000" x-model.number="ingestLocalMaxVideos"
+                   style="width:110px;padding:6px 8px" />
+            <span>个视频（防止大目录导致长时间阻塞）</span>
+          </div>
+        </div>
+        <div class="form-field full">
+          <div class="input-label">Google Drive 公开链接</div>
+          <div style="display:flex;gap:8px">
+            <input class="input" type="text" x-model="ingestDriveUrl" placeholder="https://drive.google.com/..." />
+            <button class="btn btn-ghost" @click="previewDriveSource()" :disabled="isHeavyBusy || ingestPreviewLoading || !ingestDriveUrl">
+              预览扫描
+            </button>
+            <button class="btn btn-primary" @click="ingestDriveSource()" :disabled="isHeavyBusy || !ingestDriveUrl">
+              分析云端素材
+            </button>
+          </div>
+          <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--muted);font-size:12px">
+            <span>本次最多下载并分析</span>
+            <input class="input" type="number" min="1" max="500" x-model.number="ingestDriveMaxVideos"
+                   style="width:96px;padding:6px 8px" />
+            <span>个视频</span>
+          </div>
+          <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--muted);font-size:12px">
+            <span>优先子目录关键词（可选）</span>
+            <input class="input" type="text" x-model="ingestDrivePriority"
+                   placeholder="例如：加拿大, 1203, 滑雪"
+                   style="min-width:260px;padding:6px 8px" />
+          </div>
+          <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--muted);font-size:12px">
+            <span>最多扫描目录</span>
+            <input class="input" type="number" min="1" max="2000" x-model.number="ingestDriveMaxScanFolders"
+                   style="width:96px;padding:6px 8px" />
+            <span>个</span>
+          </div>
+          <div style="margin-top:8px;display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px">
+            <input type="checkbox" x-model="ingestRefresh" />
+            <span>强制重新下载云端缓存</span>
+          </div>
+        </div>
+        <div x-show="ingestLocalPreviewLoading" style="margin-top:8px;color:var(--muted);font-size:12px">本地目录预览中…</div>
+        <div x-show="ingestLocalPreviewError" class="badge badge-danger" style="margin-top:8px" x-text="ingestLocalPreviewError"></div>
+        <div x-show="ingestLocalPreview" style="margin-top:8px;font-size:12px;color:var(--muted)">
+          目录候选视频：
+          <span x-text="(ingestLocalPreview && ingestLocalPreview.video_candidates) || 0"></span> 个
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px" x-show="ingestLocalPreview && ingestLocalPreview.sample_videos && ingestLocalPreview.sample_videos.length>0">
+          <template x-for="p in (ingestLocalPreview.sample_videos || [])" :key="p">
+            <span class="badge badge-info" x-text="p"></span>
+          </template>
+        </div>
+      </div>
+      <div x-show="ingestLoading" style="margin-top:8px;color:var(--muted)">分析中，请稍候…</div>
+      <div x-show="ingestLoading" style="margin-top:8px;display:flex;gap:8px;align-items:center">
+        <button class="btn btn-danger" @click="cancelIngestJob()" :disabled="!ingestJobId">取消当前分析</button>
+      </div>
+      <div x-show="ingestLoading" style="margin-top:8px">
+        <div class="progress-bar-wrap" style="height:10px">
+          <div class="progress-bar" :style="`width:${ingestProgress || 0}%`"></div>
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-top:6px"
+             x-text="`任务进度：${ingestProgress || 0}%`"></div>
+      </div>
+      <div x-show="ingestMessage" class="badge badge-info" style="margin-top:8px" x-text="ingestMessage"></div>
+      <div x-show="ingestLog && ingestLog.length>0" style="margin-top:8px;max-height:90px;overflow:auto;font-size:12px;color:var(--muted);border:1px dashed var(--border);padding:8px;border-radius:8px">
+        <template x-for="(line, idx) in ingestLog.slice(-8)" :key="idx">
+          <div x-text="line"></div>
+        </template>
+      </div>
+      <div style="margin-top:8px;font-size:12px;color:var(--muted)">
+        系统负载：1m=<span x-text="(systemLoad && systemLoad.load_1m) || 0"></span>，
+        CPU=<span x-text="(systemLoad && systemLoad.cpu_count) || 0"></span>，
+        比率=<span x-text="(systemLoad && systemLoad.load_ratio_1m) || 0"></span>
+      </div>
+      <div x-show="ingestPreviewLoading" style="margin-top:8px;color:var(--muted)">预览扫描中，请稍候…</div>
+      <div x-show="ingestPreviewError" class="badge badge-danger" style="margin-top:8px" x-text="ingestPreviewError"></div>
+      <div x-show="ingestPreview" style="margin-top:10px;border-top:1px dashed var(--border);padding-top:10px">
+        <div style="font-size:12px;color:var(--muted)">
+          预览结果：
+          扫描目录 <span x-text="(ingestPreview && ingestPreview.scanned_folders) || 0"></span> /
+          上限 <span x-text="(ingestPreview && ingestPreview.max_scan_folders) || 0"></span>，
+          列出文件 <span x-text="(ingestPreview && ingestPreview.listed_files) || 0"></span>，
+          视频文件 <span x-text="(ingestPreview && ingestPreview.video_files) || 0"></span>
+          <span x-show="ingestPreview && ingestPreview.scan_partial">（部分扫描）</span>
+        </div>
+        <div style="margin-top:8px;font-size:12px;color:var(--muted)" x-show="(ingestPreview && ingestPreview.folder_stats ? ingestPreview.folder_stats : []).length>0">
+          命中子目录（前 20）
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px" x-show="(ingestPreview && ingestPreview.folder_stats ? ingestPreview.folder_stats : []).length>0">
+          <template x-for="folder in (ingestPreview && ingestPreview.folder_stats ? ingestPreview.folder_stats : [])" :key="folder.path">
+            <span class="badge badge-info" x-text="`${folder.path}（视频${folder.video_files}）`"></span>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-title">AI 配置（用于脚本脑爆与脚本生成）</div>
+      <div class="form-grid">
+        <div class="form-field">
+          <div class="input-label">AI Provider</div>
+          <select class="input" x-model="aiSettings.provider">
+            <option value="openai">openai</option>
+            <option value="anthropic">anthropic</option>
+            <option value="moonshot">moonshot</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <div class="input-label">Model（可选）</div>
+          <input class="input" type="text" x-model="aiSettings.ai_model" placeholder="如 gpt-4o-mini / claude-sonnet-4-6" />
+        </div>
+        <div class="form-field full">
+          <div class="input-label">Base URL（可选）</div>
+          <input class="input" type="text" x-model="aiSettings.ai_base_url" placeholder="如 https://api.openai.com/v1" />
+        </div>
+
+        <div class="form-field">
+          <div class="input-label">OpenAI API Key（留空不修改）</div>
+          <input class="input" type="password" x-model="aiSettings.openai_api_key" placeholder="sk-..." />
+          <div style="font-size:12px;color:var(--muted);margin-top:6px">
+            状态：<span x-text="aiStatus.openai_api_key_set ? `已保存（${aiStatus.openai_api_key_masked || '***'}）` : '未保存'"></span>
+          </div>
+          <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:12px;color:var(--muted)">
+            <input type="checkbox" x-model="aiSettings.clear_openai_api_key" />
+            清空 OpenAI Key
+          </label>
+        </div>
+        <div class="form-field">
+          <div class="input-label">Anthropic API Key（留空不修改）</div>
+          <input class="input" type="password" x-model="aiSettings.anthropic_api_key" placeholder="sk-ant-..." />
+          <div style="font-size:12px;color:var(--muted);margin-top:6px">
+            状态：<span x-text="aiStatus.anthropic_api_key_set ? `已保存（${aiStatus.anthropic_api_key_masked || '***'}）` : '未保存'"></span>
+          </div>
+          <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:12px;color:var(--muted)">
+            <input type="checkbox" x-model="aiSettings.clear_anthropic_api_key" />
+            清空 Anthropic Key
+          </label>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
+        <button class="btn btn-primary" @click="saveAiSettings()" :disabled="aiSaving">
+          <span x-show="!aiSaving">保存 AI 配置</span>
+          <span x-show="aiSaving">保存中…</span>
+        </button>
+        <button class="btn btn-ghost" @click="loadAiSettings()" :disabled="aiLoading">刷新状态</button>
+        <span style="font-size:12px;color:var(--muted)" x-show="aiMessage" x-text="aiMessage"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">语义搜索素材</div>
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <input class="input" type="text" x-model="libraryQuery"
+               @keydown.enter.prevent="searchLibrary()"
+               placeholder="输入关键词（场景、运镜、叙事角色、用途、受众、地点、分辨率等）" />
+        <button class="btn btn-primary" @click="searchLibrary()" :disabled="libraryLoading">搜索</button>
+        <button class="btn btn-ghost" @click="refreshLibrary()" :disabled="libraryLoading">刷新</button>
+      </div>
+
+      <div x-show="libraryLoading" style="color:var(--muted);font-size:13px">正在检索…</div>
+      <div x-show="!libraryLoading && libraryMessage" style="color:var(--muted);font-size:12px;margin-bottom:8px" x-text="libraryMessage"></div>
+      <div x-show="!libraryLoading && libraryResults.length===0" style="color:var(--muted);font-size:13px">暂无结果</div>
+
+      <div class="frames-grid" x-show="libraryResults.length>0">
+        <template x-for="asset in libraryResults" :key="asset.uid">
+          <div class="frame-card" style="padding:12px">
+              <div style="font-size:13px;font-weight:600" x-text="asset.filename"></div>
+              <div style="font-size:12px;color:var(--muted);margin-top:4px" x-text="`${asset.resolution || '未知分辨率'} · ${formatDur(asset.duration)}`"></div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px"
+                   x-show="semanticSummary(asset)"
+                   x-text="semanticSummary(asset)"></div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px" x-text="toZhSentence(asset.scene_description || '无场景描述')"></div>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px"
+                   x-text="`语义维度 ${asset.semantic_dimensions_count || 0}`"></div>
+              <div style="font-size:11px;color:var(--muted);margin-top:6px">核心检索标签</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+                <template x-for="tag in semanticTags(asset, 10)" :key="tag">
+                  <span class="badge badge-info" x-text="tag"></span>
+                </template>
+              </div>
+              <details x-show="secondarySemanticTags(asset, 12).length > 0" style="margin-top:8px">
+                <summary style="font-size:11px;color:var(--muted);cursor:pointer">次级标签（可检索，默认折叠）</summary>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+                  <template x-for="tag in secondarySemanticTags(asset, 12)" :key="`sec-${tag}`">
+                    <span class="badge badge-warn" x-text="tag"></span>
+                  </template>
+                </div>
+              </details>
+            <div style="display:flex;gap:8px;margin-top:10px">
+              <button class="btn btn-ghost" @click="openFinder(asset.path)" :disabled="!asset.path">定位</button>
+              <button class="btn" :class="isSelected(asset.uid) ? 'btn-danger' : 'btn-success'"
+                      @click="toggleSelect(asset)">
+                <span x-text="isSelected(asset.uid) ? '取消选择' : '加入制作'"></span>
+              </button>
+            </div>
+          </div>
+        </template>
+      </div>
+      <div x-show="libraryResults.length>0 && libraryHasMore" style="display:flex;justify-content:center;margin-top:12px">
+        <button class="btn btn-ghost" @click="loadMoreLibrary()" :disabled="libraryLoading">
+          <span x-show="!libraryLoading">加载更多</span>
+          <span x-show="libraryLoading">加载中…</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div x-show="topModule==='analysis' && selectedAssets.length>0" style="
+    position:fixed;left:18px;right:18px;bottom:12px;z-index:40;
+    background:rgba(10,12,20,0.95);border:1px solid var(--border);
+    border-radius:12px;padding:10px 12px;backdrop-filter:blur(6px);
+  ">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="font-size:12px;color:var(--muted)">已选素材 <span x-text="selectedCount"></span>/<span x-text="maxSelectedAssets"></span></span>
+      <template x-for="asset in selectedAssets.slice(0,12)" :key="asset.uid">
+        <span class="badge badge-info" style="display:inline-flex;gap:6px;align-items:center">
+          <span x-text="asset.filename"></span>
+          <button class="btn btn-danger" style="font-size:10px;padding:2px 6px" @click="removeSelected(asset.uid)">移除</button>
+        </span>
+      </template>
+      <span style="font-size:11px;color:var(--muted)" x-show="selectedAssets.length>12"
+            x-text="`+${selectedAssets.length-12} 个`"></span>
+      <button class="btn btn-primary" style="margin-left:auto" @click="switchModule('production')">进入制作视频</button>
+    </div>
+  </div>
+
+  <div class="main" x-show="topModule==='production'">
+
+    <!-- ── 左侧导航 ──────────────────────────────────────────── -->
+    <nav class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-label">工作流</div>
+        <template x-for="n in [1,2,3,4,5,6,7]" :key="n">
+          <div class="step-item" :class="stepCls(n)" @click="navToStep(n)">
+            <div class="step-icon">
+              <span x-show="stepInfo(n).status==='done'">✓</span>
+              <span x-show="stepInfo(n).status!=='done'" x-text="n"></span>
+            </div>
+            <span class="step-name" x-text="stepInfo(n).name || `Step ${n}`"></span>
+          </div>
+        </template>
+      </div>
+
+      <!-- 全局进度条 -->
+      <div style="padding:16px 12px 0">
+        <div class="input-label">整体进度</div>
+        <div class="progress-bar-wrap" style="margin-top:6px">
+          <div class="progress-bar"
+               :style="`width:${Math.round((steps.filter(s=>s.status==='done').length/7)*100)}%`"></div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px;text-align:right"
+             x-text="`${steps.filter(s=>s.status==='done').length}/7 步完成`"></div>
+      </div>
+    </nav>
+
+    <!-- ── 内容区 ─────────────────────────────────────────────── -->
+    <div class="content">
+
+      <!-- 未加载项目时的空状态 -->
+      <div x-show="!projectDir" class="empty-state">
+        <div class="icon">🎬</div>
+        <h2>制作视频模块：Step 1 选择素材</h2>
+        <p>先在上方「素材语义分析」中检索素材，再在这里创建制作项目</p>
+
+        <div class="card" style="width:min(980px,95%);text-align:left;margin-top:14px">
+          <div class="card-title">已选择素材（<span x-text="selectedCount"></span>/<span x-text="maxSelectedAssets"></span>）</div>
+          <div x-show="selectedAssets.length===0" style="color:var(--muted);font-size:13px">
+            暂未选择素材。请切换到「素材语义分析」模块搜索后点击“加入制作”。
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap" x-show="selectedAssets.length>0">
+            <template x-for="asset in selectedAssets" :key="asset.uid">
+              <span class="badge badge-info" style="display:inline-flex;align-items:center;gap:6px">
+                <span x-text="asset.filename"></span>
+                <button class="btn btn-danger" style="font-size:10px;padding:2px 6px" @click="removeSelected(asset.uid)">移除</button>
+              </span>
+            </template>
+          </div>
+          <div class="form-field" style="margin-top:12px">
+            <div class="input-label">项目目录（可选，留空自动创建）</div>
+            <div style="display:flex;gap:8px">
+              <input class="input" x-model="productionProjectDir" placeholder="/path/to/project" />
+              <button class="btn btn-ghost" @click="pickFolder('productionProjectDir')">选择…</button>
+            </div>
+          </div>
+          <div x-show="selectionError" class="badge badge-danger" style="margin-top:8px" x-text="selectionError"></div>
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <button class="btn btn-primary" @click="createProjectFromSelection()" :disabled="isHeavyBusy || selectedAssets.length===0">
+              <span x-show="!selectionLoading">创建制作项目</span>
+              <span x-show="selectionLoading">创建中…</span>
+            </button>
+            <button class="btn btn-ghost" @click="initMode='open';showInit=true">↗ 打开已有项目</button>
+            <button class="btn btn-ghost" @click="clearSelection()" x-show="selectedAssets.length>0">清空选择</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 后台任务运行中（全局通知条） -->
+      <div x-show="projectDir && jobStatus==='running'"
+           style="background:rgba(90,141,238,0.12);border:1px solid rgba(90,141,238,0.3);
+                  border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:12px">
+        <div class="step-icon running" style="border-color:var(--accent);color:var(--accent)">⟳</div>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:500">
+            Step <span x-text="currentStep"></span> 执行中…
+          </div>
+          <div class="progress-bar-wrap" style="margin-top:6px">
+            <div class="progress-bar" :style="`width:${jobProgress}%`"></div>
+          </div>
+        </div>
+        <div class="badge badge-info" x-text="`${jobProgress}%`"></div>
+        <button class="btn btn-danger" style="font-size:12px;padding:5px 10px"
+                @click="cancelWorkflowJob()">
+          取消任务
+        </button>
+      </div>
+
+      <div x-show="jobStatus==='cancelled'"
+           style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);
+                  border-radius:10px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:13px;color:#f59e0b">任务已取消</div>
+        <button class="btn btn-ghost" @click="jobStatus=''">关闭</button>
+      </div>
+
+      <!-- 任务错误通知条 -->
+      <div x-show="jobStatus==='error'"
+           style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.3);
+                  border-radius:10px;padding:12px 16px">
+        <div style="font-size:13px;font-weight:500;color:var(--danger);margin-bottom:8px">
+          ⚠ 执行出错
+        </div>
+        <div class="log-box" x-text="jobLog.join('\n')" id="log-box"></div>
+        <div style="display:flex;justify-content:flex-end;margin-top:10px">
+          <button class="btn btn-ghost" @click="jobStatus=''">关闭</button>
+          <button class="btn btn-danger" style="margin-left:8px" @click="runCurrentStep()">重试</button>
+        </div>
+      </div>
+
+      <!-- ── Step 1：素材分析 ─────────────────────────────────── -->
+      <div x-show="projectDir && activePanel===1" class="fade-in">
+        <div class="card-title">
+          <span>📂</span>
+          <span>Step 1 — 已选素材确认</span>
+          <span class="badge"
+                :class="stepInfo(1).status==='done' ? 'badge-success' : (stepInfo(1).status==='waiting_review' ? 'badge-warn' : 'badge-info')"
+                x-text="stepInfo(1).status==='done' ? '已完成' : (stepInfo(1).status==='waiting_review' ? '待确认' : '处理中')"></span>
+        </div>
+
+        <!-- 素材网格 -->
+        <div class="card" x-show="materialsList.length > 0">
+          <div class="card-title">素材列表 (<span x-text="materialsList.length"></span> 个)</div>
+          <div class="media-grid">
+            <template x-for="clip in materialsList" :key="clip.id">
+              <div class="media-thumb" @click="openFinder(clip.path)">
+                <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:24px">🎞</div>
+                <div class="thumb-label" x-text="clip.filename || clip.id"></div>
+                <div class="thumb-dur"   x-text="formatDur(clip.duration)"></div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- 素材统计 -->
+        <div class="card" x-show="materialsList.length > 0">
+          <div style="display:flex;gap:24px;flex-wrap:wrap">
+            <div>
+              <div style="font-size:11px;color:var(--muted)">片段数量</div>
+              <div style="font-size:22px;font-weight:700" x-text="materialsList.length"></div>
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--muted)">总时长</div>
+              <div style="font-size:22px;font-weight:700"
+                   x-text="formatDur(materialsList.reduce((a,c)=>a+(c.duration||0),0))"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="action-bar" x-show="stepInfo(1).status==='waiting_review'">
+          <button class="btn btn-success" @click="approve(1)">
+            ✓ 确认素材，进入脚本脑爆
+          </button>
+        </div>
+        <div x-show="jobStatus==='running'" style="color:var(--muted);font-size:13px">
+          正在分析素材，请稍候…
+        </div>
+      </div>
+
+      <!-- ── Step 2：选题建议 ─────────────────────────────────── -->
+      <div x-show="projectDir && activePanel===2" class="fade-in">
+        <div class="card-title">
+          <span>💡</span>
+          <span>Step 2 — 选题建议</span>
+        </div>
+
+        <div class="card">
+          <div class="card-title">选择一个主题</div>
+          <div class="topic-cards">
+            <template x-for="(t, i) in topics" :key="i">
+              <div class="topic-card" :class="selectedTopic===t ? 'selected' : ''"
+                   @click="selectTopic(t)">
+                <div class="topic-title" x-text="t.title"></div>
+                <div class="topic-meta">
+                  <span x-text="t.theme"></span>
+                  <span x-text="t.emotion"></span>
+                  <span x-text="t.duration"></span>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">自定义想法（可选）</div>
+          <textarea class="json-editor" style="min-height:80px;resize:none"
+                    placeholder="写下你的想法、风格偏好、特殊要求…"
+                    x-model="topicCustom"></textarea>
+        </div>
+
+        <div class="action-bar">
+          <button class="btn btn-success" @click="approveTopic()"
+                  :disabled="isHeavyBusy || ((stepInfo(2).status==='waiting_review') && (!selectedTopic && !topicCustom))">
+            <span x-show="stepInfo(2).status==='waiting_review'">✓ 确认选题，生成脚本</span>
+            <span x-show="stepInfo(2).status!=='waiting_review'">▶ 先生成选题建议</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ── Step 3：脚本审核 ─────────────────────────────────── -->
+      <div x-show="projectDir && activePanel===3" class="fade-in">
+        <div class="card-title">
+          <span>📝</span>
+          <span>Step 3 — 脚本审核</span>
+          <button class="btn btn-ghost" style="margin-left:auto;font-size:12px"
+                  @click="toggleScriptView()">
+            <span x-text="scriptView==='visual' ? '{ } JSON 模式' : '👁 可视化模式'"></span>
+          </button>
+        </div>
+
+        <!-- 可视化模式 -->
+        <div x-show="scriptView==='visual'" class="fade-in">
+          <div class="card">
+            <div class="card-title">片段时间轴</div>
+            <div class="script-timeline">
+              <template x-for="(clip, i) in scriptClips" :key="i">
+                <div class="timeline-item">
+                  <div class="timeline-thumb" style="display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:20px">🎞</div>
+                  <div class="timeline-info">
+                    <div class="timeline-idx">片段 <span x-text="i+1"></span></div>
+                    <input class="input" style="margin-bottom:4px"
+                           x-model="clip.scene_description"
+                           :placeholder="'片段 ' + (i+1) + ' 场景描述'" />
+                    <div class="timeline-dur">
+                      <span x-text="clip.video_id || clip.video_path || '未分配素材'"></span>
+                      &nbsp;·&nbsp;
+                      <span x-text="formatDur((clip.source_end||0)-(clip.source_start||0))"></span>
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div class="card" x-show="scriptSubs.length > 0">
+            <div class="card-title">字幕列表</div>
+            <template x-for="(sub, i) in scriptSubs" :key="i">
+              <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
+                <div style="font-size:11px;color:var(--muted);width:28px;text-align:right" x-text="i+1"></div>
+                <input class="input" x-model="sub.cn_text" placeholder="中文字幕" />
+                <input class="input" x-model="sub.en_text" placeholder="English subtitle" />
+                <input class="input" type="number" x-model.number="sub.start_time"
+                       style="width:72px" placeholder="开始(s)" />
+                <input class="input" type="number" x-model.number="sub.end_time"
+                       style="width:72px" placeholder="结束(s)" />
+              </div>
+            </template>
+            <button class="btn btn-ghost" style="margin-top:4px"
+                    @click="scriptSubs.push({cn_text:'',en_text:'',start_time:0,end_time:2})">
+              ＋ 添加字幕
+            </button>
+          </div>
+        </div>
+
+        <!-- JSON 模式 -->
+        <div x-show="scriptView==='json'" class="fade-in">
+          <div class="card">
+            <div class="card-title">脚本 JSON</div>
+            <textarea class="json-editor" x-model="scriptJson" style="min-height:320px"></textarea>
+          </div>
+        </div>
+
+        <div class="action-bar">
+          <button class="btn btn-ghost" @click="saveScript()" :disabled="scriptSaving">
+            <span x-show="!scriptSaving">💾 保存草稿</span>
+            <span x-show="scriptSaving">保存中…</span>
+          </button>
+          <button class="btn btn-success" @click="approveScript()">
+            ✓ 确认脚本，匹配素材
+          </button>
+        </div>
+      </div>
+
+      <!-- ── Step 4：素材匹配 ─────────────────────────────────── -->
+      <div x-show="projectDir && activePanel===4" class="fade-in">
+        <div class="card-title">
+          <span>🔗</span>
+          <span>Step 4 — 素材匹配</span>
+        </div>
+
+        <div class="card">
+          <div class="card-title">匹配结果</div>
+          <table class="match-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>场景描述</th>
+                <th>分配素材</th>
+                <th>时长</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="(clip, i) in scriptClips" :key="i">
+                <tr>
+                  <td style="color:var(--muted)" x-text="i+1"></td>
+                  <td x-text="clip.scene_description || clip.video_id || '—'"></td>
+                  <td>
+                    <span class="badge badge-info"
+                          x-text="clip.video_id || clip.video_path || '未分配'"></span>
+                  </td>
+                  <td style="color:var(--accent)"
+                      x-text="formatDur((clip.source_end||0)-(clip.source_start||0))"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card" style="background:rgba(52,211,153,0.05);border-color:rgba(52,211,153,0.2)">
+          <div style="font-size:13px;color:var(--muted)">
+            如需替换素材，请直接编辑项目目录中的 <code>data/script_matched.json</code>，然后点击确认继续。
+          </div>
+        </div>
+
+        <div class="action-bar">
+          <button class="btn btn-ghost" @click="openFinder(projectDir + '/data')">
+            📂 在 Finder 中查看 data/
+          </button>
+          <button class="btn btn-success" @click="approveMatching()">
+            ✓ 确认匹配，提取关键帧
+          </button>
+        </div>
+      </div>
+
+      <!-- ── Step 5：帧预览 ───────────────────────────────────── -->
+      <div x-show="projectDir && activePanel===5" class="fade-in">
+        <div class="card-title">
+          <span>🖼</span>
+          <span>Step 5 — 关键帧预览</span>
+          <span class="badge badge-info" x-text="`${frames.length} 帧`"></span>
+        </div>
+
+        <div class="card" x-show="frames.length === 0" style="text-align:center;color:var(--muted);padding:40px">
+          <div style="font-size:32px;margin-bottom:8px">⏳</div>
+          正在提取关键帧，请稍候…
+        </div>
+
+        <div class="frames-grid" x-show="frames.length > 0">
+          <template x-for="f in frames" :key="f.name">
+            <div class="frame-card">
+              <img :src="f.url" :alt="f.name" loading="lazy" />
+              <div class="frame-name" x-text="f.name"></div>
+            </div>
+          </template>
+        </div>
+
+        <div class="action-bar">
+          <button class="btn btn-success" @click="approve(5)">
+            ✓ 确认帧预览，生成粗剪
+          </button>
+        </div>
+      </div>
+
+      <!-- ── Step 6：粗剪 + 渲染参数 ────────────────────────────────── -->
+      <div x-show="projectDir && activePanel===6" class="fade-in">
+        <div class="card-title">
+          <span>✂️</span>
+          <span>Step 6 — 粗剪预览 &amp; 渲染参数</span>
+        </div>
+
+        <!-- 粗剪播放器 -->
+        <div class="card">
+          <div class="card-title">粗剪预览</div>
+          <div class="video-wrap" x-show="roughUrl">
+            <video :src="roughUrl" controls playsinline></video>
+          </div>
+          <div x-show="!roughUrl" style="text-align:center;color:var(--muted);padding:24px">
+            粗剪文件未生成，请先运行 Step 6
+          </div>
+        </div>
+
+        <!-- 渲染参数 -->
+        <div class="card">
+          <div class="card-title">渲染参数</div>
+          <div class="form-grid">
+
+            <div class="form-field">
+              <div class="input-label">宽度 (px)</div>
+              <input class="input" type="number" x-model.number="renderOpts.width" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">高度 (px)</div>
+              <input class="input" type="number" x-model.number="renderOpts.height" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">帧率 (fps)</div>
+              <input class="input" type="number" x-model.number="renderOpts.fps" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">CRF 质量 (越低越好, 18-28)</div>
+              <input class="input" type="number" x-model.number="renderOpts.crf" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">编码预设</div>
+              <select class="input" x-model="renderOpts.preset">
+                <option value="ultrafast">ultrafast</option>
+                <option value="fast">fast</option>
+                <option value="medium">medium</option>
+                <option value="slow">slow</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <div class="input-label">字幕字体</div>
+              <input class="input" type="text" x-model="renderOpts.subtitle_font" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">字幕字号 (px)</div>
+              <input class="input" type="number" x-model.number="renderOpts.subtitle_size" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">美颜强度 (0-1)</div>
+              <input class="input" type="number" step="0.05" x-model.number="renderOpts.skin_smooth_strength" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">转场样式</div>
+              <select class="input" x-model="renderOpts.transition_style">
+                <option value="none">无转场（硬切）</option>
+                <option value="fade">淡入淡出</option>
+                <option value="smoothleft">向左平滑</option>
+                <option value="smoothright">向右平滑</option>
+                <option value="circleopen">圆形展开</option>
+                <option value="pixelize">像素化</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <div class="input-label">转场时长 (秒)</div>
+              <input class="input" type="number" min="0" max="2" step="0.05" x-model.number="renderOpts.transition_duration" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">审美预设</div>
+              <select class="input" x-model="renderOpts.aesthetic_preset">
+                <option value="travel_story">旅行叙事</option>
+                <option value="cinematic">电影感</option>
+                <option value="vibrant">明快高饱和</option>
+                <option value="natural">自然写实</option>
+              </select>
+            </div>
+
+            <div class="form-field full">
+              <div class="toggle-wrap">
+                <label class="toggle">
+                  <input type="checkbox" x-model="renderOpts.enable_skin_smooth" />
+                  <span class="toggle-slider"></span>
+                </label>
+                <span style="font-size:13px">启用美颜滤镜</span>
+              </div>
+            </div>
+            <div class="form-field full">
+              <div class="toggle-wrap">
+                <label class="toggle">
+                  <input type="checkbox" x-model="renderOpts.enable_color_grading" />
+                  <span class="toggle-slider"></span>
+                </label>
+                <span style="font-size:13px">启用色彩调级</span>
+              </div>
+            </div>
+            <div class="form-field full">
+              <div class="toggle-wrap">
+                <label class="toggle">
+                  <input type="checkbox" x-model="renderOpts.enable_skill_enhance" />
+                  <span class="toggle-slider"></span>
+                </label>
+                <span style="font-size:13px">启用 Skill 审美增强（调色 + 转场微调）</span>
+              </div>
+            </div>
+
+            <div class="form-field full">
+              <div class="input-label">BGM 路径（.mp3/.aac，留空跳过）</div>
+              <div style="display:flex;gap:8px">
+                <input class="input" type="text" placeholder="/path/to/bgm.mp3"
+                       x-model="renderOpts.bgm_path" />
+                <button class="btn btn-ghost" @click="pickFile('renderOpts.bgm_path')">选择…</button>
+              </div>
+            </div>
+            <div class="form-field">
+              <div class="input-label">BGM 音量 (0-1)</div>
+              <input class="input" type="number" step="0.05" x-model.number="renderOpts.bgm_volume" />
+            </div>
+            <div class="form-field full">
+              <div class="input-label">旁白路径（留空跳过）</div>
+              <div style="display:flex;gap:8px">
+                <input class="input" type="text" placeholder="/path/to/narration.mp3"
+                       x-model="renderOpts.narration_path" />
+                <button class="btn btn-ghost" @click="pickFile('renderOpts.narration_path')">选择…</button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="action-bar">
+          <button class="btn btn-success" @click="approveRender()">
+            ▶ 开始精渲染
+          </button>
+        </div>
+      </div>
+
+      <!-- ── Step 7：精渲染进度 ──────────────────────────────────── -->
+      <div x-show="projectDir && activePanel===7" class="fade-in">
+        <div class="card-title">
+          <span>🎬</span>
+          <span>Step 7 — 精渲染</span>
+          <span class="badge" :class="jobStatus==='running' ? 'badge-warn' : (finalUrl ? 'badge-success' : 'badge-muted')"
+                x-text="jobStatus==='running' ? '渲染中…' : (finalUrl ? '已完成' : '等待中')"></span>
+        </div>
+
+        <!-- 渲染阶段进度 -->
+        <div class="card">
+          <div class="card-title">渲染阶段</div>
+          <div class="stage-list">
+            <template x-for="(name, i) in stageNames" :key="i">
+              <div class="stage-item"
+                   :class="stageStatus(Object.keys(stageFiles)[i] || '') === 'done' ? 'done' :
+                           stageStatus(Object.keys(stageFiles)[i] || '') === 'running' ? 'running' : ''">
+                <div class="stage-icon">
+                  <span x-show="stageStatus(Object.keys(stageFiles)[i]||'')!=='done' && stageStatus(Object.keys(stageFiles)[i]||'')!=='running'" x-text="i+1"></span>
+                  <span x-show="stageStatus(Object.keys(stageFiles)[i]||'')==='done'">✓</span>
+                  <span x-show="stageStatus(Object.keys(stageFiles)[i]||'')==='running'">⟳</span>
+                </div>
+                <div class="stage-label" x-text="name"></div>
+                <div class="stage-size" x-text="stageSize(Object.keys(stageFiles)[i]||'')"></div>
+              </div>
+            </template>
+            <!-- Final -->
+            <div class="stage-item" :class="finalUrl ? 'done' : ''">
+              <div class="stage-icon">
+                <span x-show="!finalUrl">🏁</span>
+                <span x-show="finalUrl">✓</span>
+              </div>
+              <div class="stage-label">最终输出 final.mp4</div>
+              <div class="stage-size" x-text="stageSize('final.mp4')"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 全局进度 -->
+        <div class="card" x-show="jobStatus==='running'">
+          <div class="card-title">执行日志</div>
+          <div class="log-box" id="log-box" x-text="jobLog.join('\n')"
+               x-effect="scrollLog()"></div>
+        </div>
+
+        <!-- 完成后播放器 -->
+        <div class="card" x-show="finalUrl">
+          <div class="card-title">🎉 渲染完成！</div>
+          <div class="video-wrap">
+            <video :src="finalUrl" controls playsinline></video>
+          </div>
+          <div class="action-bar">
+            <button class="btn btn-ghost" @click="openFinalInFinder()">
+              📂 在 Finder 中显示
+            </button>
+          </div>
+        </div>
+
+        <!-- 刷新按钮 -->
+        <div class="action-bar">
+          <button class="btn btn-ghost" @click="loadStages()">🔄 刷新进度</button>
+          <button class="btn btn-primary" x-show="!finalUrl && jobStatus!=='running'"
+                  @click="runCurrentStep()">▶ 开始渲染</button>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </div><!-- /main -->
+</div><!-- /app -->
+
+</body>
+</html>

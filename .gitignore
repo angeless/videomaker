@@ -43,6 +43,7 @@ results/
 video_analysis_*.json
 materials_index.json
 draft.json
+.video_library/
 
 # Test videos (user should provide their own)
 test_videos/

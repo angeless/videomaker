@@ -1,47 +1,25 @@
 #!/usr/bin/env python3
-"""
-测试AI工具是否安装成功
-"""
+"""Compatibility wrapper for modules/legacy_lab/manage_videos/tests/test_ai_tools.py."""
 
+from pathlib import Path
+import runpy
 import sys
-import importlib
 
-def test_import(module_name):
-    try:
-        importlib.import_module(module_name)
-        return True, "✅"
-    except ImportError as e:
-        return False, f"❌ {e}"
+REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
-print("🔍 测试AI工具导入...")
-print("=" * 60)
-
-modules_to_test = [
-    ("ultralytics", "YOLOv8 - 物体检测"),
-    ("transformers", "BLIP - 场景描述"),
-    ("whisper", "Whisper - 语音转文字"),
-    ("scenedetect", "PySceneDetect - 场景检测"),
-    ("imagehash", "ImageHash - 感知哈希"),
-    ("cv2", "OpenCV - 图像处理"),
-]
-
-all_passed = True
-for module_name, description in modules_to_test:
-    success, message = test_import(module_name)
-    status = "✅" if success else "❌"
-    print(f"{status} {description}: {module_name}")
-    if not success:
-        all_passed = False
-        print(f"   错误: {message}")
-
-print("\n" + "=" * 60)
-if all_passed:
-    print("🎉 所有AI工具安装成功!")
-    print("可以开始视频分析了!")
+if __name__ == "__main__":
+    target = REPO_ROOT / "modules/legacy_lab/manage_videos/tests/test_ai_tools.py"
+    runpy.run_path(str(target), run_name="__main__")
 else:
-    print("⚠️  部分工具安装失败，需要检查")
+    import importlib.util
 
-print("\n激活虚拟环境:")
-print("  source venv/bin/activate")
-print("\n运行测试:")
-print("  python test_ai_tools.py")
+    target = REPO_ROOT / "modules/legacy_lab/manage_videos/tests/test_ai_tools.py"
+    spec = importlib.util.spec_from_file_location("legacy_wrapper", str(target))
+    module = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    spec.loader.exec_module(module)
+    for name in dir(module):
+        if not name.startswith("_"):
+            globals()[name] = getattr(module, name)

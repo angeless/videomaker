@@ -9,10 +9,16 @@ import json
 import time
 import signal
 from enum import Enum
-from typing import Dict, List, Optional, Callable, Any
+from typing import Dict, List, Optional, Callable, Any, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
+
+try:
+    import requests as _requests
+    HAS_REQUESTS = True
+except ImportError:
+    HAS_REQUESTS = False
 
 
 class Stage(Enum):
@@ -86,11 +92,13 @@ class WorkflowOrchestrator:
         self,
         timeout_seconds: int = 600,
         auto_continue_on_timeout: bool = False,
-        default_strategy: str = "conservative"  # conservative / aggressive
+        default_strategy: str = "conservative",  # conservative / aggressive
+        discord_webhook_url: Optional[str] = None
     ):
         self.timeout_seconds = timeout_seconds
         self.auto_continue_on_timeout = auto_continue_on_timeout
         self.default_strategy = default_strategy
+        self.discord_webhook_url = discord_webhook_url
         
         # 定义确认点
         self.checkpoints = {
@@ -180,6 +188,7 @@ class WorkflowOrchestrator:
         # 处理决策
         if decision == Decision.REJECT:
             print("\n❌ 用户中止工作流")
+            self._notify_discord(f"❌ VideoEditer 工作流在「{checkpoint.name}」被用户中止")
             raise RuntimeError("用户中止")
         
         elif decision == Decision.MODIFY:
@@ -188,6 +197,10 @@ class WorkflowOrchestrator:
         
         elif decision == Decision.TIMEOUT:
             print(f"\n⏰ 超时，执行默认策略: {checkpoint.default_action.value}")
+            self._notify_discord(
+                f"⏰ VideoEditer「{checkpoint.name}」10 分钟无响应，"
+                f"已自动执行默认策略：{checkpoint.default_action.value}"
+            )
             # 超时后如果默认是继续，则继续
             if checkpoint.default_action == Decision.APPROVE:
                 decision = Decision.APPROVE
@@ -196,6 +209,7 @@ class WorkflowOrchestrator:
         
         # 确认继续
         print(f"\n✅ 确认通过，进入下一阶段")
+        self._notify_discord(f"✅ VideoEditer「{checkpoint.name}」已确认通过")
         self.state.artifacts[stage.value] = stage_output
         return decision, stage_output
     
@@ -330,6 +344,19 @@ class WorkflowOrchestrator:
         
         return context
     
+    def _notify_discord(self, message: str):
+        """发送 Discord 通知（可选，需配置 discord_webhook_url）"""
+        if not self.discord_webhook_url or not HAS_REQUESTS:
+            return
+        try:
+            _requests.post(
+                self.discord_webhook_url,
+                json={"content": message},
+                timeout=5
+            )
+        except Exception:
+            pass  # 通知失败不影响主流程
+
     def save_state(self, path: str):
         """保存工作流状态"""
         state_dict = {
@@ -349,7 +376,7 @@ class WorkflowOrchestrator:
         with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
-        self.state.current_stage = Stage(data.get("current_stage", "planning"))
+        self.state.current_stage = Stage(data.get("current_stage", Stage.PLANNING.value))
         self.state.stage_history = data.get("stage_history", [])
         self.state.user_decisions = data.get("user_decisions", {})
         self.state.artifacts = data.get("artifacts", {})

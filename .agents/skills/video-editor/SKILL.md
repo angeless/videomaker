@@ -148,6 +148,61 @@ results = search.search_by_tags(["4K", "航拍", "风景"])
 results = search.search_by_resolution(min_width=1920)
 ```
 
+## 高级索引（来自 opencut 合并）
+
+### 视频指纹去重
+
+```bash
+python .agents/skills/manage-videos/indexer/fingerprint.py \
+    /path/to/video_folder \
+    fingerprints.db
+```
+
+自动用 pHash 检测重复/相似片段，结果存入 SQLite，扫描 8TB 素材库无压力。
+
+### CLIP 语义搜索
+
+```bash
+# 建立索引
+python .agents/skills/manage-videos/indexer/semantic.py \
+    /path/to/video_folder \
+    semantic_index.json
+
+# 搜索（中英文均可）
+python .agents/skills/manage-videos/indexer/semantic.py \
+    /path/to/video_folder \
+    semantic_index.json \
+    "冰岛黑沙滩航拍"
+```
+
+需要安装：`pip install torch transformers`（未安装时自动降级为关键词匹配）
+
+### 高级磨皮（频率分解）
+
+```python
+from scripts.render.beauty import AdvancedBeautyFilter
+
+bf = AdvancedBeautyFilter(smooth_strength=0.8, pore_reduction=0.6)
+bf.process_video("input.mp4", "output_beauty.mp4")
+```
+
+需要安装：`pip install mediapipe`（未安装时 auto_render.py 自动降级到 smartblur）
+
+### Discord 确认通知
+
+```python
+from scripts.orchestrator import WorkflowOrchestrator
+
+orchestrator = WorkflowOrchestrator(
+    timeout_seconds=600,
+    discord_webhook_url="https://discord.com/api/webhooks/..."  # 可选
+)
+```
+
+配置后，超时/中止/通过 等事件会自动推送到 Discord。
+
+---
+
 ## 常用操作
 
 ### 全自动渲染（推荐）

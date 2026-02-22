@@ -71,28 +71,31 @@ python .agents/skills/video-editor/scripts/generate_jianying_json.py \
 ## 📁 项目结构
 
 ```
-videoediter/
+videoeditor/
 ├── README.md
 ├── LICENSE
 ├── requirements.txt
 └── .agents/skills/
-    ├── manage-videos/           # 素材管理 skill
-    │   ├── SKILL.md             # skill 定义文档
-    │   ├── video_asset_toolkit.py
-    │   ├── search_videos.py
-    │   ├── chinese_search_ui.py
-    │   └── ...
-    └── video-editor/            # 剪辑执行 skill
-        ├── SKILL.md             # skill 定义文档
-        ├── scripts/
-        │   ├── generate_jianying_json.py
-        │   └── convert_index.py
-        ├── references/
-        │   ├── jianying-format.md
-        │   ├── script-format.md
-        │   └── materials-index-format.md
-        └── assets/
-            └── examples/
+    ├── manage-videos/              # 素材管理 skill
+    │   ├── SKILL.md
+    │   ├── video_asset_toolkit.py  # 多格式分析（JSON/Markdown/CSV）
+    │   ├── search_videos.py        # 关键词/标签/分辨率搜索
+    │   ├── run_toolkit.py          # CLI 入口
+    │   ├── analyze_videos.py       # 本地 vs 云端分析对比
+    │   └── indexer/                # ★ 高级索引（来自 opencut）
+    │       ├── fingerprint.py      # pHash 去重 + SQLite
+    │       └── semantic.py         # CLIP 语义搜索（中英文）
+    └── video-editor/               # 剪辑执行 skill
+        ├── SKILL.md
+        └── scripts/
+            ├── generate_jianying_json.py  # 剪映草稿生成
+            ├── convert_index.py           # 索引格式转换
+            ├── auto_render.py             # FFmpeg 全自动渲染
+            ├── adaptive_rewriter.py       # 剧本自适应重写
+            ├── orchestrator.py            # 三级确认 + 超时熔断
+            └── render/                    # ★ 渲染子模块（来自 opencut）
+                ├── beauty.py              # 频率分解磨皮（MediaPipe）
+                └── pipeline.py            # 完整渲染管道（含音频混合）
 ```
 
 ## 🛠️ 功能特性
@@ -100,9 +103,9 @@ videoediter/
 ### manage-videos（素材管理）
 
 - **批量分析**：技术质量、内容标签、地点识别
-- **语义索引**：支持中文/英文关键词检索
-- **智能搜索**：多维度匹配（描述、标签、物体、情绪）
 - **质量评分**：分辨率、码率综合评估
+- **★ pHash 去重**：感知哈希 + SQLite，秒速检测 8TB 素材库中的重复片段
+- **★ CLIP 语义搜索**：中英文文本直接匹配视频内容（未安装时自动降级关键词）
 
 ### video-editor（剪辑执行）
 
@@ -110,6 +113,9 @@ videoediter/
 - **剪映集成**：生成可直接导入的 JSON 草稿
 - **双语字幕**：中英文双字幕轨道
 - **智能匹配**：根据脚本语义自动匹配素材
+- **★ 频率分解磨皮**：MediaPipe 人脸检测 + 频率分离，精准处理毛孔/痘印
+- **★ 三级确认熔断**：10 分钟超时自动降级 + 可选 Discord 通知
+- **★ 剧本自适应重写**：素材不足时自动改戏（词汇替换 + 通用文案）
 
 ## 📖 使用指南
 
