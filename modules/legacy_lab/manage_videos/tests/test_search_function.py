@@ -5,7 +5,12 @@
 
 import sqlite3
 from pathlib import Path
-from improved_fingerprint import ImprovedFingerprintSystem
+try:
+    from modules.legacy_lab.manage_videos.improved_fingerprint import (
+        ImprovedFingerprintSystem,
+    )
+except ModuleNotFoundError:
+    from improved_fingerprint import ImprovedFingerprintSystem
 
 class SearchTester:
     def __init__(self, db_path="video_fingerprints.db"):

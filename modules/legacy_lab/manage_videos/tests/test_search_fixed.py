@@ -3,7 +3,12 @@
 修复后的搜索测试
 """
 
-from improved_fingerprint import ImprovedFingerprintSystem
+try:
+    from modules.legacy_lab.manage_videos.improved_fingerprint import (
+        ImprovedFingerprintSystem,
+    )
+except ModuleNotFoundError:
+    from improved_fingerprint import ImprovedFingerprintSystem
 from pathlib import Path
 
 def test_fixed_search():
