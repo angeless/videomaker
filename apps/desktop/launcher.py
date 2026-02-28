@@ -59,6 +59,7 @@ def main():
 
     # 等待 Flask 就绪
     url = f"http://127.0.0.1:{port}"
+    print(f"[launcher] serving UI at {url}")
     for _ in range(20):
         try:
             import urllib.request
