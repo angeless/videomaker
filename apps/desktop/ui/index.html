@@ -135,6 +135,14 @@
           <div style="font-size:22px;font-weight:700" x-text="libraryStats.available_assets || 0"></div>
         </div>
         <div>
+          <div style="font-size:11px;color:var(--muted)">视频素材</div>
+          <div style="font-size:22px;font-weight:700" x-text="libraryStats.video_assets || 0"></div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted)">图片素材</div>
+          <div style="font-size:22px;font-weight:700" x-text="libraryStats.image_assets || 0"></div>
+        </div>
+        <div>
           <div style="font-size:11px;color:var(--muted)">本地来源</div>
           <div style="font-size:22px;font-weight:700" x-text="libraryStats.local_assets || 0"></div>
         </div>
@@ -153,6 +161,14 @@
         <div>
           <div style="font-size:11px;color:var(--muted)">语义待升级</div>
           <div style="font-size:22px;font-weight:700" x-text="libraryStats.semantic_pending_assets || 0"></div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted)">向量已就绪</div>
+          <div style="font-size:22px;font-weight:700" x-text="libraryStats.embedding_ready_assets || 0"></div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted)">向量待生成</div>
+          <div style="font-size:22px;font-weight:700" x-text="libraryStats.embedding_pending_assets || 0"></div>
         </div>
       </div>
     </div>
@@ -177,6 +193,25 @@
             <input class="input" type="number" min="1" max="5000" x-model.number="ingestLocalMaxVideos"
                    style="width:110px;padding:6px 8px" />
             <span>个视频（防止大目录导致长时间阻塞）</span>
+          </div>
+        </div>
+        <div class="form-field full">
+          <div class="input-label">本地图片目录</div>
+          <div style="display:flex;gap:8px">
+            <input class="input" type="text" x-model="ingestImagePath" placeholder="/path/to/images" />
+            <button class="btn btn-ghost" @click="pickFolder('ingestImagePath')">选择…</button>
+            <button class="btn btn-ghost" @click="previewImageSource()" :disabled="isHeavyBusy || !ingestImagePath">
+              预览目录
+            </button>
+            <button class="btn btn-primary" @click="ingestImageSource()" :disabled="isHeavyBusy || !ingestImagePath">
+              分析本地图片
+            </button>
+          </div>
+          <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--muted);font-size:12px">
+            <span>本次最多分析</span>
+            <input class="input" type="number" min="1" max="8000" x-model.number="ingestImageMaxItems"
+                   style="width:110px;padding:6px 8px" />
+            <span>张图片</span>
           </div>
         </div>
         <div class="form-field full">
@@ -213,6 +248,36 @@
             <span>强制重新下载云端缓存</span>
           </div>
         </div>
+        <div class="form-field full">
+          <div class="input-label">Google Drive 图片公开链接</div>
+          <div style="display:flex;gap:8px">
+            <input class="input" type="text" x-model="ingestDriveImageUrl" placeholder="https://drive.google.com/..." />
+            <button class="btn btn-ghost" @click="previewDriveImageSource()" :disabled="isHeavyBusy || ingestImageDrivePreviewLoading || !ingestDriveImageUrl">
+              预览扫描
+            </button>
+            <button class="btn btn-primary" @click="ingestDriveImageSource()" :disabled="isHeavyBusy || !ingestDriveImageUrl">
+              分析云端图片
+            </button>
+          </div>
+          <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--muted);font-size:12px">
+            <span>本次最多下载并分析</span>
+            <input class="input" type="number" min="1" max="2000" x-model.number="ingestDriveImageMaxItems"
+                   style="width:96px;padding:6px 8px" />
+            <span>张图片</span>
+          </div>
+          <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--muted);font-size:12px">
+            <span>优先子目录关键词（可选）</span>
+            <input class="input" type="text" x-model="ingestDriveImagePriority"
+                   placeholder="例如：封面, 静态图, 景点照"
+                   style="min-width:260px;padding:6px 8px" />
+          </div>
+          <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--muted);font-size:12px">
+            <span>最多扫描目录</span>
+            <input class="input" type="number" min="1" max="2000" x-model.number="ingestDriveImageMaxScanFolders"
+                   style="width:96px;padding:6px 8px" />
+            <span>个</span>
+          </div>
+        </div>
         <div x-show="ingestLocalPreviewLoading" style="margin-top:8px;color:var(--muted);font-size:12px">本地目录预览中…</div>
         <div x-show="ingestLocalPreviewError" class="badge badge-danger" style="margin-top:8px" x-text="ingestLocalPreviewError"></div>
         <div x-show="ingestLocalPreview" style="margin-top:8px;font-size:12px;color:var(--muted)">
@@ -222,6 +287,17 @@
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px" x-show="ingestLocalPreview && ingestLocalPreview.sample_videos && ingestLocalPreview.sample_videos.length>0">
           <template x-for="p in (ingestLocalPreview.sample_videos || [])" :key="p">
             <span class="badge badge-info" x-text="p"></span>
+          </template>
+        </div>
+        <div x-show="ingestImagePreviewLoading" style="margin-top:8px;color:var(--muted);font-size:12px">图片目录预览中…</div>
+        <div x-show="ingestImagePreviewError" class="badge badge-danger" style="margin-top:8px" x-text="ingestImagePreviewError"></div>
+        <div x-show="ingestImagePreview" style="margin-top:8px;font-size:12px;color:var(--muted)">
+          目录候选图片：
+          <span x-text="(ingestImagePreview && ingestImagePreview.image_candidates) || 0"></span> 个
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px" x-show="ingestImagePreview && ingestImagePreview.sample_images && ingestImagePreview.sample_images.length>0">
+          <template x-for="p in (ingestImagePreview.sample_images || [])" :key="`img-${p}`">
+            <span class="badge badge-success" x-text="p"></span>
           </template>
         </div>
       </div>
@@ -267,6 +343,26 @@
           </template>
         </div>
       </div>
+      <div x-show="ingestImageDrivePreviewLoading" style="margin-top:8px;color:var(--muted)">图片预览扫描中，请稍候…</div>
+      <div x-show="ingestImageDrivePreviewError" class="badge badge-danger" style="margin-top:8px" x-text="ingestImageDrivePreviewError"></div>
+      <div x-show="ingestImageDrivePreview" style="margin-top:10px;border-top:1px dashed var(--border);padding-top:10px">
+        <div style="font-size:12px;color:var(--muted)">
+          图片预览结果：
+          扫描目录 <span x-text="(ingestImageDrivePreview && ingestImageDrivePreview.scanned_folders) || 0"></span> /
+          上限 <span x-text="(ingestImageDrivePreview && ingestImageDrivePreview.max_scan_folders) || 0"></span>，
+          列出文件 <span x-text="(ingestImageDrivePreview && ingestImageDrivePreview.listed_files) || 0"></span>，
+          图片文件 <span x-text="(ingestImageDrivePreview && ingestImageDrivePreview.image_files) || 0"></span>
+          <span x-show="ingestImageDrivePreview && ingestImageDrivePreview.scan_partial">（部分扫描）</span>
+        </div>
+        <div style="margin-top:8px;font-size:12px;color:var(--muted)" x-show="(ingestImageDrivePreview && ingestImageDrivePreview.folder_stats ? ingestImageDrivePreview.folder_stats : []).length>0">
+          命中子目录（前 20）
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px" x-show="(ingestImageDrivePreview && ingestImageDrivePreview.folder_stats ? ingestImageDrivePreview.folder_stats : []).length>0">
+          <template x-for="folder in (ingestImageDrivePreview && ingestImageDrivePreview.folder_stats ? ingestImageDrivePreview.folder_stats : [])" :key="`img-folder-${folder.path}`">
+            <span class="badge badge-success" x-text="`${folder.path}（图片${folder.image_files}）`"></span>
+          </template>
+        </div>
+      </div>
     </div>
 
     <div class="card" style="margin-bottom:14px">
@@ -274,23 +370,39 @@
       <div class="form-grid">
         <div class="form-field">
           <div class="input-label">AI Provider</div>
-          <select class="input" x-model="aiSettings.provider">
+          <select class="input" x-model="aiSettings.provider" @change="onProviderChanged()">
             <option value="openai">openai</option>
             <option value="anthropic">anthropic</option>
             <option value="moonshot">moonshot</option>
+            <option value="kimi">kimi</option>
+            <option value="qwen">qwen</option>
+            <option value="gemini">gemini</option>
+            <option value="maxmini">maxmini</option>
           </select>
         </div>
         <div class="form-field">
           <div class="input-label">Model（可选）</div>
           <input class="input" type="text" x-model="aiSettings.ai_model" placeholder="如 gpt-4o-mini / claude-sonnet-4-6" />
         </div>
+        <div class="form-field">
+          <div class="input-label">Embedding Model（可选）</div>
+          <input class="input" type="text" x-model="aiSettings.embedding_model" placeholder="如 text-embedding-3-small" />
+        </div>
         <div class="form-field full">
           <div class="input-label">Base URL（可选）</div>
           <input class="input" type="text" x-model="aiSettings.ai_base_url" placeholder="如 https://api.openai.com/v1" />
+          <div style="display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap">
+            <span style="font-size:12px;color:var(--muted)"
+                  x-text="recommendedBaseUrl() ? `推荐：${recommendedBaseUrl()}` : '当前 provider 无默认推荐地址'"></span>
+            <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" @click="fillRecommendedBaseUrl()">
+              一键填充推荐地址
+            </button>
+          </div>
+          <div style="font-size:12px;color:var(--muted);margin-top:6px">留空默认官方地址。仅在代理或兼容网关时填写。</div>
         </div>
 
         <div class="form-field">
-          <div class="input-label">OpenAI API Key（留空不修改）</div>
+          <div class="input-label">OpenAI兼容 API Key（openai/moonshot/kimi/qwen/gemini/maxmini，留空不修改）</div>
           <input class="input" type="password" x-model="aiSettings.openai_api_key" placeholder="sk-..." />
           <div style="font-size:12px;color:var(--muted);margin-top:6px">
             状态：<span x-text="aiStatus.openai_api_key_set ? `已保存（${aiStatus.openai_api_key_masked || '***'}）` : '未保存'"></span>
@@ -324,6 +436,31 @@
 
     <div class="card">
       <div class="card-title">语义搜索素材</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <span style="font-size:12px;color:var(--muted)">检索模式</span>
+        <button class="btn" :class="librarySearchMode==='hybrid' ? 'btn-primary' : 'btn-ghost'"
+                style="font-size:12px;padding:5px 10px"
+                @click="setLibrarySearchMode('hybrid')">混合</button>
+        <button class="btn" :class="librarySearchMode==='keyword' ? 'btn-primary' : 'btn-ghost'"
+                style="font-size:12px;padding:5px 10px"
+                @click="setLibrarySearchMode('keyword')">关键词</button>
+        <button class="btn" :class="librarySearchMode==='vector' ? 'btn-primary' : 'btn-ghost'"
+                style="font-size:12px;padding:5px 10px"
+                @click="setLibrarySearchMode('vector')">向量</button>
+        <span style="font-size:12px;color:var(--muted);margin-left:6px">类型</span>
+        <button class="btn" :class="libraryMediaType==='all' ? 'btn-primary' : 'btn-ghost'"
+                style="font-size:12px;padding:5px 10px"
+                @click="setLibraryMediaType('all')">全部</button>
+        <button class="btn" :class="libraryMediaType==='video' ? 'btn-primary' : 'btn-ghost'"
+                style="font-size:12px;padding:5px 10px"
+                @click="setLibraryMediaType('video')">视频</button>
+        <button class="btn" :class="libraryMediaType==='image' ? 'btn-primary' : 'btn-ghost'"
+                style="font-size:12px;padding:5px 10px"
+                @click="setLibraryMediaType('image')">图片</button>
+        <span class="badge badge-info" x-text="`当前: ${retrievalModeZh(libraryRetrievalMode)}`"></span>
+        <span class="badge" :class="libraryEmbeddingEnabled ? 'badge-success' : 'badge-warn'"
+              x-text="libraryEmbeddingEnabled ? `向量可用（${libraryEmbeddingReadyAssets}）` : `向量不可用（${embeddingStatusZh(libraryEmbeddingStatus)}）`"></span>
+      </div>
       <div style="display:flex;gap:8px;margin-bottom:10px">
         <input class="input" type="text" x-model="libraryQuery"
                @keydown.enter.prevent="searchLibrary()"
@@ -340,11 +477,15 @@
         <template x-for="asset in libraryResults" :key="asset.uid">
           <div class="frame-card" style="padding:12px">
               <div style="font-size:13px;font-weight:600" x-text="asset.filename"></div>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px"
+                   x-text="`类型：${assetKindZh(asset.asset_kind)}`"></div>
               <div style="font-size:12px;color:var(--muted);margin-top:4px" x-text="`${asset.resolution || '未知分辨率'} · ${formatDur(asset.duration)}`"></div>
               <div style="font-size:12px;color:var(--muted);margin-top:2px"
                    x-show="semanticSummary(asset)"
                    x-text="semanticSummary(asset)"></div>
               <div style="font-size:12px;color:var(--muted);margin-top:2px" x-text="toZhSentence(asset.scene_description || '无场景描述')"></div>
+              <div style="font-size:11px;color:var(--muted);margin-top:4px" x-show="libraryQuery.trim()"
+                   x-text="`综合 ${formatScore(asset.match_score)} · 关键词 ${asset.keyword_score || 0} · 向量 ${formatVectorScore(asset.vector_score)}`"></div>
               <div style="font-size:11px;color:var(--muted);margin-top:2px"
                    x-text="`语义维度 ${asset.semantic_dimensions_count || 0}`"></div>
               <div style="font-size:11px;color:var(--muted);margin-top:6px">核心检索标签</div>
@@ -363,9 +504,11 @@
               </details>
             <div style="display:flex;gap:8px;margin-top:10px">
               <button class="btn btn-ghost" @click="openFinder(asset.path)" :disabled="!asset.path">定位</button>
-              <button class="btn" :class="isSelected(asset.uid) ? 'btn-danger' : 'btn-success'"
+              <button class="btn"
+                      :class="(asset.asset_kind || 'video') === 'video' ? (isSelected(asset.uid) ? 'btn-danger' : 'btn-success') : 'btn-ghost'"
+                      :disabled="(asset.asset_kind || 'video') !== 'video'"
                       @click="toggleSelect(asset)">
-                <span x-text="isSelected(asset.uid) ? '取消选择' : '加入制作'"></span>
+                <span x-text="(asset.asset_kind || 'video') === 'video' ? (isSelected(asset.uid) ? '取消选择' : '加入制作') : '图片不可加入制作'"></span>
               </button>
             </div>
           </div>
@@ -430,6 +573,1999 @@
 
     <!-- ── 内容区 ─────────────────────────────────────────────── -->
     <div class="content">
+
+      <!-- ── Capability 工作台（独立功能模块）──────────────────── -->
+      <div x-show="projectDir" class="card fade-in" style="margin-bottom:4px">
+        <div class="card-title">
+          <span>🧩</span>
+          <span>能力工作台（模块化功能）</span>
+          <button class="btn btn-ghost" style="margin-left:auto;font-size:12px;padding:4px 10px"
+                  @click="loadCapabilityWorkbench()" :disabled="capabilitiesLoading || topicLibraryLoading">
+            刷新能力数据
+          </button>
+        </div>
+        <div x-show="capabilityMessage" class="badge badge-info" style="margin-bottom:10px" x-text="capabilityMessage"></div>
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          <button class="btn" :class="capabilityTab==='topic_library' ? 'btn-primary' : 'btn-ghost'"
+                  style="font-size:12px;padding:5px 10px"
+                  @click="capabilityTab='topic_library'">选题库</button>
+          <button class="btn" :class="capabilityTab==='topic_copy' ? 'btn-primary' : 'btn-ghost'"
+                  style="font-size:12px;padding:5px 10px"
+                  @click="capabilityTab='topic_copy'">选题+文案</button>
+          <button class="btn" :class="capabilityTab==='text_rough' ? 'btn-primary' : 'btn-ghost'"
+                  style="font-size:12px;padding:5px 10px"
+                  @click="capabilityTab='text_rough'; loadTextRoughSource()">文字粗剪</button>
+          <button class="btn" :class="capabilityTab==='short_clip' ? 'btn-primary' : 'btn-ghost'"
+                  style="font-size:12px;padding:5px 10px"
+                  @click="capabilityTab='short_clip'">短视频快剪</button>
+          <button class="btn" :class="capabilityTab==='refinement' ? 'btn-primary' : 'btn-ghost'"
+                  style="font-size:12px;padding:5px 10px"
+                  @click="capabilityTab='refinement'">视频精剪</button>
+          <button class="btn" :class="capabilityTab==='social_export' ? 'btn-primary' : 'btn-ghost'"
+                  style="font-size:12px;padding:5px 10px"
+                  @click="capabilityTab='social_export'">社媒导出</button>
+          <button class="btn" :class="capabilityTab==='audio_voice' ? 'btn-primary' : 'btn-ghost'"
+                  style="font-size:12px;padding:5px 10px"
+                  @click="capabilityTab='audio_voice'">配乐配音</button>
+          <button class="btn" :class="capabilityTab==='subtitle_calibration' ? 'btn-primary' : 'btn-ghost'"
+                  style="font-size:12px;padding:5px 10px"
+                  @click="capabilityTab='subtitle_calibration'">字幕校准</button>
+          <button class="btn" :class="capabilityTab==='image_semantic' ? 'btn-primary' : 'btn-ghost'"
+                  style="font-size:12px;padding:5px 10px"
+                  @click="capabilityTab='image_semantic'">图片语义</button>
+          <button class="btn" :class="capabilityTab==='article_expand' ? 'btn-primary' : 'btn-ghost'"
+                  style="font-size:12px;padding:5px 10px"
+                  @click="capabilityTab='article_expand'">公众号扩写</button>
+          <button class="btn" :class="capabilityTab==='content_publish' ? 'btn-primary' : 'btn-ghost'"
+                  style="font-size:12px;padding:5px 10px"
+                  @click="capabilityTab='content_publish'; loadContentPublishPlatforms()">内容发布</button>
+          <button class="btn" :class="capabilityTab==='workflow_builder' ? 'btn-primary' : 'btn-ghost'"
+                  style="font-size:12px;padding:5px 10px"
+                  @click="capabilityTab='workflow_builder'; loadWorkflowCatalog(); loadWorkflowList(); loadWorkflowRuns()">自定义工作流</button>
+          <button class="btn" :class="capabilityTab==='idempotency_cache' ? 'btn-primary' : 'btn-ghost'"
+                  style="font-size:12px;padding:5px 10px"
+                  @click="capabilityTab='idempotency_cache'; loadIdempotencyCache(true)">幂等缓存</button>
+          <button class="btn" :class="capabilityTab==='agent_templates' ? 'btn-primary' : 'btn-ghost'"
+                  style="font-size:12px;padding:5px 10px"
+                  @click="capabilityTab='agent_templates'; loadAgentTemplates()">Agent模板</button>
+          <button class="btn" :class="capabilityTab==='agent_observability' ? 'btn-primary' : 'btn-ghost'"
+                  style="font-size:12px;padding:5px 10px"
+                  @click="capabilityTab='agent_observability'; loadAgentObservability()">Agent观测</button>
+        </div>
+
+        <div x-show="capabilityTab==='topic_library'" class="fade-in">
+          <div class="form-grid">
+            <div class="form-field">
+              <div class="input-label">检索</div>
+              <input class="input" x-model="topicLibraryQuery" placeholder="关键词检索标题/模板/标签" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">分类</div>
+              <input class="input" x-model="topicLibraryCategory" placeholder="travel" />
+            </div>
+            <div class="form-field" style="display:flex;align-items:flex-end;gap:8px">
+              <button class="btn btn-primary" @click="loadTopicLibrary()" :disabled="topicLibraryLoading">查询</button>
+              <button class="btn btn-ghost" @click="bootstrapTopicLibrary()">从素材初始化</button>
+            </div>
+          </div>
+          <div class="form-grid" style="margin-top:10px">
+            <div class="form-field">
+              <div class="input-label">标题</div>
+              <input class="input" x-model="topicForm.title" placeholder="例如：城市夜景漫游" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">slug（可选）</div>
+              <input class="input" x-model="topicForm.slug" placeholder="city-night-walk" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">标签</div>
+              <input class="input" x-model="topicForm.tags" placeholder="夜景,城市,街拍" />
+            </div>
+            <div class="form-field full">
+              <div class="input-label">结构模板</div>
+              <input class="input" x-model="topicForm.outline_template" placeholder="开场冲突-中段推进-结尾回收情绪" />
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button class="btn btn-success" @click="saveTopicTemplate()">保存模板</button>
+          </div>
+          <div style="margin-top:10px;max-height:180px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:8px">
+            <template x-for="item in topicLibraryItems.slice(0, 20)" :key="item.slug">
+              <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed var(--border)">
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:13px;font-weight:600" x-text="item.title"></div>
+                  <div style="font-size:11px;color:var(--muted)" x-text="`${item.slug} | ${(item.tags||[]).join(', ')}`"></div>
+                </div>
+                <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" @click="useTopicTemplate(item)">用于文案</button>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <div x-show="capabilityTab==='topic_copy'" class="fade-in">
+          <div class="form-grid">
+            <div class="form-field">
+              <div class="input-label">选题 slug</div>
+              <input class="input" x-model="topicCopy.slug" placeholder="从选题库选择或手动输入" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">目标时长（秒）</div>
+              <input class="input" type="number" x-model.number="topicCopy.target_duration_s" />
+            </div>
+            <div class="form-field" style="display:flex;align-items:flex-end">
+              <button class="btn btn-primary" @click="buildTopicCopyDraft()">生成文案草案</button>
+            </div>
+          </div>
+          <div class="card" style="margin-top:10px" x-show="topicCopy.draft">
+            <div class="card-title">文案草案输出</div>
+            <textarea class="json-editor" style="min-height:180px" :value="jsonPretty(topicCopy.draft)" readonly></textarea>
+          </div>
+        </div>
+
+        <div x-show="capabilityTab==='text_rough'" class="fade-in">
+          <div class="form-grid">
+            <div class="form-field">
+              <div class="input-label">去除口头词</div>
+              <input class="input" x-model="textRoughInput.removed_phrases" placeholder="嗯,啊,然后,就是" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">目标时长（秒）</div>
+              <input class="input" type="number" x-model.number="textRoughInput.target_duration_s" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">合并间隔（秒）</div>
+              <input class="input" type="number" step="0.05" x-model.number="textRoughInput.merge_gap_s" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">保留句号（可选）</div>
+              <input class="input" x-model="textRoughInput.keep_span_indexes" placeholder="1,2,5-8" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">删除句号（可选）</div>
+              <input class="input" x-model="textRoughInput.drop_span_indexes" placeholder="3,9,12-14" />
+            </div>
+            <div class="form-field full">
+              <div class="toggle-wrap">
+                <label class="toggle">
+                  <input type="checkbox" x-model="textRoughInput.apply_removed_phrases" />
+                  <span class="toggle-slider"></span>
+                </label>
+                <span style="font-size:13px">保留/删除句号后继续应用“去除口头词”过滤</span>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button class="btn btn-ghost" @click="loadTextRoughSource()" :disabled="textRoughSourceLoading">
+              <span x-show="!textRoughSourceLoading">刷新句子</span>
+              <span x-show="textRoughSourceLoading">加载中…</span>
+            </button>
+            <button class="btn btn-ghost" @click="setAllTextRoughSelection(true)">全选</button>
+            <button class="btn btn-ghost" @click="setAllTextRoughSelection(false)">全不选</button>
+            <button class="btn btn-ghost" @click="invertTextRoughSelection()">反选</button>
+            <button class="btn btn-ghost" @click="applyTextRoughInputsToSelection()">应用保留/删除输入</button>
+            <button class="btn btn-ghost" @click="removeFillerTextRoughSpans()">全删口头词句</button>
+            <button class="btn btn-primary" @click="buildTextRoughPlan()">生成文字粗剪计划</button>
+          </div>
+          <div class="card" style="margin-top:10px">
+            <div class="card-title">逐句文本粗剪（Descript 风格）</div>
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+              <input class="input" style="min-width:240px" x-model="textRoughFilterKeyword" placeholder="关键词筛选句子（如：转场、风景、口播）" />
+              <button class="btn btn-ghost" @click="setFilteredTextRoughSelection(true)">按筛选全选</button>
+              <button class="btn btn-ghost" @click="setFilteredTextRoughSelection(false)">按筛选全不选</button>
+              <span style="font-size:12px;color:var(--muted)"
+                    x-text="`显示 ${getFilteredTextRoughSpans().length}/${textRoughSpans.length} 句`"></span>
+            </div>
+            <div x-show="textRoughSourceError" class="badge badge-danger" x-text="textRoughSourceError"></div>
+            <div x-show="!textRoughSourceError && textRoughSpans.length===0" style="font-size:12px;color:var(--muted)">
+              暂无字幕句子。请先生成脚本字幕（Step3）或刷新句子。
+            </div>
+            <div x-show="textRoughSpans.length>0" style="max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:8px">
+              <template x-for="span in getFilteredTextRoughSpans()" :key="span.index">
+                <label style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px dashed var(--border);cursor:pointer">
+                  <input type="checkbox" x-model="span.keep" @change="syncTextRoughSelectionInputs()" />
+                  <div style="flex:1;min-width:0" @click.stop="jumpTextRoughPreview(span.start)">
+                    <div style="font-size:11px;color:var(--muted)" x-text="`#${span.index} | ${span.start}s - ${span.end}s`"></div>
+                    <div style="font-size:13px;line-height:1.45" x-text="span.text"></div>
+                  </div>
+                </label>
+              </template>
+            </div>
+          </div>
+          <div class="card" style="margin-top:10px">
+            <div class="card-title">粗剪预览联动（点击句子自动跳转）</div>
+            <div class="video-wrap" x-show="roughUrl">
+              <video x-ref="textRoughPreviewVideo" :src="roughUrl" controls playsinline></video>
+            </div>
+            <div x-show="!roughUrl" style="font-size:12px;color:var(--muted)">
+              暂无粗剪预览视频。完成 Step6 后可用。
+            </div>
+          </div>
+          <div class="card" style="margin-top:10px" x-show="textRoughPlan">
+            <div class="card-title">文字粗剪 JSON</div>
+            <textarea class="json-editor" style="min-height:180px" :value="jsonPretty(textRoughPlan)" readonly></textarea>
+          </div>
+        </div>
+
+        <div x-show="capabilityTab==='short_clip'" class="fade-in">
+          <div class="form-grid">
+            <div class="form-field">
+              <div class="input-label">目标时长（秒）</div>
+              <input class="input" type="number" x-model.number="shortClipInput.target_duration_s" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">最多片段数</div>
+              <input class="input" type="number" x-model.number="shortClipInput.max_clips" />
+            </div>
+            <div class="form-field" style="display:flex;align-items:flex-end">
+              <button class="btn btn-primary" @click="buildShortClipPlan()">生成快剪计划</button>
+            </div>
+          </div>
+          <div class="card" style="margin-top:10px" x-show="shortClipPlan">
+            <div class="card-title">快剪 JSON</div>
+            <textarea class="json-editor" style="min-height:180px" :value="jsonPretty(shortClipPlan)" readonly></textarea>
+          </div>
+        </div>
+
+        <div x-show="capabilityTab==='refinement'" class="fade-in">
+          <div class="form-grid">
+            <div class="form-field">
+              <div class="input-label">风格</div>
+              <select class="input" x-model="refineInput.style">
+                <option value="travel_story">travel_story</option>
+                <option value="cinematic">cinematic</option>
+                <option value="clean_vlog">clean_vlog</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <div class="input-label">编辑器</div>
+              <select class="input" x-model="refineInput.editor">
+                <option value="internal_ffmpeg">internal_ffmpeg</option>
+                <option value="davinci">davinci</option>
+                <option value="finalcut">finalcut</option>
+                <option value="premiere">premiere</option>
+                <option value="jianying">jianying</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <div class="input-label">质量档位</div>
+              <select class="input" x-model="refineInput.quality">
+                <option value="draft">draft</option>
+                <option value="high">high</option>
+                <option value="premium">premium</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button class="btn btn-primary" @click="buildRefinePlan()">生成精剪策略</button>
+            <button class="btn btn-ghost" @click="buildNleHandoff()">生成 NLE 交接包</button>
+            <button class="btn btn-success" @click="executeNleRefinement()">交接并启动编辑器</button>
+            <button class="btn btn-primary" @click="collectNleMaster()">导回成片</button>
+          </div>
+          <div class="form-grid" style="margin-top:10px">
+            <div class="form-field">
+              <div class="input-label">交接编辑器</div>
+              <select class="input" x-model="handoffInput.editor">
+                <option value="finalcut">finalcut (FCPXML)</option>
+                <option value="premiere">premiere (EDL)</option>
+                <option value="davinci">davinci (FCPXML + EDL)</option>
+                <option value="jianying">jianying (manifest)</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <div class="input-label">交接标题</div>
+              <input class="input" x-model="handoffInput.title" placeholder="VideoEditer Timeline" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">帧率</div>
+              <input class="input" type="number" x-model.number="handoffInput.fps" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">应用名（可选）</div>
+              <input class="input" x-model="handoffInput.app_name" placeholder="留空用默认应用名" />
+            </div>
+            <div class="form-field">
+              <div class="toggle-wrap">
+                <label class="toggle">
+                  <input type="checkbox" x-model="handoffInput.launch" />
+                  <span class="toggle-slider"></span>
+                </label>
+                <span style="font-size:13px">生成后自动启动外部编辑器</span>
+              </div>
+            </div>
+            <div class="form-field full">
+              <div class="input-label">外部成片路径（可选）</div>
+              <div style="display:flex;gap:8px">
+                <input class="input" x-model="handoffInput.master_source" placeholder="留空可自动扫描 data/nle_handoff 和 output" />
+                <button class="btn btn-ghost" @click="pickFile('handoffInput.master_source')">选择文件</button>
+              </div>
+            </div>
+            <div class="form-field">
+              <div class="input-label">导回文件名</div>
+              <input class="input" x-model="handoffInput.output_name" placeholder="final.mp4" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">导回方式</div>
+              <select class="input" x-model="handoffInput.copy_mode">
+                <option value="copy">copy</option>
+                <option value="move">move</option>
+              </select>
+            </div>
+          </div>
+          <div class="card" style="margin-top:10px" x-show="refinePlan">
+            <div class="card-title">精剪策略 JSON</div>
+            <textarea class="json-editor" style="min-height:160px" :value="jsonPretty(refinePlan)" readonly></textarea>
+          </div>
+          <div class="card" style="margin-top:10px" x-show="handoffResult">
+            <div class="card-title">NLE 交接包</div>
+            <textarea class="json-editor" style="min-height:140px" :value="jsonPretty(handoffResult)" readonly></textarea>
+          </div>
+          <div class="card" style="margin-top:10px" x-show="handoffLaunchResult">
+            <div class="card-title">NLE 启动结果</div>
+            <textarea class="json-editor" style="min-height:120px" :value="jsonPretty(handoffLaunchResult)" readonly></textarea>
+          </div>
+          <div class="card" style="margin-top:10px" x-show="handoffCollectResult">
+            <div class="card-title">NLE 成片导回结果</div>
+            <textarea class="json-editor" style="min-height:120px" :value="jsonPretty(handoffCollectResult)" readonly></textarea>
+          </div>
+        </div>
+
+        <div x-show="capabilityTab==='social_export'" class="fade-in">
+          <div class="form-grid" style="margin-bottom:10px">
+            <div class="form-field">
+              <div class="input-label">输入视频（可选）</div>
+              <input class="input" x-model="socialExportInput.input_video" placeholder="留空默认 output/final.mp4" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">平台（逗号分隔）</div>
+              <input class="input" x-model="socialExportInput.platforms" placeholder="tiktok短视频,微信短视频,抖音短视频,小红书短视频,微信公众号,b站视频,YouTube视频" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">质量档位</div>
+              <select class="input" x-model="socialExportInput.quality">
+                <option value="draft">draft</option>
+                <option value="medium">medium</option>
+                <option value="high">high</option>
+                <option value="premium">premium</option>
+              </select>
+            </div>
+            <div class="form-field full">
+              <div class="input-label">输出目录（可选）</div>
+              <input class="input" x-model="socialExportInput.output_dir" placeholder="留空默认 output/social_exports" />
+            </div>
+            <div class="form-field full">
+              <div class="toggle-wrap">
+                <label class="toggle">
+                  <input type="checkbox" x-model="socialExportInput.strict_duration_limit" />
+                  <span class="toggle-slider"></span>
+                </label>
+                <span style="font-size:13px">严格按平台最大时长导出（超限自动截断）</span>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-bottom:10px">
+            <button class="btn btn-primary" @click="buildSocialExportPlan()">生成导出计划</button>
+            <button class="btn btn-ghost" @click="validateSocialExportSource()">校验源视频规格</button>
+            <button class="btn btn-success" @click="runSocialExport()" :disabled="socialExportRunning">
+              <span x-show="!socialExportRunning">执行导出</span>
+              <span x-show="socialExportRunning">导出中…</span>
+            </button>
+          </div>
+          <div x-show="socialExportRunning" style="margin-bottom:10px">
+            <div class="progress-bar-wrap">
+              <div class="progress-bar" :style="`width:${socialExportProgress || 0}%`"></div>
+            </div>
+            <div style="font-size:12px;color:var(--muted);margin-top:6px" x-text="`导出进度：${socialExportProgress || 0}%`"></div>
+          </div>
+          <div class="card" style="margin-bottom:10px">
+            <div class="card-title">自定义导出模板（FlexClip 风格）</div>
+            <div class="form-grid">
+              <div class="form-field">
+                <div class="input-label">模板ID</div>
+                <input class="input" x-model="socialTemplateForm.platform_id" placeholder="travel_vertical" />
+              </div>
+              <div class="form-field">
+                <div class="input-label">模板名称</div>
+                <input class="input" x-model="socialTemplateForm.name" placeholder="旅行竖版模板 9:16" />
+              </div>
+              <div class="form-field">
+                <div class="input-label">宽度</div>
+                <input class="input" type="number" x-model.number="socialTemplateForm.width" />
+              </div>
+              <div class="form-field">
+                <div class="input-label">高度</div>
+                <input class="input" type="number" x-model.number="socialTemplateForm.height" />
+              </div>
+              <div class="form-field">
+                <div class="input-label">帧率</div>
+                <input class="input" type="number" x-model.number="socialTemplateForm.fps" />
+              </div>
+              <div class="form-field">
+                <div class="input-label">视频码率</div>
+                <input class="input" x-model="socialTemplateForm.video_bitrate" placeholder="10M" />
+              </div>
+              <div class="form-field">
+                <div class="input-label">音频码率</div>
+                <input class="input" x-model="socialTemplateForm.audio_bitrate" placeholder="192k" />
+              </div>
+              <div class="form-field">
+                <div class="input-label">最大时长(秒)</div>
+                <input class="input" type="number" x-model.number="socialTemplateForm.max_duration_s" />
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <button class="btn btn-primary" @click="saveSocialExportTemplate()">保存模板</button>
+            </div>
+            <div style="margin-top:10px;border:1px solid var(--border);border-radius:8px;padding:8px;max-height:160px;overflow:auto">
+              <div x-show="customExportTemplates.length===0" style="font-size:12px;color:var(--muted)">暂无自定义模板</div>
+              <template x-for="tpl in customExportTemplates" :key="tpl.platform_id">
+                <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed var(--border)">
+                  <div style="flex:1">
+                    <div style="font-size:13px;font-weight:600" x-text="tpl.name"></div>
+                    <div style="font-size:11px;color:var(--muted)" x-text="`${tpl.platform_id} | ${tpl.width}x${tpl.height} | ${tpl.fps}fps | ${tpl.video_bitrate}`"></div>
+                  </div>
+                  <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" @click="fillTemplateFormFromProfile(tpl)">编辑</button>
+                  <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" @click="useExportProfile(tpl)">用于导出</button>
+                  <button class="btn btn-danger" style="font-size:11px;padding:3px 8px" @click="deleteSocialExportTemplate(tpl.platform_id)">删除</button>
+                </div>
+              </template>
+            </div>
+          </div>
+          <div class="card" style="margin-bottom:10px" x-show="socialExportPlan">
+            <div class="card-title">导出计划 JSON</div>
+            <textarea class="json-editor" style="min-height:140px" :value="jsonPretty(socialExportPlan)" readonly></textarea>
+          </div>
+          <div class="card" style="margin-bottom:10px" x-show="socialExportValidation">
+            <div class="card-title">源视频规格校验</div>
+            <textarea class="json-editor" style="min-height:140px" :value="jsonPretty(socialExportValidation)" readonly></textarea>
+          </div>
+          <div class="card" style="margin-bottom:10px" x-show="socialExportResult">
+            <div class="card-title">导出执行结果</div>
+            <textarea class="json-editor" style="min-height:140px" :value="jsonPretty(socialExportResult)" readonly></textarea>
+          </div>
+          <div class="card" style="margin-bottom:10px">
+            <div class="card-title">
+              <span>导出历史批次</span>
+              <button class="btn btn-ghost" style="margin-left:auto;font-size:11px;padding:3px 8px"
+                      @click="loadSocialExportHistory()" :disabled="socialExportHistoryLoading">
+                刷新历史
+              </button>
+            </div>
+            <div x-show="socialExportHistoryLoading" style="font-size:12px;color:var(--muted)">加载中…</div>
+            <div x-show="!socialExportHistoryLoading && socialExportHistory.length===0" style="font-size:12px;color:var(--muted)">暂无导出历史</div>
+            <div x-show="socialExportHistory.length>0" style="max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:8px">
+              <template x-for="item in socialExportHistory" :key="item.batch_id">
+                <div style="padding:8px 0;border-bottom:1px dashed var(--border)">
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                    <span class="badge badge-info" x-text="item.batch_id"></span>
+                    <span class="badge" :class="item.status==='done' ? 'badge-success' : (item.status==='partial' ? 'badge-warn' : 'badge-danger')"
+                          x-text="socialExportStatusZh(item.status)"></span>
+                    <span style="font-size:11px;color:var(--muted)" x-text="formatDateTime(item.finished_at || item.started_at)"></span>
+                  </div>
+                  <div style="font-size:12px;color:var(--muted);margin-top:4px"
+                       x-text="`平台: ${(item.platforms || []).join(', ')} | 成功 ${item.success || 0} / ${item.total || 0}`"></div>
+                  <div style="font-size:11px;color:var(--muted);margin-top:3px"
+                       x-text="`时长限制: ${item.strict_duration_limit ? '严格截断' : '不截断'}`"></div>
+                  <div style="font-size:11px;color:var(--muted);margin-top:3px" x-text="`输出目录: ${item.output_dir || '-'}`"></div>
+                  <div style="display:flex;gap:8px;margin-top:6px">
+                    <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" @click="openFinder(item.output_dir)">打开目录</button>
+                    <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px"
+                            x-show="(item.output_files || []).length>0"
+                            @click="openFinder((item.output_files || [])[0])">
+                      打开首个成片
+                    </button>
+                    <button class="btn btn-primary" style="font-size:11px;padding:3px 8px"
+                            :disabled="socialExportRunning"
+                            @click="rerunSocialExportBatch(item.batch_id)">
+                      复跑同参数
+                    </button>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:8px">平台导出规格（可作为模板）</div>
+          <div style="max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:8px">
+            <template x-for="p in exportProfiles" :key="p.platform_id">
+              <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed var(--border)">
+                <div style="flex:1">
+                  <div style="font-size:13px;font-weight:600" x-text="p.name"></div>
+                  <div style="font-size:11px;color:var(--muted)" x-text="`${p.platform_id} | ${p.width}x${p.height} | ${p.fps}fps | ${p.video_bitrate}`"></div>
+                </div>
+                <span class="badge badge-info" x-show="p.is_custom">自定义</span>
+                <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" @click="useExportProfile(p)">用于导出</button>
+                <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" x-show="p.is_custom" @click="fillTemplateFormFromProfile(p)">编辑</button>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <div x-show="capabilityTab==='audio_voice'" class="fade-in">
+          <div class="form-grid">
+            <div class="form-field">
+              <div class="input-label">音频风格</div>
+              <select class="input" x-model="audioInput.mood">
+                <option value="travel_story">travel_story</option>
+                <option value="cinematic">cinematic</option>
+                <option value="clean_vlog">clean_vlog</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <div class="input-label">Provider</div>
+              <select class="input" x-model="audioInput.provider">
+                <option value="elevenlabs">elevenlabs</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <div class="input-label">Voice ID</div>
+              <input class="input" x-model="audioInput.voice_id" placeholder="填 ElevenLabs voice_id" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">Model</div>
+              <input class="input" x-model="audioInput.model_id" placeholder="eleven_multilingual_v2" />
+            </div>
+            <div class="form-field full">
+              <div class="input-label">API Key（可选，留空走环境变量 ELEVENLABS_API_KEY）</div>
+              <input class="input" type="password" x-model="audioInput.api_key" placeholder="sk_..." />
+            </div>
+            <div class="form-field full">
+              <div class="input-label">输出目录（可选）</div>
+              <div style="display:flex;gap:8px">
+                <input class="input" x-model="audioInput.output_dir" placeholder="留空默认 data/audio_voice/voiceover" />
+                <button class="btn btn-ghost" @click="pickFolder('audioInput.output_dir')">选择目录</button>
+              </div>
+            </div>
+            <div class="form-field full">
+              <div class="input-label">旁白轨输出（可选）</div>
+              <input class="input" x-model="audioInput.timeline_output" placeholder="留空默认 data/audio_voice/narration_timeline.m4a" />
+            </div>
+            <div class="form-field full">
+              <div class="input-label">输入母版视频（可选）</div>
+              <div style="display:flex;gap:8px">
+                <input class="input" x-model="audioInput.master_input" placeholder="留空默认 output/final.mp4" />
+                <button class="btn btn-ghost" @click="pickFile('audioInput.master_input')">选择文件</button>
+              </div>
+            </div>
+            <div class="form-field full">
+              <div class="input-label">BGM 路径（可选）</div>
+              <div style="display:flex;gap:8px">
+                <input class="input" x-model="audioInput.bgm_audio" placeholder="可选背景音乐文件" />
+                <button class="btn btn-ghost" @click="pickFile('audioInput.bgm_audio')">选择文件</button>
+                <button class="btn btn-primary" @click="pickAudioBgm()">自动选配乐</button>
+              </div>
+            </div>
+            <div class="form-field">
+              <div class="input-label">配乐 Provider</div>
+              <select class="input" x-model="audioInput.bgm_provider">
+                <option value="local_library">local_library</option>
+                <option value="elevencreative_compatible">elevencreative_compatible</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <div class="input-label">配乐 Endpoint（远端可选）</div>
+              <input class="input" x-model="audioInput.bgm_endpoint" placeholder="https://.../v1/music/pick" />
+            </div>
+            <div class="form-field full">
+              <div class="input-label">配乐 API Key（远端可选）</div>
+              <input class="input" type="password" x-model="audioInput.bgm_api_key" placeholder="sk_..." />
+            </div>
+            <div class="form-field full">
+              <div class="input-label">自动配乐目录（可选）</div>
+              <div style="display:flex;gap:8px">
+                <input class="input" x-model="audioInput.bgm_library_dir" placeholder="留空默认扫描 assets/bgm、data/bgm、music 等目录" />
+                <button class="btn btn-ghost" @click="pickFolder('audioInput.bgm_library_dir')">选择目录</button>
+              </div>
+            </div>
+            <div class="form-field full">
+              <div class="toggle-wrap">
+                <label class="toggle">
+                  <input type="checkbox" x-model="audioInput.auto_pick_bgm" />
+                  <span class="toggle-slider"></span>
+                </label>
+                <span style="font-size:13px">混音/流水线时自动选 BGM（未填写 BGM 路径时生效）</span>
+              </div>
+            </div>
+            <div class="form-field full">
+              <div class="toggle-wrap">
+                <label class="toggle">
+                  <input type="checkbox" x-model="audioInput.bgm_download" />
+                  <span class="toggle-slider"></span>
+                </label>
+                <span style="font-size:13px">远端配乐自动下载到本地（仅远端 provider）</span>
+              </div>
+            </div>
+            <div class="form-field full">
+              <div class="toggle-wrap">
+                <label class="toggle">
+                  <input type="checkbox" x-model="audioInput.bgm_cache_enabled" />
+                  <span class="toggle-slider"></span>
+                </label>
+                <span style="font-size:13px">启用远端配乐缓存复用（同 URL 不重复下载）</span>
+              </div>
+            </div>
+            <div class="form-field full">
+              <div class="toggle-wrap">
+                <label class="toggle">
+                  <input type="checkbox" x-model="audioInput.bgm_strict_schema" />
+                  <span class="toggle-slider"></span>
+                </label>
+                <span style="font-size:13px">启用远端响应严格协议校验（tracks 字段）</span>
+              </div>
+            </div>
+            <div class="form-field full">
+              <div class="toggle-wrap">
+                <label class="toggle">
+                  <input type="checkbox" x-model="audioInput.bgm_force_refresh" />
+                  <span class="toggle-slider"></span>
+                </label>
+                <span style="font-size:13px">远端配乐强制刷新（本次忽略缓存）</span>
+              </div>
+            </div>
+            <div class="form-field">
+              <div class="input-label">缓存有效期(天，0=不过期)</div>
+              <input class="input" type="number" step="1" min="0" x-model.number="audioInput.bgm_cache_max_age_days" />
+            </div>
+            <div class="form-field full">
+              <div class="toggle-wrap">
+                <label class="toggle">
+                  <input type="checkbox" x-model="audioInput.bgm_loop" />
+                  <span class="toggle-slider"></span>
+                </label>
+                <span style="font-size:13px">BGM 自动循环到整段视频时长</span>
+              </div>
+            </div>
+            <div class="form-field">
+              <div class="input-label">BGM 淡出时长(s)</div>
+              <input class="input" type="number" step="0.1" x-model.number="audioInput.bgm_fade_out_s" />
+            </div>
+            <div class="form-field full">
+              <div class="input-label">混音输出（可选）</div>
+              <input class="input" x-model="audioInput.mix_output" placeholder="留空默认 output/final_voice.mp4（若勾选覆盖则写回 final.mp4）" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">原声音量</div>
+              <input class="input" type="number" step="0.05" x-model.number="audioInput.origin_volume" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">旁白音量</div>
+              <input class="input" type="number" step="0.05" x-model.number="audioInput.narration_volume" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">BGM 音量</div>
+              <input class="input" type="number" step="0.05" x-model.number="audioInput.bgm_volume" />
+            </div>
+            <div class="form-field full">
+              <div class="toggle-wrap">
+                <label class="toggle">
+                  <input type="checkbox" x-model="audioInput.enable_ducking" />
+                  <span class="toggle-slider"></span>
+                </label>
+                <span style="font-size:13px">启用 BGM Ducking（旁白时自动压低背景音乐）</span>
+              </div>
+            </div>
+            <div class="form-field">
+              <div class="input-label">Ducking Threshold</div>
+              <input class="input" type="number" step="0.01" x-model.number="audioInput.ducking_threshold" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">Ducking Ratio</div>
+              <input class="input" type="number" step="0.1" x-model.number="audioInput.ducking_ratio" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">Ducking Attack(ms)</div>
+              <input class="input" type="number" step="1" x-model.number="audioInput.ducking_attack_ms" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">Ducking Release(ms)</div>
+              <input class="input" type="number" step="1" x-model.number="audioInput.ducking_release_ms" />
+            </div>
+            <div class="form-field full">
+              <div class="toggle-wrap">
+                <label class="toggle">
+                  <input type="checkbox" x-model="audioInput.replace_master" />
+                  <span class="toggle-slider"></span>
+                </label>
+                <span style="font-size:13px">混音后覆盖 output/final.mp4</span>
+              </div>
+            </div>
+            <div class="form-field full">
+              <div class="toggle-wrap">
+                <label class="toggle">
+                  <input type="checkbox" x-model="audioInput.dry_run" />
+                  <span class="toggle-slider"></span>
+                </label>
+                <span style="font-size:13px">Dry-run（仅生成计划，不实际调用 API）</span>
+              </div>
+            </div>
+            <div class="form-field full" style="display:flex;align-items:flex-end;gap:8px">
+              <button class="btn btn-primary" @click="buildAudioVoicePlan()">生成配乐配音规划</button>
+              <button class="btn btn-success" @click="synthesizeAudioVoice()">执行配音合成</button>
+              <button class="btn btn-primary" @click="buildAudioVoiceTimeline()">生成旁白轨</button>
+              <button class="btn btn-success" @click="mixAudioToMaster()">混音到成片</button>
+              <button class="btn btn-success" @click="runAudioVoicePipeline()" :disabled="audioPipelineRunning">
+                <span x-show="!audioPipelineRunning">一键执行音频流水线</span>
+                <span x-show="audioPipelineRunning">流水线运行中…</span>
+              </button>
+            </div>
+          </div>
+          <div x-show="audioPipelineRunning" style="margin-top:8px;margin-bottom:8px">
+            <div class="progress-bar-wrap">
+              <div class="progress-bar" :style="`width:${audioPipelineProgress || 0}%`"></div>
+            </div>
+            <div style="font-size:12px;color:var(--muted);margin-top:6px" x-text="`流水线进度：${audioPipelineProgress || 0}%`"></div>
+          </div>
+          <div class="card" style="margin-top:10px" x-show="audioPlan">
+            <div class="card-title">配乐配音 JSON</div>
+            <textarea class="json-editor" style="min-height:180px" :value="jsonPretty(audioPlan)" readonly></textarea>
+          </div>
+          <div class="card" style="margin-top:10px" x-show="audioSynthesis">
+            <div class="card-title">配音合成结果</div>
+            <textarea class="json-editor" style="min-height:160px" :value="jsonPretty(audioSynthesis)" readonly></textarea>
+          </div>
+          <div class="card" style="margin-top:10px" x-show="audioTimeline">
+            <div class="card-title">旁白轨结果</div>
+            <textarea class="json-editor" style="min-height:140px" :value="jsonPretty(audioTimeline)" readonly></textarea>
+          </div>
+          <div class="card" style="margin-top:10px" x-show="audioBgmPick">
+            <div class="card-title">自动配乐结果</div>
+            <textarea class="json-editor" style="min-height:120px" :value="jsonPretty(audioBgmPick)" readonly></textarea>
+          </div>
+          <div class="card" style="margin-top:10px" x-show="audioMixResult">
+            <div class="card-title">成片混音结果</div>
+            <textarea class="json-editor" style="min-height:140px" :value="jsonPretty(audioMixResult)" readonly></textarea>
+          </div>
+          <div class="card" style="margin-top:10px" x-show="audioPipelineResult">
+            <div class="card-title">音频流水线结果</div>
+            <textarea class="json-editor" style="min-height:160px" :value="jsonPretty(audioPipelineResult)" readonly></textarea>
+          </div>
+        </div>
+
+        <div x-show="capabilityTab==='subtitle_calibration'" class="fade-in">
+          <div class="form-grid">
+            <div class="form-field">
+              <div class="input-label">输入模式</div>
+              <select class="input" x-model="subtitleInput.input_mode">
+                <option value="project">project（读项目字幕）</option>
+                <option value="inline">inline（手动字幕 JSON）</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <div class="input-label">校准模式</div>
+              <select class="input" x-model="subtitleInput.mode">
+                <option value="text_only">text_only</option>
+                <option value="timeline_align">timeline_align</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <div class="input-label">翻译模式</div>
+              <select class="input" x-model="subtitleInput.translation">
+                <option value="off">off</option>
+                <option value="zh2en">zh2en</option>
+                <option value="en2zh">en2zh</option>
+                <option value="bilingual">bilingual</option>
+              </select>
+            </div>
+            <div class="form-field full" x-show="subtitleInput.input_mode==='inline'">
+              <div class="input-label">字幕 JSON</div>
+              <textarea class="json-editor" style="min-height:160px" x-model="subtitleInput.subtitles_json"></textarea>
+            </div>
+            <div class="form-field full">
+              <div class="toggle-wrap">
+                <label class="toggle">
+                  <input type="checkbox" x-model="subtitleInput.use_llm" />
+                  <span class="toggle-slider"></span>
+                </label>
+                <span style="font-size:13px">启用 LLM 翻译校准（无 key 自动降级）</span>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button class="btn btn-primary" @click="planSubtitleCalibration()">生成校准规划</button>
+            <button class="btn btn-success" @click="runSubtitleCalibration()">执行字幕校准</button>
+          </div>
+          <div class="card" style="margin-top:10px" x-show="subtitlePlan">
+            <div class="card-title">字幕校准规划</div>
+            <textarea class="json-editor" style="min-height:120px" :value="jsonPretty(subtitlePlan)" readonly></textarea>
+          </div>
+          <div class="card" style="margin-top:10px" x-show="subtitleResult">
+            <div class="card-title">字幕校准结果</div>
+            <textarea class="json-editor" style="min-height:180px" :value="jsonPretty(subtitleResult)" readonly></textarea>
+          </div>
+        </div>
+
+        <div x-show="capabilityTab==='image_semantic'" class="fade-in">
+          <div class="form-grid">
+            <div class="form-field">
+              <div class="input-label">输入模式</div>
+              <select class="input" x-model="imageSemanticInput.input_mode">
+                <option value="inline">inline（路径输入）</option>
+                <option value="project">project（使用项目库）</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <div class="input-label">检索模式</div>
+              <select class="input" x-model="imageSemanticInput.retrieval_mode">
+                <option value="hybrid">hybrid</option>
+                <option value="keyword">keyword</option>
+                <option value="vector">vector</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <div class="input-label">返回条数</div>
+              <input class="input" type="number" min="1" x-model.number="imageSemanticInput.limit" />
+            </div>
+            <div class="form-field full">
+              <div class="input-label">图片路径（逗号或换行）</div>
+              <textarea class="json-editor" style="min-height:100px" x-model="imageSemanticInput.image_paths" placeholder="/path/a.jpg,/path/b.png"></textarea>
+            </div>
+            <div class="form-field full">
+              <div class="toggle-wrap">
+                <label class="toggle">
+                  <input type="checkbox" x-model="imageSemanticInput.auto_ingest" />
+                  <span class="toggle-slider"></span>
+                </label>
+                <span style="font-size:13px">分析前自动入库语义</span>
+              </div>
+            </div>
+            <div class="form-field full">
+              <div class="input-label">语义查询</div>
+              <input class="input" x-model="imageSemanticInput.query" placeholder="如：雪山 日落 人像" />
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button class="btn btn-primary" @click="analyzeImageSemantic()">分析图片语义</button>
+            <button class="btn btn-success" @click="searchImageSemantic()">语义检索</button>
+          </div>
+          <div class="card" style="margin-top:10px" x-show="imageSemanticAnalyze">
+            <div class="card-title">图片语义分析结果</div>
+            <textarea class="json-editor" style="min-height:160px" :value="jsonPretty(imageSemanticAnalyze)" readonly></textarea>
+          </div>
+          <div class="card" style="margin-top:10px" x-show="imageSemanticSearch">
+            <div class="card-title">图片语义检索结果</div>
+            <textarea class="json-editor" style="min-height:160px" :value="jsonPretty(imageSemanticSearch)" readonly></textarea>
+          </div>
+        </div>
+
+        <div x-show="capabilityTab==='article_expand'" class="fade-in">
+          <div class="form-grid">
+            <div class="form-field">
+              <div class="input-label">输入模式</div>
+              <select class="input" x-model="articleExpandInput.input_mode">
+                <option value="inline">inline</option>
+                <option value="project">project</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <div class="input-label">语气</div>
+              <input class="input" x-model="articleExpandInput.tone" placeholder="professional" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">目标字数</div>
+              <input class="input" type="number" x-model.number="articleExpandInput.length_target" />
+            </div>
+            <div class="form-field full">
+              <div class="input-label">源文本</div>
+              <textarea class="json-editor" style="min-height:120px" x-model="articleExpandInput.source_text"></textarea>
+            </div>
+            <div class="form-field full">
+              <div class="input-label">要点（逗号或换行）</div>
+              <textarea class="json-editor" style="min-height:90px" x-model="articleExpandInput.key_points"></textarea>
+            </div>
+            <div class="form-field full">
+              <div class="toggle-wrap">
+                <label class="toggle">
+                  <input type="checkbox" x-model="articleExpandInput.use_llm" />
+                  <span class="toggle-slider"></span>
+                </label>
+                <span style="font-size:13px">启用 LLM 扩写（无 key 自动降级）</span>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button class="btn btn-primary" @click="generateArticleExpand()">生成公众号扩写</button>
+          </div>
+          <div class="card" style="margin-top:10px" x-show="articleExpandResult">
+            <div class="card-title">公众号扩写结果</div>
+            <textarea class="json-editor" style="min-height:200px" :value="jsonPretty(articleExpandResult)" readonly></textarea>
+          </div>
+        </div>
+
+        <div x-show="capabilityTab==='content_publish'" class="fade-in">
+          <div class="form-grid">
+            <div class="form-field">
+              <div class="input-label">输入模式</div>
+              <select class="input" x-model="contentPublishInput.input_mode">
+                <option value="project">project</option>
+                <option value="inline">inline</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <div class="input-label">内容类型</div>
+              <select class="input" x-model="contentPublishInput.platform_content_type">
+                <option value="video_post">video_post</option>
+                <option value="article_post">article_post</option>
+              </select>
+            </div>
+            <div class="form-field full">
+              <div class="input-label">发布平台</div>
+              <input class="input" x-model="contentPublishInput.platforms" placeholder="xiaohongshu,ixigua,douyin,wechat_channels,wechat_mp,youtube,instagram,twitter,threads,facebook,blog" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">Session ID</div>
+              <input class="input" x-model="contentPublishInput.session_id" placeholder="留空自动生成" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">会话有效期(分钟)</div>
+              <input class="input" type="number" x-model.number="contentPublishInput.expires_in_minutes" />
+            </div>
+            <div class="form-field full">
+              <div class="toggle-wrap">
+                <label class="toggle">
+                  <input type="checkbox" x-model="contentPublishInput.authenticated" />
+                  <span class="toggle-slider"></span>
+                </label>
+                <span style="font-size:13px">会话已认证（否则运行态会进入 waiting_auth）</span>
+              </div>
+            </div>
+            <div class="form-field full">
+              <div class="toggle-wrap">
+                <label class="toggle">
+                  <input type="checkbox" x-model="contentPublishInput.dry_run" />
+                  <span class="toggle-slider"></span>
+                </label>
+                <span style="font-size:13px">dry_run（仅生成计划，不真实发布）</span>
+              </div>
+            </div>
+            <div class="form-field full">
+              <div class="input-label">标题</div>
+              <input class="input" x-model="contentPublishInput.title" />
+            </div>
+            <div class="form-field full">
+              <div class="input-label">描述</div>
+              <textarea class="json-editor" style="min-height:90px" x-model="contentPublishInput.description"></textarea>
+            </div>
+            <div class="form-field full">
+              <div class="input-label">关键词（逗号）</div>
+              <input class="input" x-model="contentPublishInput.keywords" />
+            </div>
+            <div class="form-field full">
+              <div class="input-label">媒体 URL（逗号）</div>
+              <input class="input" x-model="contentPublishInput.media_urls" />
+            </div>
+            <div class="form-field full">
+              <div class="input-label">Blog Markdown（可选）</div>
+              <textarea class="json-editor" style="min-height:90px" x-model="contentPublishInput.article_markdown"></textarea>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+            <button class="btn btn-ghost" @click="loadContentPublishPlatforms()">刷新平台列表</button>
+            <button class="btn btn-primary" @click="bootstrapContentPublishSession()">初始化会话</button>
+            <button class="btn btn-primary" @click="buildContentPublishPlan()">生成发布计划</button>
+            <button class="btn btn-success" @click="runContentPublish()">执行发布</button>
+            <button class="btn btn-ghost" @click="rerunContentPublishFailed()">仅复跑失败项</button>
+          </div>
+          <div class="card" style="margin-top:10px" x-show="contentPublishSession">
+            <div class="card-title">发布会话</div>
+            <textarea class="json-editor" style="min-height:100px" :value="jsonPretty(contentPublishSession)" readonly></textarea>
+          </div>
+          <div class="card" style="margin-top:10px" x-show="contentPublishPlan">
+            <div class="card-title">发布计划</div>
+            <textarea class="json-editor" style="min-height:180px" :value="jsonPretty(contentPublishPlan)" readonly></textarea>
+          </div>
+          <div class="card" style="margin-top:10px" x-show="contentPublishRun">
+            <div class="card-title">发布执行结果</div>
+            <textarea class="json-editor" style="min-height:180px" :value="jsonPretty(contentPublishRun)" readonly></textarea>
+          </div>
+          <div class="card" style="margin-top:10px">
+            <div class="card-title">支持平台</div>
+            <textarea class="json-editor" style="min-height:120px" :value="jsonPretty(contentPublishPlatforms)" readonly></textarea>
+          </div>
+        </div>
+
+        <div x-show="capabilityTab==='workflow_builder'" class="fade-in">
+          <div class="form-grid">
+            <div class="form-field">
+              <div class="input-label">Workflow ID（可选）</div>
+              <input class="input" x-model="workflowBuilder.workflow_id" placeholder="travel_chain_v1" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">名称</div>
+              <input class="input" x-model="workflowBuilder.name" placeholder="自定义工作流" />
+            </div>
+            <div class="form-field full">
+              <div class="input-label">描述</div>
+              <input class="input" x-model="workflowBuilder.description" placeholder="可自由组合内部能力，顺序可配置" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">start_step_id（可选）</div>
+              <input class="input" x-model="workflowBuilder.start_step_id" placeholder="留空默认从第一个节点开始" />
+            </div>
+            <div class="form-field full">
+              <div class="toggle-wrap">
+                <label class="toggle">
+                  <input type="checkbox" x-model="workflowBuilder.dry_run" />
+                  <span class="toggle-slider"></span>
+                </label>
+                <span style="font-size:13px">dry_run（给每个 POST 节点自动注入 dry_run=true）</span>
+              </div>
+            </div>
+            <div class="form-field full">
+              <div class="toggle-wrap">
+                <label class="toggle">
+                  <input type="checkbox" x-model="workflowBuilder.run_inline" />
+                  <span class="toggle-slider"></span>
+                </label>
+                <span style="font-size:13px">按 inline 定义执行（不依赖已保存 workflow_id）</span>
+              </div>
+            </div>
+            <div class="form-field full">
+              <div class="input-label">工作流运行输入 JSON（可选，对应 payload.input）</div>
+              <textarea class="json-editor" style="min-height:90px" x-model="workflowBuilder.input_json"></textarea>
+            </div>
+            <div class="form-field full" style="font-size:12px;color:var(--muted)">
+              节点推荐在下方“节点编排器”里编辑；高级模式可在“原始 JSON”里直接修改。
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:10px">
+            <div class="card-title">节点编排器（可视化顺序编辑）</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+              <select class="input" style="max-width:240px" x-model="workflowQuickAddCapability">
+                <template x-for="item in workflowCatalog" :key="`cap-${item.capability_id}`">
+                  <option :value="item.capability_id" x-text="item.capability_id"></option>
+                </template>
+              </select>
+              <button class="btn btn-ghost" @click="addWorkflowStep(workflowQuickAddCapability)">添加节点</button>
+              <button class="btn btn-ghost" @click="addWorkflowConditionStep()">添加条件节点</button>
+              <button class="btn btn-ghost" @click="writeWorkflowEditorToJson()">写回 JSON</button>
+              <button class="btn btn-ghost" @click="applyWorkflowRawJsonToEditor()">从 JSON 同步</button>
+              <span x-show="workflowStepJsonError" class="badge badge-danger" x-text="workflowStepJsonError"></span>
+            </div>
+            <div x-show="workflowSteps.length===0" style="font-size:12px;color:var(--muted)">暂无节点，请先添加</div>
+            <div x-show="workflowSteps.length>0" style="display:flex;flex-direction:column;gap:10px">
+              <div class="workflow-canvas-wrap"
+                   @dragover.prevent
+                   @drop.prevent="onWorkflowCanvasDropToEnd($event)">
+                <div class="workflow-canvas">
+                  <template x-for="(step, idx) in workflowSteps" :key="`wf-canvas-${idx}-${step.step_id}`">
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <div class="workflow-canvas-node"
+                           :class="{
+                             'active': idx===workflowActiveStepIndex,
+                             'dragging': idx===workflowCanvasDragIndex,
+                             'drop-target': idx===workflowCanvasDropIndex && workflowCanvasDragIndex>=0 && idx!==workflowCanvasDragIndex,
+                             'disabled': !step.enabled
+                           }"
+                           draggable="true"
+                           @click="setActiveWorkflowStep(idx)"
+                           @dragstart="onWorkflowNodeDragStart(idx, $event)"
+                           @dragover="onWorkflowNodeDragOver(idx, $event)"
+                           @drop="onWorkflowNodeDrop(idx, $event)"
+                           @dragend="onWorkflowNodeDragEnd()">
+                        <div class="workflow-canvas-step" x-text="`#${idx+1}`"></div>
+                        <div class="workflow-canvas-title" x-text="workflowStepDisplay(step)"></div>
+                        <div class="workflow-canvas-meta" x-text="workflowStepInputSummary(step)"></div>
+                      </div>
+                      <div class="workflow-canvas-arrow" x-show="idx < workflowSteps.length - 1">→</div>
+                    </div>
+                  </template>
+                  <div class="workflow-canvas-end-drop" x-show="workflowSteps.length>0">
+                    拖到这里放在末尾
+                  </div>
+                </div>
+              </div>
+
+              <div class="card" style="padding:8px;border:1px solid var(--border)">
+                <div class="card-title">路由概览</div>
+                <div x-show="workflowGraphEdgesPreview().length===0" style="font-size:12px;color:var(--muted)">
+                  暂无可用路由（只有单节点或目标未定义）
+                </div>
+                <div x-show="workflowGraphEdgesPreview().length>0" style="display:flex;gap:6px;flex-wrap:wrap">
+                  <template x-for="edge in workflowGraphEdgesPreview()" :key="`wf-edge-${edge.from}-${edge.when}-${edge.to}-${edge.source}`">
+                    <span class="badge badge-info" x-text="`${edge.from} --${edge.when}/${edge.source}--> ${edge.to}`"></span>
+                  </template>
+                </div>
+                <div x-show="workflowGraphInvalidEdges().length>0" style="margin-top:8px">
+                  <span class="badge badge-danger">存在无效跳转，请检查目标 step_id</span>
+                </div>
+              </div>
+
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <span class="badge badge-info" x-text="`当前编辑节点: ${workflowActiveStepIndex + 1}/${workflowSteps.length}`"></span>
+                <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px"
+                        @click="setActiveWorkflowStep(workflowActiveStepIndex-1)"
+                        :disabled="workflowActiveStepIndex<=0">上一节点</button>
+                <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px"
+                        @click="setActiveWorkflowStep(workflowActiveStepIndex+1)"
+                        :disabled="workflowActiveStepIndex>=workflowSteps.length-1">下一节点</button>
+              </div>
+
+              <template x-for="(step, idx) in workflowSteps" :key="`wf-editor-${idx}-${step.step_id}`">
+                <div class="card" style="border:1px dashed var(--border);padding:10px" x-show="idx===workflowActiveStepIndex">
+                  <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                    <span class="badge badge-info" x-text="`Step ${idx+1}`"></span>
+                    <span style="font-size:12px;color:var(--muted)" x-text="step.step_id || '-'"></span>
+                    <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px;margin-left:auto"
+                            @click="moveWorkflowStep(idx, -1)" :disabled="idx===0">上移</button>
+                    <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px"
+                            @click="moveWorkflowStep(idx, 1)" :disabled="idx===workflowSteps.length-1">下移</button>
+                    <button class="btn btn-danger" style="font-size:11px;padding:3px 8px" @click="removeWorkflowStep(idx)">删除</button>
+                  </div>
+
+                  <div class="form-grid">
+                    <div class="form-field">
+                      <div class="input-label">step_id</div>
+                      <input class="input" x-model="step.step_id" @change="onWorkflowStepChanged()" placeholder="step_subtitle" />
+                    </div>
+                    <div class="form-field">
+                      <div class="input-label">node_type</div>
+                      <select class="input" x-model="step.node_type" @change="onWorkflowStepNodeTypeChange(idx)">
+                        <option value="action">action</option>
+                        <option value="condition">condition</option>
+                      </select>
+                    </div>
+                    <div class="form-field" x-show="step.node_type==='action'">
+                      <div class="input-label">capability_id</div>
+                      <select class="input" x-model="step.capability_id" @change="onWorkflowStepCapabilityChange(idx)">
+                        <template x-for="item in workflowCatalog" :key="`wf-node-cap-${idx}-${item.capability_id}`">
+                          <option :value="item.capability_id" x-text="item.capability_id"></option>
+                        </template>
+                      </select>
+                    </div>
+                    <div class="form-field" x-show="step.node_type==='action'">
+                      <div class="input-label">action</div>
+                      <select class="input" x-model="step.action" @change="onWorkflowStepChanged()">
+                        <template x-for="action in workflowActionsForCapability(step.capability_id)" :key="`wf-node-action-${idx}-${action}`">
+                          <option :value="action" x-text="action"></option>
+                        </template>
+                      </select>
+                    </div>
+                    <div class="form-field" x-show="step.node_type==='action'">
+                      <div class="input-label">input_mode</div>
+                      <select class="input" x-model="step.input_mode" @change="onWorkflowStepChanged()">
+                        <option value="auto">auto</option>
+                        <option value="project">project</option>
+                        <option value="inline">inline</option>
+                      </select>
+                    </div>
+                    <div class="form-field" x-show="step.node_type==='action'">
+                      <div class="input-label">save_as（可选）</div>
+                      <input class="input" x-model="step.save_as" @change="onWorkflowStepChanged()" placeholder="subtitles_result" />
+                    </div>
+                    <div class="form-field full" x-show="step.node_type==='action'">
+                      <div class="input-label">run_if（可选，支持模板变量）</div>
+                      <input class="input" x-model="step.run_if_expr" @change="onWorkflowStepChanged()" placeholder="{{steps.prev_step.response.ok}}" />
+                    </div>
+                    <div class="form-field full" x-show="step.node_type==='condition'">
+                      <div class="input-label">condition（支持模板变量）</div>
+                      <input class="input" x-model="step.condition_expr" @change="onWorkflowStepChanged()" placeholder="{{input.use_fast_path}}" />
+                    </div>
+                    <div class="form-field">
+                      <div class="input-label">next_step_id（默认）</div>
+                      <input class="input" x-model="step.next_step_id" @change="onWorkflowStepChanged()" placeholder="留空则按顺序下一个" />
+                    </div>
+                    <div class="form-field">
+                      <div class="input-label">next_on_success</div>
+                      <input class="input" x-model="step.next_on_success" @change="onWorkflowStepChanged()" placeholder="成功分支 step_id" />
+                    </div>
+                    <div class="form-field">
+                      <div class="input-label">next_on_error</div>
+                      <input class="input" x-model="step.next_on_error" @change="onWorkflowStepChanged()" placeholder="失败分支 step_id" />
+                    </div>
+                    <div class="form-field">
+                      <div class="input-label">next_on_skip</div>
+                      <input class="input" x-model="step.next_on_skip" @change="onWorkflowStepChanged()" placeholder="跳过分支 step_id" />
+                    </div>
+                    <div class="form-field full">
+                      <div style="display:flex;gap:16px;flex-wrap:wrap">
+                        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)">
+                          <input type="checkbox" x-model="step.enabled" @change="onWorkflowStepChanged()" />
+                          节点启用
+                        </label>
+                        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)" x-show="step.node_type==='action'">
+                          <input type="checkbox" x-model="step.continue_on_error" @change="onWorkflowStepChanged()" />
+                          失败继续
+                        </label>
+                      </div>
+                    </div>
+                    <div class="form-field full" x-show="step.node_type==='action'">
+                      <div class="input-label">input JSON（支持模板变量 `{{steps.step_id.response...}}`）</div>
+                      <textarea class="json-editor" style="min-height:120px" x-model="step.input_json" @change="onWorkflowStepChanged()"></textarea>
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <details class="card" style="margin-top:10px">
+            <summary style="cursor:pointer;font-size:13px;color:var(--muted)">原始 JSON（高级模式）</summary>
+            <div style="margin-top:10px">
+              <div class="input-label">步骤 JSON（支持分支跳转）</div>
+              <textarea class="json-editor" style="min-height:220px" x-model="workflowBuilder.steps_json"></textarea>
+            </div>
+          </details>
+
+          <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+            <button class="btn btn-ghost" @click="newWorkflowDefinition()">新建草稿</button>
+            <button class="btn btn-ghost" @click="loadWorkflowCatalog()">刷新目录</button>
+            <button class="btn btn-ghost" @click="loadWorkflowList()">刷新定义</button>
+            <button class="btn btn-ghost" @click="loadWorkflowRuns()">刷新历史</button>
+            <button class="btn btn-primary" @click="saveWorkflowDefinition()">保存工作流</button>
+            <button class="btn btn-primary" @click="planWorkflowDefinition()">生成执行计划</button>
+            <button class="btn btn-success" @click="runWorkflowDefinition()" :disabled="workflowRunning">
+              <span x-show="!workflowRunning">执行工作流</span>
+              <span x-show="workflowRunning">执行中…</span>
+            </button>
+          </div>
+
+          <div class="card" style="margin-top:10px">
+            <div class="card-title">可用能力目录（可作为节点）</div>
+            <div x-show="workflowCatalog.length===0" style="font-size:12px;color:var(--muted)">暂无目录，请点击“刷新目录”</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap" x-show="workflowCatalog.length>0">
+              <template x-for="item in workflowCatalog" :key="item.capability_id">
+                <span class="badge badge-info" x-text="`${item.capability_id} (${(item.actions||[]).map(a=>a.action).join('/')})`"></span>
+              </template>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:10px">
+            <div class="card-title">已保存工作流</div>
+            <div x-show="workflowList.length===0" style="font-size:12px;color:var(--muted)">暂无已保存定义</div>
+            <div x-show="workflowList.length>0" style="max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:8px">
+              <template x-for="item in workflowList" :key="item.workflow_id">
+                <div style="display:flex;gap:8px;align-items:flex-start;padding:8px 0;border-bottom:1px dashed var(--border)">
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:13px;font-weight:600" x-text="item.name || item.workflow_id"></div>
+                    <div style="font-size:11px;color:var(--muted)" x-text="`${item.workflow_id} · ${((item.steps||[]).length)} steps`"></div>
+                  </div>
+                  <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" @click="useWorkflowDefinition(item)">载入</button>
+                  <button class="btn btn-success" style="font-size:11px;padding:3px 8px" @click="useWorkflowDefinition(item); runWorkflowDefinition()">执行</button>
+                  <button class="btn btn-danger" style="font-size:11px;padding:3px 8px" @click="deleteWorkflowDefinition(item.workflow_id)">删除</button>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:10px" x-show="workflowPlan">
+            <div class="card-title">工作流执行计划</div>
+            <textarea class="json-editor" style="min-height:180px" :value="jsonPretty(workflowPlan)" readonly></textarea>
+          </div>
+
+          <div class="card" style="margin-top:10px" x-show="workflowRunResult">
+            <div class="card-title">最近执行结果</div>
+            <textarea class="json-editor" style="min-height:220px" :value="jsonPretty(workflowRunResult)" readonly></textarea>
+          </div>
+
+          <div class="card" style="margin-top:10px">
+            <div class="card-title">执行历史（最近30条，当前总数 <span x-text="workflowRunsTotal || 0"></span>）</div>
+            <div x-show="workflowHistoryLoading" style="font-size:12px;color:var(--muted)">历史加载中…</div>
+            <div x-show="!workflowHistoryLoading && workflowRuns.length===0" style="font-size:12px;color:var(--muted)">暂无历史记录</div>
+            <div x-show="workflowRuns.length>0" style="max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:8px">
+              <template x-for="item in workflowRuns" :key="item.run_id">
+                <div style="display:flex;gap:8px;align-items:flex-start;padding:8px 0;border-bottom:1px dashed var(--border)">
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:13px;font-weight:600" x-text="`${item.workflow_name || item.workflow_id} · ${item.status || '-'}`"></div>
+                    <div style="font-size:11px;color:var(--muted)" x-text="`${item.run_id} · 成功${item.summary && item.summary.success_steps ? item.summary.success_steps : 0}/失败${item.summary && item.summary.failed_steps ? item.summary.failed_steps : 0}`"></div>
+                  </div>
+                  <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" @click="rerunWorkflow(item, true)">仅重跑失败</button>
+                  <button class="btn btn-primary" style="font-size:11px;padding:3px 8px" @click="rerunWorkflow(item, false)">整条重跑</button>
+                </div>
+              </template>
+            </div>
+          </div>
+        </div>
+
+        <div x-show="capabilityTab==='idempotency_cache'" class="fade-in">
+          <div class="form-grid">
+            <div class="form-field">
+              <div class="input-label">数据源</div>
+              <select class="input" x-model="idempotencyCacheInput.source">
+                <option value="merged">merged（合并）</option>
+                <option value="memory">memory（内存）</option>
+                <option value="persisted">persisted（落盘）</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <div class="input-label">TTL（秒）</div>
+              <input class="input" type="number" min="0" x-model.number="idempotencyCacheInput.ttl_seconds" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">返回条数</div>
+              <input class="input" type="number" min="1" max="1000" x-model.number="idempotencyCacheInput.limit" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">匹配模式</div>
+              <select class="input" x-model="idempotencyCacheInput.match_mode">
+                <option value="contains">contains（包含）</option>
+                <option value="exact">exact（精确）</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <div class="input-label">Actor 过滤（可选）</div>
+              <input class="input" x-model="idempotencyCacheInput.actor_id" placeholder="如 planner_cache" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">端点过滤（可选）</div>
+              <input class="input" x-model="idempotencyCacheInput.endpoint" placeholder="如 topic_library" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">Idempotency Key 过滤（可选）</div>
+              <input class="input" x-model="idempotencyCacheInput.idempotency_key" placeholder="如 idem_topic_1" />
+            </div>
+            <div class="form-field full">
+              <div class="input-label">项目路径过滤（可选）</div>
+              <input class="input" x-model="idempotencyCacheInput.project_path" placeholder="如 /Users/angelwang/videoeditor/proj_xxx" />
+            </div>
+            <div class="form-field full">
+              <div class="toggle-wrap">
+                <label class="toggle">
+                  <input type="checkbox" x-model="idempotencyCacheInput.include_expired" />
+                  <span class="toggle-slider"></span>
+                </label>
+                <span style="font-size:13px">包含过期记录</span>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+            <button class="btn btn-primary" @click="loadIdempotencyCache(true)" :disabled="idempotencyCacheLoading">
+              <span x-show="!idempotencyCacheLoading">刷新缓存</span>
+              <span x-show="idempotencyCacheLoading">加载中…</span>
+            </button>
+            <button class="btn btn-ghost" @click="idempotencyPruneInput.remove_expired=true; idempotencyPruneInput.clear_memory=false; idempotencyPruneInput.clear_persisted=false; pruneIdempotencyCache()"
+                    :disabled="idempotencyCachePruning">
+              <span x-show="!idempotencyCachePruning">清理过期项</span>
+              <span x-show="idempotencyCachePruning">清理中…</span>
+            </button>
+            <button class="btn btn-ghost" @click="pruneIdempotencyCacheDefault()" :disabled="idempotencyCachePruning">
+              一键默认清理（7天）
+            </button>
+            <button class="btn btn-danger" @click="idempotencyPruneInput.remove_expired=false; idempotencyPruneInput.clear_memory=true; idempotencyPruneInput.clear_persisted=false; pruneIdempotencyCache()"
+                    :disabled="idempotencyCachePruning">
+              清空内存缓存
+            </button>
+            <button class="btn btn-danger" @click="idempotencyPruneInput.remove_expired=false; idempotencyPruneInput.clear_memory=false; idempotencyPruneInput.clear_persisted=true; pruneIdempotencyCache()"
+                    :disabled="idempotencyCachePruning">
+              清空落盘缓存
+            </button>
+          </div>
+
+          <div class="card" style="margin-top:10px">
+            <div class="card-title">清理参数</div>
+            <div class="form-grid">
+              <div class="form-field">
+                <div class="input-label">清理 TTL（秒）</div>
+                <input class="input" type="number" min="0" x-model.number="idempotencyPruneInput.ttl_seconds" />
+              </div>
+              <div class="form-field">
+                <div class="input-label">最大保留条数（可选）</div>
+                <input class="input" type="number" min="1" x-model="idempotencyPruneInput.max_entries" placeholder="留空使用系统默认上限" />
+              </div>
+              <div class="form-field full">
+                <div class="toggle-wrap">
+                  <label class="toggle">
+                    <input type="checkbox" x-model="idempotencyPruneInput.remove_expired" />
+                    <span class="toggle-slider"></span>
+                  </label>
+                  <span style="font-size:13px">删除过期项</span>
+                </div>
+              </div>
+              <div class="form-field full">
+                <div class="toggle-wrap">
+                  <label class="toggle">
+                    <input type="checkbox" x-model="idempotencyPruneInput.clear_memory" />
+                    <span class="toggle-slider"></span>
+                  </label>
+                  <span style="font-size:13px">清空内存缓存（会忽略 remove_expired）</span>
+                </div>
+              </div>
+              <div class="form-field full">
+                <div class="toggle-wrap">
+                  <label class="toggle">
+                    <input type="checkbox" x-model="idempotencyPruneInput.clear_persisted" />
+                    <span class="toggle-slider"></span>
+                  </label>
+                  <span style="font-size:13px">清空落盘缓存（会忽略 remove_expired）</span>
+                </div>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <button class="btn btn-primary" @click="pruneIdempotencyCache()" :disabled="idempotencyCachePruning">
+                <span x-show="!idempotencyCachePruning">执行清理</span>
+                <span x-show="idempotencyCachePruning">清理中…</span>
+              </button>
+            </div>
+            <div x-show="idempotencyCacheLastPrune" style="margin-top:8px;font-size:12px;color:var(--muted)"
+                 x-text="`上次清理：内存 ${idempotencyCacheLastPrune.memory_before || 0} -> ${idempotencyCacheLastPrune.memory_after || 0}，落盘 ${idempotencyCacheLastPrune.persisted_before || 0} -> ${idempotencyCacheLastPrune.persisted_after || 0}`"></div>
+          </div>
+
+          <div class="card" style="margin-top:10px">
+            <div class="card-title">缓存统计</div>
+            <div x-show="!idempotencyCacheStats" style="font-size:12px;color:var(--muted)">暂无统计，点击“刷新缓存”加载。</div>
+            <div x-show="idempotencyCacheStats" style="display:flex;gap:8px;flex-wrap:wrap">
+              <span class="badge badge-info" x-text="`source: ${idempotencySourceZh(idempotencyCacheStats.source)}`"></span>
+              <span class="badge badge-info" x-text="`ttl: ${idempotencyCacheStats.ttl_seconds || 0}s`"></span>
+              <span class="badge badge-info" x-text="`总数: ${idempotencyCacheStats.total || 0}`"></span>
+              <span class="badge badge-success" x-text="`有效: ${idempotencyCacheStats.active || 0}`"></span>
+              <span class="badge badge-warn" x-text="`过期: ${idempotencyCacheStats.expired || 0}`"></span>
+              <span class="badge badge-info" x-text="`返回: ${idempotencyCacheStats.returned || 0}`"></span>
+            </div>
+            <div x-show="idempotencyCacheStats" style="font-size:12px;color:var(--muted);margin-top:8px"
+                 x-text="`raw(memory/persisted): ${(idempotencyCacheStats && idempotencyCacheStats.memory_total_raw) || 0} / ${(idempotencyCacheStats && idempotencyCacheStats.persisted_total_raw) || 0}`"></div>
+            <div x-show="idempotencyCacheStats && idempotencyCacheStats.filters" style="font-size:12px;color:var(--muted);margin-top:6px"
+                 x-text="`filters: actor=${(idempotencyCacheStats.filters && idempotencyCacheStats.filters.actor_id) || '-'} | endpoint=${(idempotencyCacheStats.filters && idempotencyCacheStats.filters.endpoint) || '-'} | key=${(idempotencyCacheStats.filters && idempotencyCacheStats.filters.idempotency_key) || '-'} | mode=${(idempotencyCacheStats.filters && idempotencyCacheStats.filters.match_mode) || 'contains'}`"></div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px" x-show="idempotencyCacheStats">
+              <button class="btn btn-ghost"
+                      :disabled="idempotencyCacheLoading || ((idempotencyCacheStats && idempotencyCacheStats.offset) || 0) <= 0"
+                      @click="prevIdempotencyCachePage()">
+                上一页
+              </button>
+              <button class="btn btn-ghost"
+                      :disabled="idempotencyCacheLoading || !(idempotencyCacheStats && idempotencyCacheStats.has_more)"
+                      @click="nextIdempotencyCachePage()">
+                下一页
+              </button>
+              <span style="font-size:12px;color:var(--muted)"
+                    x-text="`offset ${(idempotencyCacheStats && idempotencyCacheStats.offset) || 0} / 总数 ${(idempotencyCacheStats && idempotencyCacheStats.total) || 0}`"></span>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:10px">
+            <div class="card-title">缓存记录</div>
+            <div x-show="idempotencyCacheRecords.length===0" style="font-size:12px;color:var(--muted)">
+              暂无记录（可先触发带 `idempotency_key` 的 POST capability 请求）。
+            </div>
+            <div x-show="idempotencyCacheRecords.length>0" style="max-height:280px;overflow:auto;border:1px solid var(--border);border-radius:8px">
+              <table class="match-table">
+                <thead>
+                  <tr>
+                    <th>时间</th>
+                    <th>来源</th>
+                    <th>状态</th>
+                    <th>端点</th>
+                    <th>Actor</th>
+                    <th>Idempotency Key</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="item in idempotencyCacheRecords" :key="item.cache_key">
+                    <tr>
+                      <td x-text="formatDateTime(item.created_at)"></td>
+                      <td>
+                        <span class="badge badge-info" x-text="idempotencySourceZh(item.source)"></span>
+                      </td>
+                      <td>
+                        <span class="badge"
+                              :class="item.expired ? 'badge-warn' : 'badge-success'"
+                              x-text="item.expired ? 'expired' : 'active'"></span>
+                      </td>
+                      <td x-text="item.endpoint || '-'"></td>
+                      <td x-text="item.actor_id || '-'"></td>
+                      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" :title="item.idempotency_key || ''"
+                          x-text="item.idempotency_key || '-'"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div x-show="capabilityTab==='agent_observability'" class="fade-in">
+          <div class="form-grid">
+            <div class="form-field">
+              <div class="input-label">Actor ID（可选）</div>
+              <input class="input" x-model="agentObservabilityInput.actor_id" placeholder="留空查看全部 Actor" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">窗口任务数</div>
+              <input class="input" type="number" min="1" max="2000" x-model.number="agentObservabilityInput.limit" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">Top N</div>
+              <input class="input" type="number" min="1" max="20" x-model.number="agentObservabilityInput.top_n" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">状态筛选（可选）</div>
+              <select class="input" x-model="agentObservabilityInput.status">
+                <option value="">全部</option>
+                <option value="done">done</option>
+                <option value="error">error</option>
+                <option value="cancelled">cancelled</option>
+                <option value="running">running</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <div class="input-label">模式筛选（可选）</div>
+              <select class="input" x-model="agentObservabilityInput.task_mode">
+                <option value="">全部</option>
+                <option value="single_capability">single_capability</option>
+                <option value="skill_sequence">skill_sequence</option>
+                <option value="skill_invoke">skill_invoke</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <div class="input-label">Capability ID（可选）</div>
+              <input class="input" x-model="agentObservabilityInput.capability_id" placeholder="如 text_rough_cut" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">Skill ID（可选）</div>
+              <input class="input" x-model="agentObservabilityInput.skill_id" placeholder="如 skill.text_rough_cut.plan" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">可重放（可选）</div>
+              <select class="input" x-model="agentObservabilityInput.replay_supported">
+                <option value="">全部</option>
+                <option value="true">仅可重放</option>
+                <option value="false">仅不可重放</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <div class="input-label">开始时间（可选）</div>
+              <input class="input" type="datetime-local" x-model="agentObservabilityInput.since" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">结束时间（可选）</div>
+              <input class="input" type="datetime-local" x-model="agentObservabilityInput.until" />
+            </div>
+            <div class="form-field full">
+              <div class="toggle-wrap">
+                <label class="toggle">
+                  <input type="checkbox" x-model="agentObservabilityInput.include_items" />
+                  <span class="toggle-slider"></span>
+                </label>
+                <span style="font-size:13px">返回最近任务明细（items）</span>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+            <button class="btn btn-primary" @click="loadAgentObservability()" :disabled="agentObservabilityLoading">
+              <span x-show="!agentObservabilityLoading">刷新观测</span>
+              <span x-show="agentObservabilityLoading">加载中…</span>
+            </button>
+            <button class="btn btn-ghost"
+                    @click="exportAgentObservability('json')"
+                    :disabled="agentObservabilityExporting==='json' || agentObservabilityLoading">
+              <span x-show="agentObservabilityExporting!=='json'">导出 JSON</span>
+              <span x-show="agentObservabilityExporting==='json'">导出中…</span>
+            </button>
+            <button class="btn btn-ghost"
+                    @click="exportAgentObservability('csv')"
+                    :disabled="agentObservabilityExporting==='csv' || agentObservabilityLoading">
+              <span x-show="agentObservabilityExporting!=='csv'">导出 CSV</span>
+              <span x-show="agentObservabilityExporting==='csv'">导出中…</span>
+            </button>
+            <button class="btn btn-ghost" @click="openAgentObservabilityExport()" :disabled="!agentObservabilityLastExport">
+              打开导出文件
+            </button>
+            <span class="badge badge-info"
+                  x-text="`窗口 ${agentObservabilityWindowCount || 0}/${agentObservabilityWindowLimit || 0}（历史 ${agentObservabilityHistoryCount || 0}）`"></span>
+            <span class="badge badge-info"
+                  x-show="agentObservabilityInput.include_items"
+                  x-text="`筛选命中 ${agentObservabilityItemsTotal || 0}`"></span>
+          </div>
+          <div x-show="agentObservabilityLastExport" style="font-size:12px;color:var(--muted);margin-top:8px"
+               x-text="`最近导出：${agentObservabilityLastExport}`"></div>
+
+          <div class="card" style="margin-top:10px" x-show="agentObservabilitySummary">
+            <div class="card-title">观测概览</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">
+              <div style="border:1px solid var(--border);border-radius:8px;padding:10px">
+                <div style="font-size:11px;color:var(--muted)">任务总数</div>
+                <div style="font-size:20px;font-weight:700" x-text="(agentObservabilitySummary && agentObservabilitySummary.total_tasks) || 0"></div>
+              </div>
+              <div style="border:1px solid var(--border);border-radius:8px;padding:10px">
+                <div style="font-size:11px;color:var(--muted)">成功率</div>
+                <div style="font-size:20px;font-weight:700"
+                     x-text="formatPercentRate((agentObservabilitySummary && agentObservabilitySummary.rates && agentObservabilitySummary.rates.success_rate) || 0)"></div>
+              </div>
+              <div style="border:1px solid var(--border);border-radius:8px;padding:10px">
+                <div style="font-size:11px;color:var(--muted)">错误率</div>
+                <div style="font-size:20px;font-weight:700"
+                     x-text="formatPercentRate((agentObservabilitySummary && agentObservabilitySummary.rates && agentObservabilitySummary.rates.error_rate) || 0)"></div>
+              </div>
+              <div style="border:1px solid var(--border);border-radius:8px;padding:10px">
+                <div style="font-size:11px;color:var(--muted)">重试率</div>
+                <div style="font-size:20px;font-weight:700"
+                     x-text="formatPercentRate((agentObservabilitySummary && agentObservabilitySummary.rates && agentObservabilitySummary.rates.retry_rate) || 0)"></div>
+              </div>
+              <div style="border:1px solid var(--border);border-radius:8px;padding:10px">
+                <div style="font-size:11px;color:var(--muted)">模板命中率</div>
+                <div style="font-size:20px;font-weight:700"
+                     x-text="formatPercentRate((agentObservabilitySummary && agentObservabilitySummary.rates && agentObservabilitySummary.rates.template_hit_rate) || 0)"></div>
+              </div>
+              <div style="border:1px solid var(--border);border-radius:8px;padding:10px">
+                <div style="font-size:11px;color:var(--muted)">平均时长</div>
+                <div style="font-size:20px;font-weight:700"
+                     x-text="`${((agentObservabilitySummary && agentObservabilitySummary.averages && agentObservabilitySummary.averages.duration_seconds) || 0).toFixed(2)}s`"></div>
+              </div>
+              <div style="border:1px solid var(--border);border-radius:8px;padding:10px">
+                <div style="font-size:11px;color:var(--muted)">平均 Tokens</div>
+                <div style="font-size:20px;font-weight:700"
+                     x-text="((agentObservabilitySummary && agentObservabilitySummary.averages && agentObservabilitySummary.averages.total_tokens) || 0).toLocaleString()"></div>
+              </div>
+              <div style="border:1px solid var(--border);border-radius:8px;padding:10px">
+                <div style="font-size:11px;color:var(--muted)">平均成本</div>
+                <div style="font-size:20px;font-weight:700"
+                     x-text="formatUsd((agentObservabilitySummary && agentObservabilitySummary.averages && agentObservabilitySummary.averages.estimated_cost_usd) || 0, 6)"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-grid" style="margin-top:10px">
+            <div class="card" style="margin:0">
+              <div class="card-title">模式分布</div>
+              <div x-show="!agentObservabilitySummary || Object.keys((agentObservabilitySummary && agentObservabilitySummary.mode_counts) || {}).length===0"
+                   style="font-size:12px;color:var(--muted)">暂无数据</div>
+              <div x-show="agentObservabilitySummary && Object.keys((agentObservabilitySummary.mode_counts || {})).length>0"
+                   style="display:flex;gap:8px;flex-wrap:wrap">
+                <template x-for="entry in Object.entries((agentObservabilitySummary && agentObservabilitySummary.mode_counts) || {})" :key="entry[0]">
+                  <span class="badge badge-info" x-text="`${agentTaskModeZh(entry[0])}: ${entry[1]}`"></span>
+                </template>
+              </div>
+            </div>
+            <div class="card" style="margin:0">
+              <div class="card-title">模板命中 Top</div>
+              <div x-show="!agentObservabilitySummary || ((agentObservabilitySummary && agentObservabilitySummary.top_templates) || []).length===0"
+                   style="font-size:12px;color:var(--muted)">暂无命中</div>
+              <div x-show="agentObservabilitySummary && (agentObservabilitySummary.top_templates || []).length>0"
+                   style="display:flex;flex-direction:column;gap:6px">
+                <template x-for="item in ((agentObservabilitySummary && agentObservabilitySummary.top_templates) || [])" :key="item.template_id">
+                  <div style="display:flex;justify-content:space-between;gap:8px;border-bottom:1px dashed var(--border);padding-bottom:4px">
+                    <span style="font-size:12px" x-text="item.template_id || '-'"></span>
+                    <span class="badge badge-info" x-text="item.count || 0"></span>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:10px">
+            <div class="card-title">失败节点 Top</div>
+            <div x-show="!agentObservabilitySummary || ((agentObservabilitySummary && agentObservabilitySummary.failed_top) || []).length===0"
+                 style="font-size:12px;color:var(--muted)">暂无失败记录</div>
+            <div x-show="agentObservabilitySummary && (agentObservabilitySummary.failed_top || []).length>0"
+                 style="max-height:180px;overflow:auto">
+              <template x-for="item in ((agentObservabilitySummary && agentObservabilitySummary.failed_top) || [])" :key="`${item.skill_id || item.capability_id || 'unknown'}_${item.error || ''}`">
+                <div style="padding:8px 0;border-bottom:1px dashed var(--border)">
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                    <span class="badge badge-danger" x-text="item.count || 0"></span>
+                    <span style="font-size:12px;font-weight:600" x-text="item.skill_id || item.capability_id || 'unknown'"></span>
+                    <button class="btn btn-ghost" style="font-size:11px;padding:2px 8px"
+                            @click="applyAgentFailedTopFilter(item)">按此筛选</button>
+                  </div>
+                  <div style="font-size:11px;color:var(--muted);margin-top:4px" x-text="item.error || '-'"></div>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:10px">
+            <div class="card-title">最近任务</div>
+            <div x-show="agentObservabilityInput.include_items && agentObservabilityItems.length===0"
+                 style="font-size:12px;color:var(--muted)">暂无任务明细（可刷新或取消筛选）</div>
+            <div x-show="!agentObservabilityInput.include_items"
+                 style="font-size:12px;color:var(--muted)">已关闭 items 返回，开启后可查看任务明细。</div>
+            <div x-show="agentObservabilityInput.include_items && agentObservabilityItems.length>0"
+                 style="max-height:260px;overflow:auto;border:1px solid var(--border);border-radius:8px">
+              <table class="match-table">
+                <thead>
+                  <tr>
+                    <th>时间</th>
+                    <th>状态</th>
+                    <th>模式</th>
+                    <th>能力 / Skill</th>
+                    <th>重试</th>
+                    <th>Tokens</th>
+                    <th>成本</th>
+                    <th>模板命中</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="item in agentObservabilityItems" :key="item.job_id">
+                    <tr>
+                      <td x-text="formatDateTime(item.finished_at || item.started_at)"></td>
+                      <td>
+                        <span class="badge"
+                              :class="item.status==='done' ? 'badge-success' : (item.status==='error' ? 'badge-danger' : 'badge-warn')"
+                              x-text="agentTaskStatusZh(item.status)"></span>
+                      </td>
+                      <td x-text="agentTaskModeZh(item.task_mode)"></td>
+                      <td>
+                        <div style="font-size:12px" x-text="(item.capability_ids || []).join(', ') || '-'"></div>
+                        <div style="font-size:11px;color:var(--muted)" x-text="(item.skill_ids || []).join(', ') || '-'"></div>
+                      </td>
+                      <td x-text="item.retry_count || 0"></td>
+                      <td x-text="(item.total_tokens || 0).toLocaleString()"></td>
+                      <td x-text="formatUsd(item.estimated_cost_usd || 0, 6)"></td>
+                      <td x-text="(item.template_hits || []).join(', ') || '-'"></td>
+                      <td>
+                        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px;margin-right:4px"
+                                :disabled="!item.job_id || agentTaskDetailLoading"
+                                @click="viewAgentTaskDetail(item)">
+                          详情
+                        </button>
+                        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px"
+                                :disabled="!item.job_id || !!agentReplayRunningJobId"
+                                @click="replayAgentTask(item)">
+                          <span x-show="agentReplayRunningJobId!==item.job_id">重放</span>
+                          <span x-show="agentReplayRunningJobId===item.job_id">重放中…</span>
+                        </button>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+            <div x-show="agentObservabilityInput.include_items" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
+              <button class="btn btn-ghost"
+                      :disabled="agentObservabilityLoading || (agentObservabilityItemsOffset || 0) <= 0"
+                      @click="prevAgentObservabilityItemsPage()">
+                上一页
+              </button>
+              <button class="btn btn-ghost"
+                      :disabled="agentObservabilityLoading || !agentObservabilityItemsHasMore"
+                      @click="nextAgentObservabilityItemsPage()">
+                下一页
+              </button>
+              <span style="font-size:12px;color:var(--muted)"
+                    x-text="`offset ${(agentObservabilityItemsOffset || 0)} / 命中 ${(agentObservabilityItemsTotal || 0)}`"></span>
+            </div>
+            <div x-show="agentTaskDetailLoading" style="font-size:12px;color:var(--muted);margin-top:8px">任务详情加载中…</div>
+            <div x-show="agentTaskDetailError" style="font-size:12px;color:#b42318;margin-top:8px" x-text="agentTaskDetailError"></div>
+            <div class="card" style="margin-top:10px" x-show="agentTaskDetail">
+              <div class="card-title" x-text="`任务详情：${agentTaskDetailJobId || '-'}`"></div>
+              <div style="font-size:12px;color:var(--muted);margin-bottom:8px"
+                   x-text="agentTaskDetail && agentTaskDetail.status ? `状态 ${agentTaskDetail.status} | 来源 ${agentTaskDetail.source || 'memory'}` : ''"></div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+                <button class="btn btn-ghost" @click="replayAgentTaskDetail()" :disabled="agentTaskDetailLoading || !!agentReplayRunningJobId">重放该任务</button>
+                <button class="btn btn-ghost" @click="exportAgentTaskDetail('json')" :disabled="agentTaskDetailLoading">导出 JSON</button>
+                <button class="btn btn-ghost" @click="exportAgentTaskDetail('csv')" :disabled="agentTaskDetailLoading">导出 CSV</button>
+                <button class="btn btn-ghost" @click="openAgentTaskDetailExport()" :disabled="!agentTaskDetailLastExport">打开导出文件</button>
+              </div>
+              <div x-show="agentTaskDetailLastExport" style="font-size:12px;color:var(--muted);margin-bottom:8px"
+                   x-text="`最近任务导出：${agentTaskDetailLastExport}`"></div>
+              <div style="font-size:12px;font-weight:600;margin-bottom:4px">链路视图（chain_view）</div>
+              <textarea class="json-editor" style="min-height:120px" :value="jsonPretty(agentTaskDetail && agentTaskDetail.chain_view ? agentTaskDetail.chain_view : {})" readonly></textarea>
+              <div style="font-size:12px;font-weight:600;margin-top:8px;margin-bottom:4px">结果（result）</div>
+              <textarea class="json-editor" style="min-height:180px" :value="jsonPretty(agentTaskDetail && agentTaskDetail.result ? agentTaskDetail.result : {})" readonly></textarea>
+              <div style="font-size:12px;font-weight:600;margin-top:8px;margin-bottom:4px">失败节点</div>
+              <div x-show="getAgentTaskFailedNodes().length===0" style="font-size:12px;color:var(--muted)">无失败节点</div>
+              <div x-show="getAgentTaskFailedNodes().length>0" style="display:flex;flex-direction:column;gap:6px">
+                <template x-for="n in getAgentTaskFailedNodes()" :key="`${n.node_id}_${n.skill_id}_${n.capability_id}`">
+                  <div style="border:1px dashed var(--border);border-radius:8px;padding:8px">
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                      <span class="badge badge-danger">error</span>
+                      <span style="font-size:12px;font-weight:600" x-text="n.node_id || '-'"></span>
+                      <span style="font-size:11px;color:var(--muted)" x-text="n.skill_id || n.capability_id || '-'"></span>
+                    </div>
+                    <div style="font-size:11px;color:var(--muted);margin-top:4px" x-text="n.error || '-'"></div>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div x-show="capabilityTab==='agent_templates'" class="fade-in">
+          <div class="form-grid">
+            <div class="form-field">
+              <div class="input-label">能力ID筛选（可选）</div>
+              <input class="input" x-model="agentTemplateFilters.capability_id" list="agent-capability-list" placeholder="如 topic_copy" />
+              <datalist id="agent-capability-list">
+                <template x-for="cap in capabilities" :key="cap.capability_id">
+                  <option :value="cap.capability_id" x-text="cap.capability_id"></option>
+                </template>
+              </datalist>
+            </div>
+            <div class="form-field">
+              <div class="input-label">Scope</div>
+              <select class="input" x-model="agentTemplateFilters.scope">
+                <option value="">全部</option>
+                <option value="system">system</option>
+                <option value="project">project</option>
+                <option value="agent">agent</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <div class="input-label">Actor ID（agent scope 建议填写）</div>
+              <input class="input" x-model="agentTemplateFilters.actor_id" placeholder="如 agent_bot_1" />
+            </div>
+            <div class="form-field full">
+              <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+                <div class="toggle-wrap">
+                  <label class="toggle">
+                    <input type="checkbox" x-model="agentTemplateFilters.include_system" />
+                    <span class="toggle-slider"></span>
+                  </label>
+                  <span style="font-size:13px">包含 system 模板</span>
+                </div>
+                <div class="toggle-wrap">
+                  <label class="toggle">
+                    <input type="checkbox" x-model="agentTemplateFilters.resolve" />
+                    <span class="toggle-slider"></span>
+                  </label>
+                  <span style="font-size:13px">解析继承链（effective_content/template_chain/warnings）</span>
+                </div>
+              </div>
+            </div>
+            <div class="form-field full">
+              <div class="input-label">本地关键词筛选</div>
+              <input class="input" x-model="agentTemplateSearch" placeholder="按 template_id / 名称 / capability / tags 模糊筛选" />
+            </div>
+          </div>
+
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+            <button class="btn btn-primary" @click="loadAgentTemplates()" :disabled="agentTemplatesLoading">
+              <span x-show="!agentTemplatesLoading">刷新模板列表</span>
+              <span x-show="agentTemplatesLoading">加载中…</span>
+            </button>
+            <button class="btn btn-ghost" @click="toggleSelectAllEditableAgentTemplates()">全选/反选可写模板</button>
+            <button class="btn btn-ghost" @click="clearAgentTemplateSelection()">清空勾选</button>
+            <button class="btn btn-ghost" @click="resetAgentTemplateEditor()">新建模板</button>
+            <span class="badge badge-info"
+                  x-text="`已选 ${agentTemplateSelectedKeys.length} / 显示 ${getFilteredAgentTemplates().length} / 总数 ${agentTemplates.length}`"></span>
+          </div>
+
+          <div class="card" style="margin-top:10px">
+            <div class="card-title">模板列表（继承链可视化）</div>
+            <div x-show="agentTemplatesLoading" style="font-size:12px;color:var(--muted)">模板加载中…</div>
+            <div x-show="!agentTemplatesLoading && getFilteredAgentTemplates().length===0" style="font-size:12px;color:var(--muted)">暂无模板</div>
+            <div x-show="!agentTemplatesLoading && getFilteredAgentTemplates().length>0"
+                 style="max-height:280px;overflow:auto;border:1px solid var(--border);border-radius:8px">
+              <table class="match-table">
+                <thead>
+                  <tr>
+                    <th>选中</th>
+                    <th>模板ID</th>
+                    <th>作用域</th>
+                    <th>能力</th>
+                    <th>继承链</th>
+                    <th>解析告警</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="item in getFilteredAgentTemplates()" :key="agentTemplateKey(item)">
+                    <tr>
+                      <td>
+                        <input type="checkbox"
+                               :disabled="item.readonly"
+                               :checked="isAgentTemplateSelected(item)"
+                               @change="toggleAgentTemplateSelected(item)" />
+                      </td>
+                      <td>
+                        <div style="font-size:12px;font-weight:600" x-text="item.template_id"></div>
+                        <div style="font-size:11px;color:var(--muted)" x-text="item.name || '-'"></div>
+                        <div style="font-size:11px;color:var(--muted)" x-show="item.actor_id" x-text="`actor: ${item.actor_id}`"></div>
+                      </td>
+                      <td>
+                        <span class="badge"
+                              :class="item.scope==='system' ? 'badge-warn' : (item.scope==='agent' ? 'badge-info' : 'badge-success')"
+                              x-text="agentTemplateScopeZh(item.scope)"></span>
+                        <span class="badge badge-muted" x-show="item.readonly">只读</span>
+                      </td>
+                      <td x-text="item.capability_id || '-'"></td>
+                      <td>
+                        <div style="font-size:11px;color:var(--muted)" x-show="(item.template_chain || []).length===0">-</div>
+                        <div style="display:flex;gap:4px;flex-wrap:wrap" x-show="(item.template_chain || []).length>0">
+                          <template x-for="token in (item.template_chain || [])" :key="token">
+                            <span class="badge badge-info" x-text="token"></span>
+                          </template>
+                        </div>
+                      </td>
+                      <td>
+                        <div style="font-size:11px;color:var(--muted)" x-show="(item.resolve_warnings || []).length===0">-</div>
+                        <div style="display:flex;gap:4px;flex-wrap:wrap" x-show="(item.resolve_warnings || []).length>0">
+                          <template x-for="w in (item.resolve_warnings || []).slice(0,2)" :key="w">
+                            <span class="badge badge-danger" x-text="w"></span>
+                          </template>
+                        </div>
+                      </td>
+                      <td>
+                        <div style="display:flex;gap:6px;flex-wrap:wrap">
+                          <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" @click="useAgentTemplateEditor(item)">编辑</button>
+                          <button class="btn btn-danger" style="font-size:11px;padding:3px 8px"
+                                  :disabled="item.readonly"
+                                  @click="deleteAgentTemplate(item)">删除</button>
+                        </div>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:10px">
+            <div class="card-title">批量变量回填（选中模板）</div>
+            <div class="form-grid">
+              <div class="form-field">
+                <div class="input-label">写入位置</div>
+                <select class="input" x-model="agentTemplateBulk.target">
+                  <option value="overrides">overrides</option>
+                  <option value="content">content</option>
+                </select>
+              </div>
+              <div class="form-field">
+                <div class="input-label">变量 key</div>
+                <input class="input" x-model="agentTemplateBulk.key" placeholder="如 target_duration_s" />
+              </div>
+              <div class="form-field full">
+                <div class="input-label">变量 value</div>
+                <input class="input" x-model="agentTemplateBulk.value" placeholder="如 45 / warm_real / [\"抖音短视频\",\"小红书短视频\"]" />
+              </div>
+              <div class="form-field full">
+                <div class="toggle-wrap">
+                  <label class="toggle">
+                    <input type="checkbox" x-model="agentTemplateBulk.parse_json" />
+                    <span class="toggle-slider"></span>
+                  </label>
+                  <span style="font-size:13px">按 JSON 解析 value（数字/布尔/数组/对象）</span>
+                </div>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <button class="btn btn-primary" @click="applyBulkFillAgentTemplates()">批量回填到已勾选模板</button>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:10px">
+            <div class="card-title">模板编辑器</div>
+            <div class="form-grid">
+              <div class="form-field">
+                <div class="input-label">模板ID</div>
+                <input class="input" x-model="agentTemplateEditor.template_id" placeholder="如 topic_copy_agent_variant" />
+              </div>
+              <div class="form-field">
+                <div class="input-label">名称</div>
+                <input class="input" x-model="agentTemplateEditor.name" placeholder="模板名称" />
+              </div>
+              <div class="form-field">
+                <div class="input-label">能力ID</div>
+                <input class="input" x-model="agentTemplateEditor.capability_id" list="agent-capability-list" placeholder="如 topic_copy" />
+              </div>
+              <div class="form-field">
+                <div class="input-label">Scope</div>
+                <select class="input" x-model="agentTemplateEditor.scope">
+                  <option value="project">project</option>
+                  <option value="agent">agent</option>
+                </select>
+              </div>
+              <div class="form-field">
+                <div class="input-label">Actor ID（scope=agent 时必填）</div>
+                <input class="input" x-model="agentTemplateEditor.actor_id" placeholder="如 agent_bot_1" />
+              </div>
+              <div class="form-field">
+                <div class="input-label">标签（逗号分隔）</div>
+                <input class="input" x-model="agentTemplateEditor.tags" placeholder="travel,copy,agent" />
+              </div>
+              <div class="form-field full">
+                <div class="input-label">base_template_id（可选）</div>
+                <input class="input" x-model="agentTemplateEditor.base_template_id" placeholder="如 topic_copy_project_base" />
+              </div>
+              <div class="form-field full">
+                <div class="input-label">content JSON</div>
+                <textarea class="json-editor" style="min-height:130px" x-model="agentTemplateEditor.content_json"></textarea>
+              </div>
+              <div class="form-field full">
+                <div class="input-label">overrides JSON</div>
+                <textarea class="json-editor" style="min-height:120px" x-model="agentTemplateEditor.overrides_json"></textarea>
+              </div>
+              <div class="form-field full">
+                <div class="input-label">variables JSON（数组）</div>
+                <textarea class="json-editor" style="min-height:120px" x-model="agentTemplateEditor.variables_json"></textarea>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <button class="btn btn-success" @click="saveAgentTemplateFromEditor()">保存模板</button>
+              <button class="btn btn-ghost" @click="resetAgentTemplateEditor()">重置编辑器</button>
+              <button class="btn btn-danger" @click="deleteAgentTemplate()">删除当前模板</button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <!-- 未加载项目时的空状态 -->
       <div x-show="!projectDir" class="empty-state">
@@ -829,6 +2965,18 @@
               <input class="input" type="number" min="0" max="2" step="0.05" x-model.number="renderOpts.transition_duration" />
             </div>
             <div class="form-field">
+              <div class="input-label">粗剪目标时长 (秒)</div>
+              <input class="input" type="number" min="5" max="120" x-model.number="renderOpts.rough_target_seconds" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">粗剪最多片段</div>
+              <input class="input" type="number" min="1" max="30" x-model.number="renderOpts.rough_max_clips" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">字幕片段合并间隔 (秒)</div>
+              <input class="input" type="number" min="0" max="1" step="0.05" x-model.number="renderOpts.rough_merge_gap_s" />
+            </div>
+            <div class="form-field">
               <div class="input-label">审美预设</div>
               <select class="input" x-model="renderOpts.aesthetic_preset">
                 <option value="travel_story">旅行叙事</option>
@@ -836,6 +2984,12 @@
                 <option value="vibrant">明快高饱和</option>
                 <option value="natural">自然写实</option>
               </select>
+            </div>
+
+            <div class="form-field full">
+              <div class="input-label">粗剪去除口头词（逗号分隔）</div>
+              <input class="input" type="text" x-model="renderOpts.rough_remove_phrases"
+                     placeholder="嗯,啊,然后,就是,那个" />
             </div>
 
             <div class="form-field full">

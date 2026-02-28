@@ -373,7 +373,11 @@ class WorkflowRunner:
         )
 
         materials = self._load_json("data/materials.json")
+        self._sync_topic_library_from_materials(materials)
         summary = self._build_material_summary(materials)
+        topic_library_summary = self._build_topic_library_summary(limit=10)
+        if topic_library_summary:
+            summary = f"{summary}\n\n## 选题库模板（可复用）\n{topic_library_summary}"
 
         ai = AIClient.from_workflow_config(self.state.config)
         print(f"  AI: {ai}")
@@ -416,6 +420,75 @@ class WorkflowRunner:
                 f"- {fname} | {dur}s | {res} | 场景:{desc} | 情绪:{mood} | 物体:{obj_list} | 语义:{sem_hint}"
             )
         return "\n".join(lines) if lines else "（未找到素材信息）"
+
+    def _sync_topic_library_from_materials(self, materials: Dict) -> None:
+        """
+        Seed topic library database from material semantics.
+
+        Safe to call repeatedly (upsert by slug).
+        """
+        try:
+            from modules.capabilities.topic_library import TopicTemplate, upsert_topic
+        except Exception:
+            return
+
+        db_path = self.p("data", "topic_library.db")
+        seen = set()
+        for _, vdata in materials.items():
+            sem = vdata.get("semantic", {}) if isinstance(vdata.get("semantic"), dict) else {}
+            setting = str(sem.get("setting", "") or "").strip() or "旅行场景"
+            activity = str(sem.get("activity", "") or "").strip() or "探索"
+            mood = str(sem.get("mood", "") or "").strip() or "真实"
+            slug = self._slugify(f"{setting}-{activity}")
+            if slug in seen:
+                continue
+            seen.add(slug)
+            outline = f"开场展示{setting}，中段推进{activity}，结尾回到{mood}情绪。"
+            topic = TopicTemplate(
+                slug=slug,
+                title=f"{setting}·{activity}高光",
+                category="travel",
+                audience="short_video",
+                hook_style="story",
+                outline_template=outline,
+                tags=[setting, activity, mood],
+                enabled=True,
+            )
+            try:
+                upsert_topic(str(db_path), topic)
+            except Exception:
+                continue
+
+    def _build_topic_library_summary(self, limit: int = 10) -> str:
+        try:
+            from modules.capabilities.topic_library import list_topics
+            rows = list_topics(str(self.p("data", "topic_library.db")), enabled_only=True, limit=limit)
+        except Exception:
+            return ""
+        if not rows:
+            return ""
+
+        lines = []
+        for item in rows:
+            tags = ", ".join((item.get("tags") or [])[:4]) or "-"
+            lines.append(
+                f"- {item.get('title', '未命名')} | 风格:{item.get('hook_style', 'story')} | 标签:{tags}"
+            )
+        return "\n".join(lines)
+
+    @staticmethod
+    def _slugify(text: str) -> str:
+        raw = str(text or "").strip().lower()
+        cleaned = []
+        for ch in raw:
+            if ch.isalnum():
+                cleaned.append(ch)
+            elif ch in {" ", "-", "_", "/"}:
+                cleaned.append("-")
+        slug = "".join(cleaned).strip("-")
+        while "--" in slug:
+            slug = slug.replace("--", "-")
+        return slug[:64] or "topic"
 
     def _extract_topics_from_response(self, ai_response: str, materials: Dict) -> List[Dict]:
         text = str(ai_response or "")
@@ -1083,7 +1156,7 @@ notes: ""
     # ==================================================================
 
     def step6_rough(self):
-        print("\n[Step 6] 粗剪预览（15秒，低质量）")
+        print("\n[Step 6] 粗剪预览（文字粗剪 + 高光快剪）")
         self._emit_progress(15, "开始粗剪预览")
         self._check_cancel()
         script = self._load_json("data/script_matched.json")
@@ -1094,7 +1167,7 @@ notes: ""
         rough_path = self.p("preview", "rough_cut.mp4")
         ffmpeg = _find_ffmpeg()
         rc = self.state.render_config
-        build_rough_cut(
+        rough_result = build_rough_cut(
             script=script,
             materials=materials,
             rough_path=rough_path,
@@ -1103,6 +1176,11 @@ notes: ""
             resolve_video_path=lambda vid_id: self._resolve_video_path(vid_id, materials),
             check_cancel=self._check_cancel,
             emit_progress=self._emit_progress,
+        )
+        rough_plan_path = self.p("preview", "rough_plan.json")
+        rough_plan_path.write_text(
+            json.dumps(rough_result, ensure_ascii=False, indent=2),
+            encoding="utf-8",
         )
 
         if sys.platform == "darwin":
@@ -1113,8 +1191,19 @@ notes: ""
             6, "waiting_review",
             output="preview/rough_cut.mp4",
             review_file="reviews/05_render_options.md",
+            rough_strategy=rough_result.get("strategy"),
+            rough_used_seconds=rough_result.get("used_seconds"),
+            rough_segment_count=rough_result.get("segment_count"),
+            rough_plan_file="preview/rough_plan.json",
         )
         print(f"\n✅ Step 6 完成  粗剪: {rough_path}")
+        print(
+            "   策略: "
+            f"{rough_result.get('strategy', 'unknown')} | "
+            f"片段: {rough_result.get('segment_count', 0)} | "
+            f"时长: {rough_result.get('used_seconds', 0)}s"
+        )
+        print(f"   计划: {rough_plan_path}")
         print(f"   请设置渲染选项: {self.p('reviews', '05_render_options.md')}")
 
     def _write_review_05(self):
@@ -1123,9 +1212,10 @@ notes: ""
 
 > **操作说明**：
 > 1. 查看粗剪: `preview/rough_cut.mp4`
-> 2. 调整下方参数
-> 3. 将 `approved: false` 改为 `approved: true`
-> 4. 重新运行 `python workflow.py run --project <项目路径>` 开始精渲染
+> 2. 如需检查粗剪策略，查看 `preview/rough_plan.json`
+> 3. 调整下方参数
+> 4. 将 `approved: false` 改为 `approved: true`
+> 5. 重新运行 `python workflow.py run --project <项目路径>` 开始精渲染
 
 ```yaml
 approved: false
@@ -1144,6 +1234,10 @@ enable_skill_enhance: {str(rc.get('enable_skill_enhance', True)).lower()}
 aesthetic_preset: "{rc.get('aesthetic_preset', 'travel_story')}"
 transition_style: "{rc.get('transition_style', 'fade')}"
 transition_duration: {rc.get('transition_duration', 0.35)}
+rough_target_seconds: {rc.get('rough_target_seconds', 15)}
+rough_max_clips: {rc.get('rough_max_clips', 8)}
+rough_merge_gap_s: {rc.get('rough_merge_gap_s', 0.15)}
+rough_remove_phrases: "{rc.get('rough_remove_phrases', '嗯,啊,然后,就是,那个')}"
 skin_smooth_strength: 0.5
 
 # 音频（填写绝对路径，留空则跳过）
@@ -1506,6 +1600,11 @@ def cmd_init(args):
             "bgm_volume": 0.3,
             "subtitle_font": "PingFangSC-Regular", "subtitle_size": 56,
             "audio_bitrate": "192k",
+            "rough_target_seconds": 15,
+            "rough_max_clips": 8,
+            "rough_min_gap_s": 0.25,
+            "rough_merge_gap_s": 0.15,
+            "rough_remove_phrases": "嗯,啊,然后,就是,那个",
         },
     }
     ws = WorkflowState.create(project_dir, args.videos, config)
@@ -1640,7 +1739,7 @@ def main():
     p_init.add_argument("--project", required=True, help="项目目录（将被创建）")
     p_init.add_argument("--semantic", action="store_true", help="启用 CLIP 语义索引（可选）")
     p_init.add_argument("--ai", default=None,
-                        choices=["anthropic", "openai", "moonshot"],
+                        choices=["anthropic", "openai", "moonshot", "kimi", "qwen", "gemini", "maxmini"],
                         help="AI 提供方（默认自动检测环境变量）")
     p_init.add_argument("--ai-base-url", default=None, help="OpenAI 兼容 API 的 base_url")
     p_init.add_argument("--ai-model", default=None, help="AI 模型名称")

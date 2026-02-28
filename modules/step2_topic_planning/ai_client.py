@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 AI API 适配器
-支持：Anthropic Claude / OpenAI 兼容（Moonshot、Kimi 等）/ 无 key 时输出模板
+支持：Anthropic Claude / OpenAI 兼容（OpenAI、Moonshot/Kimi、Qwen、Gemini、MaxMini 等）/ 无 key 时输出模板
 """
 
 import os
@@ -130,12 +130,28 @@ class AIClient:
         self.temperature = temperature
         self.base_url = base_url
 
-        self.provider = provider or self._detect_provider()
+        self.provider = self._normalize_provider(provider or self._detect_provider())
         self.api_key = api_key or self._get_api_key()
         self.model = model or self._default_model()
         self._client = None  # lazy init
 
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _normalize_provider(provider: Optional[str]) -> Optional[str]:
+        p = str(provider or "").strip().lower()
+        if not p:
+            return None
+        # 别名归一：Kimi 属于 Moonshot 体系；maxmini/minimax 归一。
+        if p == "kimi":
+            return "moonshot"
+        if p in {"minimax", "maxmini"}:
+            return "maxmini"
+        return p
+
+    @staticmethod
+    def _is_openai_compatible(provider: Optional[str]) -> bool:
+        return provider in {"openai", "moonshot", "qwen", "gemini", "maxmini"}
 
     def _detect_provider(self) -> Optional[str]:
         if os.environ.get("ANTHROPIC_API_KEY"):
@@ -147,7 +163,7 @@ class AIClient:
     def _get_api_key(self) -> Optional[str]:
         if self.provider == "anthropic":
             return os.environ.get("ANTHROPIC_API_KEY")
-        if self.provider in ("openai", "moonshot"):
+        if self._is_openai_compatible(self.provider):
             return os.environ.get("OPENAI_API_KEY")
         return None
 
@@ -156,6 +172,12 @@ class AIClient:
             return "claude-sonnet-4-6"
         if self.provider == "moonshot":
             return "moonshot-v1-8k"
+        if self.provider == "qwen":
+            return "qwen-plus"
+        if self.provider == "gemini":
+            return "gemini-2.0-flash"
+        if self.provider == "maxmini":
+            return "abab6.5s-chat"
         return "gpt-4o-mini"
 
     def _init_client(self):

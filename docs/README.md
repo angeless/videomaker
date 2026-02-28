@@ -6,6 +6,9 @@
 - `module-dependency-matrix.md`：允许/禁止依赖规则与边界约束
 - `file-migration-map.md`：文件迁移路径与回滚映射
 - `stage2-completion.md`：阶段2已落地的最终目录、映射、验证与回滚
+- `capability-decomposition-v1.md`：按产品能力拆分（选题库/文案/粗剪/快剪/精剪/导出/配音）
+- `capabilities-api.md`：能力模块 API（可独立调用各能力）
+- `agent-usability-roadmap-v1.md`：Agent 易用性路线图（在人用流程不变前提下扩展 Agent API / 模板 / Skill 编排）
 
 执行建议：
 1. 先读 `module-index.md`

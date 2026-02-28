@@ -55,6 +55,9 @@
   - 统一数据契约（materials/workflow/render）
 - `adapters`
   - 跨模块胶水层，禁止跨模块直接访问私有方法
+- `capabilities`
+  - 按产品能力组织的功能边界层（topic_library/topic_copy/text_rough_cut/short_clip/refinement/social_export/audio_voice）
+  - 用于从 Step 流水线平滑迁移到“功能模块化”调度
 - `library`
   - 全局素材库与入库检索服务
 - `app_api`

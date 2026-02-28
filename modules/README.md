@@ -3,6 +3,7 @@
 核心业务与服务模块统一放在 `modules/`。
 
 - `workflow_engine`：7步工作流运行时（状态机 + 步骤执行）
+- `capabilities`：按产品能力拆分的功能层（选题库/文案/粗剪/快剪/精剪/导出/配音）
 - `app_api`：Flask API 服务层
 - `library`：全局素材库、入库、检索
 - `adapters`：跨模块数据适配

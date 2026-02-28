@@ -18,6 +18,11 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 from urllib.parse import parse_qs, urlparse
 
+try:
+    import numpy as np
+except Exception:
+    np = None
+
 SCRIPT_DIR = Path(__file__).parent.resolve()
 REPO_ROOT = SCRIPT_DIR.parents[2]
 DEFAULT_LIBRARY_DIR = REPO_ROOT / ".video_library"
@@ -46,11 +51,15 @@ except Exception:
 
 
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".m4v", ".hevc", ".flv", ".wmv"}
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".heic"}
 GDOWN_FOLDER_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.102 Safari/537.36"
 )
 SEMANTIC_SCHEMA_VERSION = "2.10"
+EMBEDDING_SCHEMA_VERSION = "1.0"
+DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
+VECTOR_RRF_K = 60
 TAG_CATEGORIES = ("objects", "actions", "scene", "mood", "concepts", "style", "use_cases")
 GENERIC_TAG_TERMS = {
     "video", "footage", "clip", "scene", "person", "people", "thing", "background",
@@ -114,6 +123,13 @@ class GlobalMediaLibrary:
         self._toolkit: Optional[VideoAssetToolkit] = None
         self._relink_checked: Dict[str, float] = {}
         self._semantic_refresh_checked: Dict[str, float] = {}
+        self._vector_cache: Dict[str, Any] = {
+            "model": "",
+            "updated_at": "",
+            "uids": [],
+            "matrix": None,
+        }
+        self._query_embedding_cache: Dict[str, Dict[str, Any]] = {}
         self._init_db()
 
     # ------------------------------------------------------------------
@@ -124,8 +140,15 @@ class GlobalMediaLibrary:
         return datetime.now().isoformat(timespec="seconds")
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(str(self.db_path))
+        conn = sqlite3.connect(str(self.db_path), timeout=30.0)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA busy_timeout = 30000")
+        # WAL 提升并发读写能力，降低搜索与入库互相阻塞概率。
+        try:
+            conn.execute("PRAGMA journal_mode = WAL")
+            conn.execute("PRAGMA synchronous = NORMAL")
+        except Exception:
+            pass
         conn.execute("PRAGMA foreign_keys = ON")
         return conn
 
@@ -172,6 +195,20 @@ class GlobalMediaLibrary:
                 CREATE INDEX IF NOT EXISTS idx_assets_scene ON assets(scene_description);
                 CREATE INDEX IF NOT EXISTS idx_assets_resolution ON assets(resolution);
                 CREATE INDEX IF NOT EXISTS idx_locations_uid ON asset_locations(uid);
+
+                CREATE TABLE IF NOT EXISTS asset_embeddings (
+                    uid TEXT PRIMARY KEY,
+                    model TEXT NOT NULL,
+                    embedding_json TEXT NOT NULL,
+                    embedding_dim INTEGER NOT NULL,
+                    content_hash TEXT NOT NULL,
+                    embedding_version TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY(uid) REFERENCES assets(uid) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_asset_embeddings_model ON asset_embeddings(model);
+                CREATE INDEX IF NOT EXISTS idx_asset_embeddings_updated ON asset_embeddings(updated_at);
                 """
             )
             self._ensure_assets_columns(conn)
@@ -268,6 +305,41 @@ class GlobalMediaLibrary:
         return path.suffix.lower() in VIDEO_EXTENSIONS
 
     @staticmethod
+    def _is_image_file(path: Path) -> bool:
+        return path.suffix.lower() in IMAGE_EXTENSIONS
+
+    @staticmethod
+    def _infer_asset_kind(filename: Optional[str], path_text: Optional[str]) -> str:
+        raw = str(path_text or filename or "").strip()
+        suffix = Path(raw).suffix.lower()
+        if suffix in VIDEO_EXTENSIONS:
+            return "video"
+        if suffix in IMAGE_EXTENSIONS:
+            return "image"
+        return "unknown"
+
+    @staticmethod
+    def _normalize_media_type(media_type: Optional[str]) -> str:
+        m = str(media_type or "").strip().lower()
+        if m in {"video", "videos"}:
+            return "video"
+        if m in {"image", "images", "photo", "photos", "picture", "pictures"}:
+            return "image"
+        return "all"
+
+    @staticmethod
+    def _media_type_where_sql(media_type: str, alias: str = "") -> str:
+        m = GlobalMediaLibrary._normalize_media_type(media_type)
+        if m == "all":
+            return ""
+        col = f"{alias}.filename" if alias else "filename"
+        if m == "video":
+            exts = sorted(VIDEO_EXTENSIONS)
+        else:
+            exts = sorted(IMAGE_EXTENSIONS)
+        return "(" + " OR ".join([f"lower({col}) GLOB '*{ext}'" for ext in exts]) + ")"
+
+    @staticmethod
     def _run_with_retry(fn, attempts: int = 3, base_delay: float = 1.5):
         last_error = None
         for i in range(attempts):
@@ -292,9 +364,22 @@ class GlobalMediaLibrary:
             )
         return []
 
+    def _discover_images(self, input_path: Path) -> List[Path]:
+        if input_path.is_file() and self._is_image_file(input_path):
+            return [input_path]
+        if input_path.is_dir():
+            return sorted(
+                p for p in input_path.rglob("*")
+                if p.is_file() and self._is_image_file(p)
+            )
+        return []
+
     # Public adapter surface for app_api; do not call private helpers跨模块。
     def discover_videos(self, input_path: Path) -> List[Path]:
         return self._discover_videos(input_path)
+
+    def discover_images(self, input_path: Path) -> List[Path]:
+        return self._discover_images(input_path)
 
     @staticmethod
     def _compute_sha256(path: Path, chunk_size: int = 4 * 1024 * 1024) -> str:
@@ -347,6 +432,36 @@ class GlobalMediaLibrary:
         except Exception:
             return None
 
+    @staticmethod
+    def _compute_image_phash(path: Path) -> Optional[str]:
+        if cv2 is None or np is None:
+            return None
+        try:
+            img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+            if img is None:
+                return None
+            resized = cv2.resize(img, (32, 32), interpolation=cv2.INTER_AREA)
+            dct = cv2.dct(np.float32(resized))
+            low = dct[:8, :8]
+            med = float(np.median(low[1:, 1:])) if low.size >= 4 else float(np.median(low))
+            bits = "".join("1" if v > med else "0" for v in low.flatten())
+            return f"{int(bits, 2):016x}"
+        except Exception:
+            return None
+
+    @staticmethod
+    def _phash_distance(a: Optional[str], b: Optional[str]) -> Optional[int]:
+        x = str(a or "").strip().lower()
+        y = str(b or "").strip().lower()
+        if not x or not y:
+            return None
+        if len(x) != len(y):
+            return None
+        try:
+            return int(int(x, 16) ^ int(y, 16)).bit_count()
+        except Exception:
+            return None
+
     def _toolkit_instance(self) -> VideoAssetToolkit:
         if self._toolkit is None:
             self._toolkit = VideoAssetToolkit()
@@ -370,6 +485,9 @@ class GlobalMediaLibrary:
         ratios: Optional[List[float]] = None,
         jpeg_quality: int = 82,
     ) -> List[str]:
+        if GlobalMediaLibrary._is_image_file(path):
+            img_url = GlobalMediaLibrary._extract_image_data_url(path, jpeg_quality=jpeg_quality)
+            return [img_url] if img_url else []
         if cv2 is None:
             return []
         ratios = ratios or [0.12, 0.42, 0.75]
@@ -414,6 +532,19 @@ class GlobalMediaLibrary:
         urls = GlobalMediaLibrary._extract_keyframe_data_urls(path, ratios=[0.35], jpeg_quality=82)
         return urls[0] if urls else None
 
+    @staticmethod
+    def _extract_image_data_url(path: Path, jpeg_quality: int = 86) -> Optional[str]:
+        if cv2 is None:
+            return None
+        img = cv2.imread(str(path))
+        if img is None:
+            return None
+        ok, encoded = cv2.imencode(".jpg", img, [int(cv2.IMWRITE_JPEG_QUALITY), jpeg_quality])
+        if not ok:
+            return None
+        b64 = base64.b64encode(encoded.tobytes()).decode("ascii")
+        return f"data:image/jpeg;base64,{b64}"
+
     def _vision_enrich_tags(self, path: Path) -> Dict:
         if not self._vision_enrich_enabled():
             return {}
@@ -425,7 +556,7 @@ class GlobalMediaLibrary:
             client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
             model = os.environ.get("OPENAI_VISION_MODEL") or os.environ.get("OPENAI_MODEL") or "gpt-4o-mini"
             prompt = (
-                "你是视频语义标注器。请识别画面里的建筑类型、地标线索、桥梁类型和场景要素。"
+                "你是素材语义标注器（图片/视频均可）。请识别画面里的建筑类型、地标线索、桥梁类型和场景要素。"
                 "只返回 JSON，不要解释。格式："
                 "{\"scene\":\"\",\"keywords\":[],\"landmarks\":[],\"architecture_style\":[]}"
                 "关键词尽量中英混合，最多12个。"
@@ -787,6 +918,370 @@ class GlobalMediaLibrary:
         except Exception:
             return ""
 
+    @staticmethod
+    def _has_openai_sdk() -> bool:
+        try:
+            import openai  # noqa: F401
+            return True
+        except Exception:
+            return False
+
+    def _embedding_runtime_status(self) -> Dict[str, Any]:
+        has_key = bool(str(os.environ.get("OPENAI_API_KEY", "")).strip())
+        has_sdk = self._has_openai_sdk()
+        has_numpy = np is not None
+        if not has_key:
+            return {
+                "enabled": False,
+                "reason": "missing_api_key",
+                "message": "未配置 OpenAI API Key",
+            }
+        if not has_sdk:
+            return {
+                "enabled": False,
+                "reason": "missing_openai_sdk",
+                "message": "未安装 openai SDK",
+            }
+        if not has_numpy:
+            return {
+                "enabled": False,
+                "reason": "missing_numpy",
+                "message": "未安装 numpy",
+            }
+        return {
+            "enabled": True,
+            "reason": "ready",
+            "message": "向量能力已启用",
+        }
+
+    @staticmethod
+    def _embedding_model() -> str:
+        return (
+            str(os.environ.get("OPENAI_EMBEDDING_MODEL", "")).strip()
+            or str(os.environ.get("OPENAI_EMBED_MODEL", "")).strip()
+            or DEFAULT_EMBEDDING_MODEL
+        )
+
+    @staticmethod
+    def _embedding_content_hash(content: str) -> str:
+        return hashlib.sha256((content or "").strip().encode("utf-8")).hexdigest()
+
+    def _build_embedding_source(
+        self,
+        filename: Optional[str],
+        semantic_text: Optional[str],
+        keywords_json: Any,
+        semantic_json: Any,
+    ) -> str:
+        parts: List[str] = []
+        if filename:
+            parts.append(str(filename).strip())
+        if semantic_text:
+            parts.append(str(semantic_text).strip())
+
+        keywords = self._safe_json_loads(keywords_json, [])
+        if isinstance(keywords, list) and keywords:
+            parts.extend([str(x).strip() for x in keywords if str(x).strip()])
+
+        semantic = semantic_json
+        if isinstance(semantic_json, str):
+            semantic = self._safe_json_loads(semantic_json, {})
+        if isinstance(semantic, dict):
+            layers = semantic.get("index_layers", {}) if isinstance(semantic.get("index_layers"), dict) else {}
+            core = layers.get("core_search_tags", {}) if isinstance(layers, dict) else {}
+            secondary = layers.get("secondary_tags", {}) if isinstance(layers, dict) else {}
+            for bucket in (core, secondary):
+                if isinstance(bucket, dict):
+                    for lang in ("zh", "en"):
+                        vals = bucket.get(lang, [])
+                        if isinstance(vals, list):
+                            parts.extend([str(x).strip() for x in vals if str(x).strip()])
+
+            for key in ("scene_description", "mood", "setting", "time_of_day", "activity", "visual_style"):
+                val = semantic.get(key)
+                if isinstance(val, str) and val.strip():
+                    parts.append(val.strip())
+                elif isinstance(val, list):
+                    parts.extend([str(x).strip() for x in val if str(x).strip()])
+
+        compact = " | ".join([p for p in parts if p])
+        if len(compact) > 6000:
+            compact = compact[:6000]
+        return compact
+
+    def _call_openai_embedding(self, text: str) -> List[float]:
+        query = str(text or "").strip()
+        if not query:
+            return []
+        client = self._openai_client()
+        if client is None:
+            return []
+        try:
+            rsp = client.embeddings.create(
+                model=self._embedding_model(),
+                input=query,
+            )
+            data = getattr(rsp, "data", []) or []
+            if not data:
+                return []
+            vec = getattr(data[0], "embedding", None)
+            if not isinstance(vec, list):
+                return []
+            return [float(x) for x in vec]
+        except Exception:
+            return []
+
+    def _get_query_embedding(self, query: str) -> List[float]:
+        q = str(query or "").strip().lower()
+        if not q:
+            return []
+        now_ts = time.time()
+        cached = self._query_embedding_cache.get(q)
+        if cached and (now_ts - float(cached.get("ts", 0.0))) < 3600:
+            vec = cached.get("vec")
+            if isinstance(vec, list) and vec:
+                return vec
+
+        vec = self._call_openai_embedding(q)
+        if vec:
+            self._query_embedding_cache[q] = {"ts": now_ts, "vec": vec}
+            if len(self._query_embedding_cache) > 128:
+                # 简单淘汰最旧项
+                oldest = sorted(
+                    self._query_embedding_cache.items(),
+                    key=lambda kv: float(kv[1].get("ts", 0.0))
+                )[:32]
+                for k, _ in oldest:
+                    self._query_embedding_cache.pop(k, None)
+        return vec
+
+    def _invalidate_vector_cache(self):
+        self._vector_cache = {
+            "model": "",
+            "updated_at": "",
+            "uids": [],
+            "matrix": None,
+        }
+
+    def _refresh_vector_cache(self, conn: sqlite3.Connection, model: str):
+        if np is None:
+            return
+
+        meta = conn.execute(
+            """
+            SELECT COUNT(*) AS cnt, COALESCE(MAX(updated_at), '') AS max_updated
+            FROM asset_embeddings
+            WHERE model = ? AND embedding_version = ?
+            """,
+            (model, EMBEDDING_SCHEMA_VERSION),
+        ).fetchone()
+        cnt = int(meta["cnt"] or 0)
+        max_updated = str(meta["max_updated"] or "")
+        cached = self._vector_cache
+        if (
+            cached.get("model") == model
+            and cached.get("updated_at") == max_updated
+            and len(cached.get("uids", [])) == cnt
+            and cached.get("matrix") is not None
+        ):
+            return
+
+        rows = conn.execute(
+            """
+            SELECT uid, embedding_json
+            FROM asset_embeddings
+            WHERE model = ? AND embedding_version = ?
+            """,
+            (model, EMBEDDING_SCHEMA_VERSION),
+        ).fetchall()
+
+        uids: List[str] = []
+        vectors: List[List[float]] = []
+        dim = None
+        for row in rows:
+            vec = self._safe_json_loads(row["embedding_json"], [])
+            if not isinstance(vec, list) or not vec:
+                continue
+            try:
+                arr = [float(x) for x in vec]
+            except Exception:
+                continue
+            if dim is None:
+                dim = len(arr)
+            if len(arr) != dim:
+                continue
+            uids.append(str(row["uid"]))
+            vectors.append(arr)
+
+        if not vectors:
+            self._vector_cache = {
+                "model": model,
+                "updated_at": max_updated,
+                "uids": [],
+                "matrix": None,
+            }
+            return
+
+        matrix = np.array(vectors, dtype=np.float32)
+        norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+        matrix = matrix / np.maximum(norms, 1e-8)
+        self._vector_cache = {
+            "model": model,
+            "updated_at": max_updated,
+            "uids": uids,
+            "matrix": matrix,
+        }
+
+    def _vector_search(self, conn: sqlite3.Connection, query: str, top_k: int = 1200) -> Dict[str, float]:
+        if np is None:
+            return {}
+        qvec = self._get_query_embedding(query)
+        if not qvec:
+            return {}
+        model = self._embedding_model()
+        self._refresh_vector_cache(conn, model)
+        matrix = self._vector_cache.get("matrix")
+        uids = self._vector_cache.get("uids", [])
+        if matrix is None or not uids:
+            return {}
+
+        q = np.array([float(x) for x in qvec], dtype=np.float32)
+        if matrix.shape[1] != q.shape[0]:
+            return {}
+        q = q / max(float(np.linalg.norm(q)), 1e-8)
+        sims = matrix @ q
+        count = int(sims.shape[0])
+        if count <= 0:
+            return {}
+
+        k = min(max(1, int(top_k)), count)
+        if k >= count:
+            top_idx = np.arange(count)
+        else:
+            top_idx = np.argpartition(-sims, k - 1)[:k]
+        sorted_idx = top_idx[np.argsort(sims[top_idx])[::-1]]
+        out: Dict[str, float] = {}
+        for idx in sorted_idx:
+            score = float(sims[idx])
+            if score < 0.08:
+                continue
+            out[uids[int(idx)]] = score
+        return out
+
+    def _upsert_embedding_for_asset(
+        self,
+        conn: sqlite3.Connection,
+        uid: str,
+        filename: Optional[str],
+        semantic_text: Optional[str],
+        keywords_json: Any,
+        semantic_json: Any,
+    ) -> bool:
+        source = self._build_embedding_source(
+            filename=filename,
+            semantic_text=semantic_text,
+            keywords_json=keywords_json,
+            semantic_json=semantic_json,
+        )
+        if not source:
+            return False
+        content_hash = self._embedding_content_hash(source)
+        model = self._embedding_model()
+        existing = conn.execute(
+            """
+            SELECT content_hash, model, embedding_version
+            FROM asset_embeddings
+            WHERE uid = ?
+            """,
+            (uid,),
+        ).fetchone()
+        if (
+            existing
+            and str(existing["content_hash"] or "") == content_hash
+            and str(existing["model"] or "") == model
+            and str(existing["embedding_version"] or "") == EMBEDDING_SCHEMA_VERSION
+        ):
+            return False
+
+        vec = self._call_openai_embedding(source)
+        if not vec:
+            return False
+
+        conn.execute(
+            """
+            INSERT INTO asset_embeddings (
+                uid, model, embedding_json, embedding_dim,
+                content_hash, embedding_version, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(uid) DO UPDATE SET
+                model=excluded.model,
+                embedding_json=excluded.embedding_json,
+                embedding_dim=excluded.embedding_dim,
+                content_hash=excluded.content_hash,
+                embedding_version=excluded.embedding_version,
+                updated_at=excluded.updated_at
+            """,
+            (
+                uid,
+                model,
+                json.dumps(vec, ensure_ascii=False),
+                len(vec),
+                content_hash,
+                EMBEDDING_SCHEMA_VERSION,
+                self._now(),
+            ),
+        )
+        self._invalidate_vector_cache()
+        return True
+
+    def _refresh_embeddings_incremental(self, conn: sqlite3.Connection, max_items: int = 12) -> int:
+        if max_items <= 0:
+            return 0
+        client = self._openai_client()
+        if client is None:
+            return 0
+        rows = conn.execute(
+            """
+            SELECT a.uid, a.filename, a.semantic_text, a.keywords_json, a.semantic_json,
+                   e.content_hash, e.model, e.embedding_version
+            FROM assets a
+            LEFT JOIN asset_embeddings e ON e.uid = a.uid
+            ORDER BY a.updated_at DESC
+            LIMIT 600
+            """
+        ).fetchall()
+        done = 0
+        model = self._embedding_model()
+        for row in rows:
+            source = self._build_embedding_source(
+                filename=row["filename"],
+                semantic_text=row["semantic_text"],
+                keywords_json=row["keywords_json"],
+                semantic_json=row["semantic_json"],
+            )
+            if not source:
+                continue
+            expected_hash = self._embedding_content_hash(source)
+            same = (
+                str(row["content_hash"] or "") == expected_hash
+                and str(row["model"] or "") == model
+                and str(row["embedding_version"] or "") == EMBEDDING_SCHEMA_VERSION
+            )
+            if same:
+                continue
+            if self._upsert_embedding_for_asset(
+                conn=conn,
+                uid=str(row["uid"]),
+                filename=row["filename"],
+                semantic_text=row["semantic_text"],
+                keywords_json=row["keywords_json"],
+                semantic_json=row["semantic_json"],
+            ):
+                done += 1
+                if done >= max_items:
+                    break
+        return done
+
     def _heuristic_structured_tags(self, evidence: Dict[str, Any]) -> Dict[str, Any]:
         schema = self._empty_structured_tag_schema()
         mapping = self._bilingual_term_map()
@@ -935,9 +1430,9 @@ class GlobalMediaLibrary:
 
         keyframes = self._extract_keyframe_data_urls(path)
         system_prompt = (
-            "You are a professional stock-video semantic tagging editor.\n"
-            "Goal: produce search-optimized tags for a video asset management system.\n"
-            "Do NOT describe the video. Produce tags that maximize future retrievability.\n"
+            "You are a professional stock-media semantic tagging editor.\n"
+            "Goal: produce search-optimized tags for a media asset management system.\n"
+            "Do NOT describe the media. Produce tags that maximize future retrievability.\n"
             "Output JSON only and keep tags concise, lowercase, search-friendly.\n"
             "Internally expand semantic dimensions: marketing themes, storytelling arcs, industry use, "
             "emotions, social context, season/time/weather, camera language, audio mood.\n"
@@ -2820,6 +3315,197 @@ class GlobalMediaLibrary:
             "semantic_version": SEMANTIC_SCHEMA_VERSION,
         }
 
+    def _analyze_image(self, path: Path) -> Dict:
+        if cv2 is None or np is None:
+            raise RuntimeError("缺少图像分析依赖（opencv-python / numpy）")
+
+        img = cv2.imread(str(path))
+        if img is None:
+            raise RuntimeError(f"无法读取图片: {path}")
+
+        height, width = img.shape[:2]
+        resolution = f"{int(width)}x{int(height)}" if width and height else ""
+
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+
+        brightness = float(np.mean(gray) / 255.0)
+        saturation = float(np.mean(hsv[:, :, 1]) / 255.0)
+        edges = cv2.Canny(gray, 70, 160)
+        edge_density = float(np.mean(edges > 0))
+
+        b_mean = float(np.mean(img[:, :, 0]))
+        g_mean = float(np.mean(img[:, :, 1]))
+        r_mean = float(np.mean(img[:, :, 2]))
+        rgb_sum = max(r_mean + g_mean + b_mean, 1e-6)
+        red_ratio = r_mean / rgb_sum
+        green_ratio = g_mean / rgb_sum
+        blue_ratio = b_mean / rgb_sum
+
+        # 静态图片没有真实 motion/face score，保留 0 以避免误导。
+        motion_score = 0.0
+        face_ratio = 0.0
+
+        try:
+            size_bytes = int(path.stat().st_size)
+        except Exception:
+            size_bytes = None
+
+        file_mtime_iso = ""
+        try:
+            file_mtime_iso = datetime.fromtimestamp(path.stat().st_mtime).isoformat(timespec="seconds")
+        except Exception:
+            file_mtime_iso = ""
+
+        orientation, _ = self._infer_orientation(width, height)
+        megapixels = float(width * height) / 1_000_000.0 if width and height else 0.0
+        if megapixels >= 12:
+            quality_score = 0.94
+        elif megapixels >= 6:
+            quality_score = 0.88
+        elif megapixels >= 3:
+            quality_score = 0.80
+        else:
+            quality_score = 0.72
+
+        scene_parts: List[str] = []
+        if orientation == "portrait":
+            scene_parts.append("portrait photo")
+        elif orientation == "landscape":
+            scene_parts.append("landscape photo")
+        if brightness >= 0.72:
+            scene_parts.append("bright daylight")
+        elif brightness <= 0.34:
+            scene_parts.append("low light")
+        if saturation >= 0.50:
+            scene_parts.append("vivid color")
+        elif saturation <= 0.25:
+            scene_parts.append("muted color")
+        scene_description = "; ".join(scene_parts) if scene_parts else "still image"
+
+        if brightness >= 0.72 and saturation >= 0.45:
+            mood_text = "bright energetic"
+        elif brightness <= 0.34:
+            mood_text = "moody calm"
+        else:
+            mood_text = "natural"
+
+        objects: List[str] = []
+        filename_tokens = self._split_filename_tokens(path.stem)
+        for token in filename_tokens:
+            key = self._normalize_tag_to_key(token)
+            if not key:
+                continue
+            entry = self._entry_from_key(key)
+            if not entry:
+                continue
+            if entry.get("en"):
+                objects.append(entry["en"])
+            if entry.get("zh"):
+                objects.append(entry["zh"])
+
+        vision_enrich = self._vision_enrich_tags(path)
+        vision_scene = str(vision_enrich.get("scene", "") or "").strip()
+        vision_keywords = vision_enrich.get("keywords") or []
+        landmarks = vision_enrich.get("landmarks") or []
+        arch_styles = vision_enrich.get("architecture_style") or []
+        if not isinstance(vision_keywords, list):
+            vision_keywords = []
+        if not isinstance(landmarks, list):
+            landmarks = []
+        if not isinstance(arch_styles, list):
+            arch_styles = []
+        if vision_scene:
+            scene_description = f"{scene_description}; {vision_scene}" if scene_description else vision_scene
+        objects = self._dedupe_list(
+            objects + [str(x).strip() for x in (vision_keywords + landmarks + arch_styles) if str(x).strip()]
+        )
+
+        if not objects:
+            if orientation == "portrait":
+                objects.extend(["person", "portrait"])
+            else:
+                objects.extend(["landscape", "city"])
+
+        analysis = {
+            "metadata": {
+                "duration": "0",
+                "size": str(size_bytes or 0),
+                "video_streams": [],
+                "audio_streams": [],
+                "tags": {
+                    "creation_time": file_mtime_iso,
+                    "file_name": path.name,
+                    "parent_folder": path.parent.name,
+                    "media_type": "image",
+                },
+            },
+            "local_analysis": {
+                "technical": {
+                    "resolution": resolution,
+                    "fps": None,
+                    "codec": "image",
+                    "overall_quality": quality_score,
+                },
+                "scene": {
+                    "description": scene_description,
+                    "mood": mood_text,
+                    "method": "image_heuristic",
+                    "visual_features": {
+                        "brightness": brightness,
+                        "saturation": saturation,
+                        "edge_density": edge_density,
+                        "motion_score": motion_score,
+                        "face_ratio": face_ratio,
+                        "red_ratio": red_ratio,
+                        "green_ratio": green_ratio,
+                        "blue_ratio": blue_ratio,
+                    },
+                },
+                "objects": {
+                    "detected_objects": objects,
+                    "confidence": 0.66 if vision_enrich else 0.52,
+                    "method": "image_vision_enrich" if vision_enrich else "image_heuristic",
+                },
+            },
+            "recommendations": [],
+        }
+        if vision_enrich:
+            analysis["vision_enrich"] = {
+                "scene": vision_scene,
+                "keywords": self._dedupe_list(
+                    [str(x).strip() for x in (vision_keywords + landmarks + arch_styles) if str(x).strip()]
+                )[:16],
+            }
+
+        semantic_bundle = self._build_semantic_bundle(
+            path=path,
+            analysis=analysis,
+            scene_description=scene_description,
+            mood=mood_text,
+            objects=objects,
+            quality_score=quality_score,
+        )
+
+        return {
+            "analysis": analysis,
+            "duration": None,
+            "size_bytes": size_bytes,
+            "resolution": resolution,
+            "width": int(width) if width else None,
+            "height": int(height) if height else None,
+            "fps": None,
+            "codec": "image",
+            "quality_score": quality_score,
+            "scene_description": scene_description,
+            "mood": mood_text,
+            "objects": objects,
+            "semantic_json": semantic_bundle["semantic"],
+            "semantic_text": semantic_bundle["semantic_text"],
+            "search_keywords": semantic_bundle["search_keywords"],
+            "semantic_version": SEMANTIC_SCHEMA_VERSION,
+        }
+
     @staticmethod
     def _choose_primary_path(current_path: Optional[str], current_source: Optional[str], new_path: str, new_source: str) -> str:
         # Keep local path as primary when available; otherwise latest wins.
@@ -2844,7 +3530,7 @@ class GlobalMediaLibrary:
         )
 
     def _find_similar_by_phash(self, conn: sqlite3.Connection, phash: Optional[str], threshold: int = 5) -> tuple[Optional[str], Optional[int]]:
-        if not phash or VideoHasher is None:
+        if not phash:
             return None, None
         rows = conn.execute(
             "SELECT uid, phash FROM assets WHERE phash IS NOT NULL AND phash != ''"
@@ -2853,9 +3539,15 @@ class GlobalMediaLibrary:
         best_dist = None
         for row in rows:
             candidate = row["phash"]
-            try:
-                dist = VideoHasher.hamming_distance(phash, candidate)
-            except Exception:
+            dist = None
+            if VideoHasher is not None:
+                try:
+                    dist = VideoHasher.hamming_distance(phash, candidate)
+                except Exception:
+                    dist = None
+            if dist is None:
+                dist = self._phash_distance(phash, candidate)
+            if dist is None:
                 continue
             if dist <= threshold and (best_dist is None or dist < best_dist):
                 best_uid = row["uid"]
@@ -2994,6 +3686,14 @@ class GlobalMediaLibrary:
                     ),
                 )
             self._upsert_location(conn, uid, str(path), source_type, source_ref)
+            self._upsert_embedding_for_asset(
+                conn=conn,
+                uid=uid,
+                filename=path.name,
+                semantic_text=semantic_text,
+                keywords_json=search_keywords,
+                semantic_json=semantic_json,
+            )
             return {
                 "uid": uid,
                 "filename": path.name,
@@ -3077,6 +3777,246 @@ class GlobalMediaLibrary:
         )
 
         self._upsert_location(conn, uid, str(path), source_type, source_ref)
+        self._upsert_embedding_for_asset(
+            conn=conn,
+            uid=uid,
+            filename=path.name,
+            semantic_text=analysis_bundle["semantic_text"],
+            keywords_json=analysis_bundle["search_keywords"],
+            semantic_json=analysis_bundle["semantic_json"],
+        )
+
+        return {
+            "uid": uid,
+            "filename": path.name,
+            "path": str(path),
+            "sha256": sha256,
+            "phash": phash,
+            "dedup_hit": bool(existing),
+            "similar_uid": similar_uid,
+            "phash_distance": similar_distance,
+            "resolution": analysis_bundle["resolution"],
+            "duration": analysis_bundle["duration"],
+            "semantic_dimensions_count": len((analysis_bundle.get("semantic_json") or {}).keys()),
+        }
+
+    def _ingest_image_file(self, conn: sqlite3.Connection, path: Path, source_type: str, source_ref: Optional[str]) -> Dict:
+        sha256 = self._compute_sha256(path)
+        now = self._now()
+
+        existing = conn.execute(
+            """
+            SELECT uid, primary_path, source_type, phash, resolution, duration,
+                   mood, scene_description, objects_json, quality_score,
+                   analysis_json, semantic_json, semantic_text, keywords_json, semantic_version
+            FROM assets
+            WHERE sha256 = ?
+            """,
+            (sha256,),
+        ).fetchone()
+
+        uid = existing["uid"] if existing else sha256
+        prev_path = existing["primary_path"] if existing else None
+        prev_source = existing["source_type"] if existing else None
+        primary_path = self._choose_primary_path(prev_path, prev_source, str(path), source_type)
+
+        if existing:
+            asset_source = prev_source if (prev_source == "local" and source_type != "local") else source_type
+            semantic_json = self._safe_json_loads(existing["semantic_json"], {})
+            search_keywords = self._safe_json_loads(existing["keywords_json"], [])
+            semantic_text = existing["semantic_text"] or ""
+            semantic_version = existing["semantic_version"]
+            analysis_from_db = self._safe_json_loads(existing["analysis_json"], {})
+            fallback_objects = self._safe_json_loads(existing["objects_json"], [])
+            refreshed_bundle = None
+
+            needs_semantic_upgrade = (
+                semantic_version != SEMANTIC_SCHEMA_VERSION
+                or not isinstance(semantic_json, dict)
+                or not semantic_json
+            )
+            needs_refresh_analysis = needs_semantic_upgrade
+
+            if needs_refresh_analysis and path.exists():
+                try:
+                    refreshed_bundle = self._analyze_image(path)
+                    semantic_json = refreshed_bundle["semantic_json"]
+                    semantic_text = refreshed_bundle["semantic_text"]
+                    search_keywords = refreshed_bundle["search_keywords"]
+                    semantic_version = refreshed_bundle["semantic_version"]
+                except Exception:
+                    refreshed_bundle = None
+
+            if refreshed_bundle is None and needs_semantic_upgrade:
+                semantic_bundle = self._semantic_from_saved_analysis(
+                    path=path,
+                    analysis=analysis_from_db,
+                    fallback_mood=existing["mood"] or "",
+                    fallback_scene=existing["scene_description"] or "",
+                    fallback_objects=fallback_objects if isinstance(fallback_objects, list) else [],
+                    quality_score=existing["quality_score"],
+                )
+                semantic_json = semantic_bundle["semantic"]
+                semantic_text = semantic_bundle["semantic_text"]
+                search_keywords = semantic_bundle["search_keywords"]
+                semantic_version = SEMANTIC_SCHEMA_VERSION
+
+            if refreshed_bundle is not None:
+                conn.execute(
+                    """
+                    UPDATE assets
+                    SET filename=?, primary_path=?, source_type=?,
+                        duration=?, size_bytes=?, resolution=?, width=?, height=?, fps=?, codec=?,
+                        quality_score=?, scene_description=?, mood=?, objects_json=?,
+                        analysis_json=?, semantic_json=?, semantic_text=?, keywords_json=?, semantic_version=?,
+                        updated_at=?
+                    WHERE uid=?
+                    """,
+                    (
+                        path.name,
+                        primary_path,
+                        asset_source,
+                        refreshed_bundle["duration"],
+                        refreshed_bundle["size_bytes"],
+                        refreshed_bundle["resolution"],
+                        refreshed_bundle["width"],
+                        refreshed_bundle["height"],
+                        refreshed_bundle["fps"],
+                        refreshed_bundle["codec"],
+                        refreshed_bundle["quality_score"],
+                        refreshed_bundle["scene_description"],
+                        refreshed_bundle["mood"],
+                        json.dumps(refreshed_bundle["objects"], ensure_ascii=False),
+                        json.dumps(refreshed_bundle["analysis"], ensure_ascii=False),
+                        json.dumps(semantic_json, ensure_ascii=False),
+                        semantic_text,
+                        json.dumps(search_keywords, ensure_ascii=False),
+                        semantic_version,
+                        now,
+                        uid,
+                    ),
+                )
+            else:
+                conn.execute(
+                    """
+                    UPDATE assets
+                    SET filename=?, primary_path=?, source_type=?,
+                        semantic_json=?, semantic_text=?, keywords_json=?, semantic_version=?,
+                        updated_at=?
+                    WHERE uid=?
+                    """,
+                    (
+                        path.name,
+                        primary_path,
+                        asset_source,
+                        json.dumps(semantic_json, ensure_ascii=False),
+                        semantic_text,
+                        json.dumps(search_keywords, ensure_ascii=False),
+                        semantic_version,
+                        now,
+                        uid,
+                    ),
+                )
+            self._upsert_location(conn, uid, str(path), source_type, source_ref)
+            self._upsert_embedding_for_asset(
+                conn=conn,
+                uid=uid,
+                filename=path.name,
+                semantic_text=semantic_text,
+                keywords_json=search_keywords,
+                semantic_json=semantic_json,
+            )
+            return {
+                "uid": uid,
+                "filename": path.name,
+                "path": str(path),
+                "sha256": sha256,
+                "phash": existing["phash"],
+                "dedup_hit": True,
+                "similar_uid": uid if existing["phash"] else None,
+                "phash_distance": 0 if existing["phash"] else None,
+                "resolution": refreshed_bundle["resolution"] if refreshed_bundle else existing["resolution"],
+                "duration": refreshed_bundle["duration"] if refreshed_bundle else existing["duration"],
+                "semantic_dimensions_count": len((semantic_json or {}).keys()) if isinstance(semantic_json, dict) else 0,
+                "semantic_refreshed": bool(refreshed_bundle is not None),
+            }
+
+        analysis_bundle = self._analyze_image(path)
+        phash = self._compute_image_phash(path)
+        similar_uid, similar_distance = self._find_similar_by_phash(conn, phash)
+
+        created_at = now
+
+        conn.execute(
+            """
+            INSERT INTO assets (
+                uid, sha256, phash, filename, primary_path, source_type,
+                duration, size_bytes, resolution, width, height, fps, codec,
+                quality_score, scene_description, mood, objects_json,
+                analysis_json, semantic_json, semantic_text, keywords_json, semantic_version,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(uid) DO UPDATE SET
+                sha256=excluded.sha256,
+                phash=COALESCE(excluded.phash, assets.phash),
+                filename=excluded.filename,
+                primary_path=excluded.primary_path,
+                source_type=excluded.source_type,
+                duration=excluded.duration,
+                size_bytes=excluded.size_bytes,
+                resolution=excluded.resolution,
+                width=excluded.width,
+                height=excluded.height,
+                fps=excluded.fps,
+                codec=excluded.codec,
+                quality_score=excluded.quality_score,
+                scene_description=excluded.scene_description,
+                mood=excluded.mood,
+                objects_json=excluded.objects_json,
+                analysis_json=excluded.analysis_json,
+                semantic_json=excluded.semantic_json,
+                semantic_text=excluded.semantic_text,
+                keywords_json=excluded.keywords_json,
+                semantic_version=excluded.semantic_version,
+                updated_at=excluded.updated_at
+            """,
+            (
+                uid,
+                sha256,
+                phash,
+                path.name,
+                primary_path,
+                source_type,
+                analysis_bundle["duration"],
+                analysis_bundle["size_bytes"],
+                analysis_bundle["resolution"],
+                analysis_bundle["width"],
+                analysis_bundle["height"],
+                analysis_bundle["fps"],
+                analysis_bundle["codec"],
+                analysis_bundle["quality_score"],
+                analysis_bundle["scene_description"],
+                analysis_bundle["mood"],
+                json.dumps(analysis_bundle["objects"], ensure_ascii=False),
+                json.dumps(analysis_bundle["analysis"], ensure_ascii=False),
+                json.dumps(analysis_bundle["semantic_json"], ensure_ascii=False),
+                analysis_bundle["semantic_text"],
+                json.dumps(analysis_bundle["search_keywords"], ensure_ascii=False),
+                analysis_bundle["semantic_version"],
+                created_at,
+                now,
+            ),
+        )
+
+        self._upsert_location(conn, uid, str(path), source_type, source_ref)
+        self._upsert_embedding_for_asset(
+            conn=conn,
+            uid=uid,
+            filename=path.name,
+            semantic_text=analysis_bundle["semantic_text"],
+            keywords_json=analysis_bundle["search_keywords"],
+            semantic_json=analysis_bundle["semantic_json"],
+        )
 
         return {
             "uid": uid,
@@ -3137,11 +4077,98 @@ class GlobalMediaLibrary:
                     result.setdefault("errors", []).append(f"{p.name}: {exc}")
                 finally:
                     done += 1
+                    # 短事务提交，避免一次大批量入库长时间持有写锁。
+                    try:
+                        conn.commit()
+                    except Exception:
+                        pass
                     if callable(progress_callback):
                         try:
                             progress_callback(done, total, str(p))
                         except Exception:
                             pass
+
+            # 持续更新：每轮入库后补齐一批历史缺失 embedding，避免一次性重算阻塞。
+            try:
+                result["embedding_refreshed"] = self._refresh_embeddings_incremental(
+                    conn,
+                    max_items=max(6, min(60, result["indexed"] // 2 + 6)),
+                )
+            except Exception:
+                result["embedding_refreshed"] = 0
+            try:
+                conn.commit()
+            except Exception:
+                pass
+
+        return result
+
+    def _ingest_image_paths(
+        self,
+        images: Iterable[Path],
+        source_type: str,
+        source_ref: Optional[str],
+        source_display: Optional[str] = None,
+        progress_callback=None,
+        should_cancel=None,
+    ) -> Dict:
+        image_list = [Path(p).resolve() for p in images]
+        result = {
+            "source_type": source_type,
+            "source": source_display or source_ref or "",
+            "scanned": len(image_list),
+            "indexed": 0,
+            "dedup_hits": 0,
+            "failed": 0,
+            "assets": [],
+        }
+        total = len(image_list)
+        done = 0
+
+        with self._connect() as conn:
+            for p in image_list:
+                if callable(should_cancel):
+                    try:
+                        if bool(should_cancel()):
+                            result["cancelled"] = True
+                            result["cancelled_after"] = done
+                            break
+                    except Exception:
+                        result["cancelled"] = True
+                        result["cancelled_after"] = done
+                        break
+                try:
+                    item = self._ingest_image_file(conn, p, source_type, source_ref)
+                    result["indexed"] += 1
+                    if item["dedup_hit"]:
+                        result["dedup_hits"] += 1
+                    result["assets"].append(item)
+                except Exception as exc:
+                    result["failed"] += 1
+                    result.setdefault("errors", []).append(f"{p.name}: {exc}")
+                finally:
+                    done += 1
+                    try:
+                        conn.commit()
+                    except Exception:
+                        pass
+                    if callable(progress_callback):
+                        try:
+                            progress_callback(done, total, str(p))
+                        except Exception:
+                            pass
+
+            try:
+                result["embedding_refreshed"] = self._refresh_embeddings_incremental(
+                    conn,
+                    max_items=max(6, min(60, result["indexed"] // 2 + 6)),
+                )
+            except Exception:
+                result["embedding_refreshed"] = 0
+            try:
+                conn.commit()
+            except Exception:
+                pass
 
         return result
 
@@ -3174,6 +4201,35 @@ class GlobalMediaLibrary:
         )
         result["total_candidates"] = total_candidates
         result["max_videos"] = max_videos
+        result["truncated"] = total_candidates > len(selected)
+        return result
+
+    def ingest_local_images(self, source_path: str, max_images: int = 1200, progress_callback=None, should_cancel=None) -> Dict:
+        root = Path(source_path).expanduser().resolve()
+        if not root.exists():
+            raise FileNotFoundError(f"路径不存在: {root}")
+
+        images = self._discover_images(root)
+        total_candidates = len(images)
+        try:
+            max_images = int(max_images)
+        except Exception:
+            max_images = 1200
+        if max_images <= 0:
+            max_images = 1200
+        max_images = min(max_images, 8000)
+
+        selected = images[:max_images]
+        result = self._ingest_image_paths(
+            selected,
+            source_type="local",
+            source_ref=str(root),
+            source_display=str(root),
+            progress_callback=progress_callback,
+            should_cancel=should_cancel,
+        )
+        result["total_candidates"] = total_candidates
+        result["max_images"] = max_images
         result["truncated"] = total_candidates > len(selected)
         return result
 
@@ -3349,6 +4405,102 @@ class GlobalMediaLibrary:
             "cancelled": cancelled,
         }
 
+    def _scan_gdrive_images_priority(
+        self,
+        url: str,
+        target_dir: Path,
+        max_images: int,
+        priority_keywords: List[str],
+        max_scan_folders: int,
+        should_cancel=None,
+    ) -> Dict:
+        folder_id = self._extract_drive_folder_id(url)
+        if not folder_id:
+            raise RuntimeError("无法从链接解析 Google Drive 文件夹 ID")
+
+        gdown_folder_mod, folder_type, sess = self._create_gdrive_folder_session()
+
+        preferred = deque([(folder_id, [])])
+        normal = deque()
+        visited = set()
+        candidates = []
+        listed_files = 0
+        scanned_folders = 0
+        folder_budget_hit = False
+        cancelled = False
+
+        try:
+            while (preferred or normal) and len(candidates) < max_images:
+                if callable(should_cancel):
+                    try:
+                        if bool(should_cancel()):
+                            cancelled = True
+                            break
+                    except Exception:
+                        cancelled = True
+                        break
+                if scanned_folders >= max_scan_folders:
+                    folder_budget_hit = True
+                    break
+
+                queue = preferred if preferred else normal
+                current_id, parent_parts = queue.popleft()
+                if current_id in visited:
+                    continue
+                visited.add(current_id)
+
+                folder_name, children = self._fetch_gdrive_children(gdown_folder_mod, sess, current_id)
+                scanned_folders += 1
+                current_parts = parent_parts if parent_parts else [folder_name]
+
+                for child_id, child_name, child_type in children:
+                    rel_parts = current_parts + [child_name]
+                    rel_path = "/".join(rel_parts)
+
+                    if child_type == folder_type:
+                        entry = (child_id, rel_parts)
+                        if self._path_priority_score(rel_path, priority_keywords) > 0:
+                            preferred.append(entry)
+                        else:
+                            normal.append(entry)
+                        continue
+
+                    listed_files += 1
+                    if not self._is_image_file(Path(child_name)):
+                        continue
+
+                    candidates.append(
+                        {
+                            "id": child_id,
+                            "path": rel_path,
+                            "local_path": str(target_dir / Path(*rel_parts)),
+                            "priority_score": self._path_priority_score(rel_path, priority_keywords),
+                        }
+                    )
+                    if len(candidates) >= max_images:
+                        break
+        finally:
+            try:
+                sess.close()
+            except Exception:
+                pass
+
+        candidates.sort(
+            key=lambda x: (x.get("priority_score", 0), x.get("path", "")),
+            reverse=True,
+        )
+        is_partial = folder_budget_hit or bool(preferred or normal) or (len(candidates) >= max_images)
+        return {
+            "items": candidates[:max_images],
+            "listed_files": listed_files,
+            "image_candidates": len(candidates),
+            "scanned_folders": scanned_folders,
+            "folder_budget_hit": folder_budget_hit,
+            "scan_partial": is_partial or cancelled,
+            "priority_keywords": priority_keywords,
+            "cancelled": cancelled,
+        }
+
     def preview_google_drive(
         self,
         url: str,
@@ -3467,6 +4619,126 @@ class GlobalMediaLibrary:
             "scan_partial": folder_budget_hit or bool(preferred or normal),
             "folder_stats": folders[:max_results],
             "sample_videos": sample_videos,
+        }
+
+    def preview_google_drive_images(
+        self,
+        url: str,
+        priority_subdirs=None,
+        max_scan_folders: int = 120,
+        max_results: int = 30,
+    ) -> Dict:
+        if gdown is None:
+            raise RuntimeError("未安装 gdown，无法处理 Google Drive 链接")
+        if not self._is_drive_folder_url(url):
+            raise RuntimeError("仅支持 Google Drive 文件夹链接预览")
+
+        try:
+            max_scan_folders = int(max_scan_folders)
+        except Exception:
+            max_scan_folders = 120
+        if max_scan_folders <= 0:
+            max_scan_folders = 120
+        max_scan_folders = min(max_scan_folders, 2000)
+
+        try:
+            max_results = int(max_results)
+        except Exception:
+            max_results = 30
+        if max_results <= 0:
+            max_results = 30
+        max_results = min(max_results, 200)
+
+        priority_keywords = self._normalize_priority_keywords(priority_subdirs)
+        folder_id = self._extract_drive_folder_id(url)
+        if not folder_id:
+            raise RuntimeError("无法从链接解析 Google Drive 文件夹 ID")
+
+        gdown_folder_mod, folder_type, sess = self._create_gdrive_folder_session()
+        preferred = deque([(folder_id, [])])
+        normal = deque()
+        visited = set()
+        folder_stats = {}
+        sample_images = []
+        listed_files = 0
+        image_files = 0
+        scanned_folders = 0
+        folder_budget_hit = False
+
+        try:
+            while preferred or normal:
+                if scanned_folders >= max_scan_folders:
+                    folder_budget_hit = True
+                    break
+
+                queue = preferred if preferred else normal
+                current_id, parent_parts = queue.popleft()
+                if current_id in visited:
+                    continue
+                visited.add(current_id)
+
+                folder_name, children = self._fetch_gdrive_children(gdown_folder_mod, sess, current_id)
+                scanned_folders += 1
+                current_parts = parent_parts if parent_parts else [folder_name]
+                folder_path = "/".join(current_parts)
+                stat = folder_stats.setdefault(
+                    folder_path,
+                    {"path": folder_path, "total_files": 0, "image_files": 0, "priority_hits": 0},
+                )
+
+                for child_id, child_name, child_type in children:
+                    rel_parts = current_parts + [child_name]
+                    rel_path = "/".join(rel_parts)
+
+                    if child_type == folder_type:
+                        entry = (child_id, rel_parts)
+                        if self._path_priority_score(rel_path, priority_keywords) > 0:
+                            preferred.append(entry)
+                        else:
+                            normal.append(entry)
+                        continue
+
+                    listed_files += 1
+                    stat["total_files"] += 1
+                    if not self._is_image_file(Path(child_name)):
+                        continue
+
+                    image_files += 1
+                    score = self._path_priority_score(rel_path, priority_keywords)
+                    stat["image_files"] += 1
+                    stat["priority_hits"] += score
+                    if len(sample_images) < max_results:
+                        sample_images.append(
+                            {
+                                "path": rel_path,
+                                "priority_score": score,
+                            }
+                        )
+        finally:
+            try:
+                sess.close()
+            except Exception:
+                pass
+
+        folders = [x for x in folder_stats.values() if x["total_files"] > 0]
+        folders.sort(
+            key=lambda x: (x["image_files"], x["priority_hits"], x["total_files"], x["path"]),
+            reverse=True,
+        )
+
+        sample_images.sort(key=lambda x: (x["priority_score"], x["path"]), reverse=True)
+        sample_images = sample_images[:max_results]
+
+        return {
+            "url": url,
+            "priority_subdirs": priority_keywords,
+            "max_scan_folders": max_scan_folders,
+            "scanned_folders": scanned_folders,
+            "listed_files": listed_files,
+            "image_files": image_files,
+            "scan_partial": folder_budget_hit or bool(preferred or normal),
+            "folder_stats": folders[:max_results],
+            "sample_images": sample_images,
         }
 
     def ingest_google_drive(
@@ -3740,6 +5012,276 @@ class GlobalMediaLibrary:
 
         return ingest_result
 
+    def ingest_google_drive_images(
+        self,
+        url: str,
+        refresh: bool = False,
+        max_images: int = 200,
+        priority_subdirs=None,
+        max_scan_folders: int = 120,
+        progress_callback=None,
+        should_cancel=None,
+    ) -> Dict:
+        if gdown is None:
+            raise RuntimeError("未安装 gdown，无法处理 Google Drive 链接")
+
+        try:
+            max_images = int(max_images)
+        except Exception:
+            max_images = 200
+        if max_images <= 0:
+            max_images = 200
+        max_images = min(max_images, 2000)
+        try:
+            max_scan_folders = int(max_scan_folders)
+        except Exception:
+            max_scan_folders = 120
+        if max_scan_folders <= 0:
+            max_scan_folders = 120
+        max_scan_folders = min(max_scan_folders, 2000)
+        priority_keywords = self._normalize_priority_keywords(priority_subdirs)
+
+        safe_key = hashlib.sha1(f"{url}|images".encode("utf-8")).hexdigest()[:16]
+        target_dir = self.cache_dir / safe_key
+
+        if refresh and target_dir.exists():
+            shutil.rmtree(target_dir)
+
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        if not refresh:
+            cached_images = self._discover_images(target_dir)
+            if cached_images:
+                image_candidates = len(cached_images)
+                if priority_keywords:
+                    cached_images.sort(
+                        key=lambda p: self._path_priority_score(
+                            str(p.relative_to(target_dir)) if p.is_relative_to(target_dir) else str(p),
+                            priority_keywords,
+                        ),
+                        reverse=True,
+                    )
+                selected_cached = cached_images[:max_images]
+                ingest_result = self._ingest_image_paths(
+                    selected_cached,
+                    source_type="gdrive",
+                    source_ref=url,
+                    source_display=url,
+                    progress_callback=progress_callback,
+                    should_cancel=should_cancel,
+                )
+                ingest_result["listed_files"] = 0
+                ingest_result["image_candidates"] = image_candidates
+                ingest_result["downloaded_images"] = len(selected_cached)
+                ingest_result["truncated"] = image_candidates > max_images
+                ingest_result["max_images"] = max_images
+                ingest_result["download_failed"] = 0
+                ingest_result["skipped_non_image"] = 0
+                ingest_result["cache_dir"] = str(target_dir)
+                ingest_result["used_cache_only"] = True
+                ingest_result["scan_mode"] = "cache_only"
+                ingest_result["scanned_folders"] = 0
+                ingest_result["priority_subdirs"] = priority_keywords
+                ingest_result["max_scan_folders"] = max_scan_folders
+                return ingest_result
+
+        listed_files = 0
+        image_candidates = 0
+        downloaded_images = 0
+        truncated = False
+        download_failed = 0
+        downloaded_paths: List[Path] = []
+
+        if self._is_drive_folder_url(url):
+            scan_mode = "priority_fast_scan"
+            priority_scan_error = None
+            scanned_folders = 0
+            try:
+                scan_result = self._scan_gdrive_images_priority(
+                    url=url,
+                    target_dir=target_dir,
+                    max_images=max_images,
+                    priority_keywords=priority_keywords,
+                    max_scan_folders=max_scan_folders,
+                    should_cancel=should_cancel,
+                )
+            except Exception as exc:
+                scan_result = None
+                priority_scan_error = str(exc)
+
+            if scan_result and scan_result.get("items"):
+                selected = scan_result["items"]
+                listed_files = int(scan_result.get("listed_files", 0))
+                image_candidates = int(scan_result.get("image_candidates", len(selected)))
+                scanned_folders = int(scan_result.get("scanned_folders", 0))
+                truncated = bool(scan_result.get("scan_partial", False))
+            else:
+                scan_mode = "full_recursive_scan"
+                try:
+                    listing = self._run_with_retry(
+                        lambda: gdown.download_folder(
+                            url=url,
+                            output=str(target_dir),
+                            quiet=True,
+                            remaining_ok=True,
+                            use_cookies=False,
+                            skip_download=True,
+                            resume=True,
+                        ),
+                        attempts=3,
+                    )
+                except Exception as exc:
+                    if priority_scan_error:
+                        raise RuntimeError(
+                            f"优先扫描失败: {priority_scan_error}; 完整扫描也失败: {exc}"
+                        ) from exc
+                    raise RuntimeError(f"Google Drive 文件夹扫描失败（已重试 3 次）: {exc}") from exc
+                if listing is None:
+                    raise RuntimeError("Google Drive 文件夹扫描失败")
+
+                listed_files = len(listing)
+                selected = []
+                for item in listing:
+                    file_id = getattr(item, "id", None)
+                    rel_path = str(getattr(item, "path", "") or "")
+                    local_path = str(getattr(item, "local_path", "") or "")
+                    if not file_id:
+                        continue
+                    suffix_source = rel_path or local_path
+                    if not suffix_source or not self._is_image_file(Path(suffix_source)):
+                        continue
+                    selected.append(
+                        {
+                            "id": file_id,
+                            "path": rel_path,
+                            "local_path": local_path,
+                            "priority_score": self._path_priority_score(rel_path, priority_keywords),
+                        }
+                    )
+                image_candidates = len(selected)
+                if image_candidates > max_images:
+                    truncated = True
+                selected = selected[:max_images]
+
+            for item in selected:
+                if callable(should_cancel):
+                    try:
+                        if bool(should_cancel()):
+                            truncated = True
+                            break
+                    except Exception:
+                        truncated = True
+                        break
+                item_id = item["id"] if isinstance(item, dict) else getattr(item, "id", None)
+                item_local_path = (
+                    item["local_path"] if isinstance(item, dict) else str(getattr(item, "local_path", ""))
+                )
+                if not item_id or not item_local_path:
+                    download_failed += 1
+                    continue
+                out_path = Path(str(item_local_path))
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    downloaded = self._run_with_retry(
+                        lambda: gdown.download(
+                            url=f"https://drive.google.com/uc?id={item_id}",
+                            output=str(out_path),
+                            quiet=True,
+                            use_cookies=False,
+                            resume=True,
+                        ),
+                        attempts=3,
+                    )
+                except Exception:
+                    download_failed += 1
+                    continue
+                final_path = Path(downloaded) if downloaded else out_path
+                if final_path.exists():
+                    downloaded_paths.append(final_path.resolve())
+                else:
+                    download_failed += 1
+        else:
+            scan_mode = "single_file"
+            scanned_folders = 0
+            priority_scan_error = None
+            try:
+                file_out = self._run_with_retry(
+                    lambda: gdown.download(
+                        url=url,
+                        output=str(target_dir),
+                        quiet=True,
+                        fuzzy=True,
+                        use_cookies=False,
+                        resume=True,
+                    ),
+                    attempts=3,
+                )
+            except Exception as exc:
+                raise RuntimeError(f"Google Drive 文件下载失败（已重试 3 次）: {exc}") from exc
+            if not file_out:
+                raise RuntimeError("Google Drive 文件下载失败")
+            downloaded_paths = [Path(file_out).resolve()]
+            listed_files = 1
+            image_candidates = 1
+
+        downloaded_images = len(downloaded_paths)
+        ingest_input = [p for p in downloaded_paths if self._is_image_file(p)]
+        ingest_result = self._ingest_image_paths(
+            ingest_input,
+            source_type="gdrive",
+            source_ref=url,
+            source_display=url,
+            progress_callback=progress_callback,
+            should_cancel=should_cancel,
+        )
+
+        ingest_result["listed_files"] = listed_files
+        ingest_result["image_candidates"] = image_candidates
+        ingest_result["downloaded_images"] = downloaded_images
+        ingest_result["truncated"] = truncated
+        ingest_result["max_images"] = max_images
+        ingest_result["download_failed"] = download_failed
+        skipped_non_image = max(downloaded_images - len(ingest_input), 0)
+        ingest_result["skipped_non_image"] = skipped_non_image
+        ingest_result["cache_dir"] = str(target_dir)
+        ingest_result["used_cache_only"] = False
+        ingest_result["scan_mode"] = scan_mode
+        ingest_result["scanned_folders"] = scanned_folders
+        ingest_result["priority_subdirs"] = priority_keywords
+        ingest_result["max_scan_folders"] = max_scan_folders
+        if priority_scan_error:
+            ingest_result["priority_scan_error"] = priority_scan_error
+        if callable(should_cancel):
+            try:
+                ingest_result["cancelled"] = bool(should_cancel()) or bool(ingest_result.get("cancelled"))
+            except Exception:
+                ingest_result["cancelled"] = bool(ingest_result.get("cancelled"))
+
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE asset_locations
+                SET source_type='gdrive', source_ref=?
+                WHERE path LIKE ?
+                """,
+                (url, f"{target_dir}%"),
+            )
+            conn.execute(
+                """
+                UPDATE assets
+                SET source_type=CASE
+                    WHEN source_type='local' THEN source_type
+                    ELSE 'gdrive'
+                END
+                WHERE uid IN (
+                    SELECT uid FROM asset_locations WHERE path LIKE ?
+                )
+                """,
+                (f"{target_dir}%",),
+            )
+
+        return ingest_result
+
     # ------------------------------------------------------------------
     # Query APIs
 
@@ -3852,15 +5394,20 @@ class GlobalMediaLibrary:
                     continue
 
                 resolved = str(cand.resolve())
-                self._upsert_location(conn, uid, resolved, "local", str(root))
-                conn.execute(
-                    """
-                    UPDATE assets
-                    SET primary_path=?, source_type='local', updated_at=?
-                    WHERE uid=?
-                    """,
-                    (resolved, self._now(), uid),
-                )
+                try:
+                    self._upsert_location(conn, uid, resolved, "local", str(root))
+                    conn.execute(
+                        """
+                        UPDATE assets
+                        SET primary_path=?, source_type='local', updated_at=?
+                        WHERE uid=?
+                        """,
+                        (resolved, self._now(), uid),
+                    )
+                except sqlite3.OperationalError as exc:
+                    if "database is locked" in str(exc).lower():
+                        return None
+                    raise
                 return resolved
         return None
 
@@ -3873,6 +5420,7 @@ class GlobalMediaLibrary:
         sha256: Optional[str] = None,
         size_bytes: Optional[int] = None,
         allow_relocate: bool = True,
+        update_availability: bool = True,
     ) -> Optional[str]:
         rows = conn.execute(
             """
@@ -3887,10 +5435,15 @@ class GlobalMediaLibrary:
         for row in rows:
             p = Path(row["path"])
             exists = p.exists()
-            conn.execute(
-                "UPDATE asset_locations SET is_available=?, last_seen_at=? WHERE path=?",
-                (1 if exists else 0, self._now(), row["path"]),
-            )
+            if update_availability:
+                try:
+                    conn.execute(
+                        "UPDATE asset_locations SET is_available=?, last_seen_at=? WHERE path=?",
+                        (1 if exists else 0, self._now(), row["path"]),
+                    )
+                except sqlite3.OperationalError as exc:
+                    if "database is locked" not in str(exc).lower():
+                        raise
             if exists:
                 return str(p)
 
@@ -3946,36 +5499,184 @@ class GlobalMediaLibrary:
                 score += 6
         return score
 
-    def count_matching_assets(self, query: str = "") -> int:
-        q = (query or "").strip().lower()
-        keywords = self._tokenize_query(q) if q else []
-        with self._connect() as conn:
-            if not keywords:
-                return int(conn.execute("SELECT COUNT(*) FROM assets").fetchone()[0])
-            rows = conn.execute(
-                """
-                SELECT filename, primary_path, scene_description, mood, resolution,
-                       objects_json, semantic_text, semantic_json, keywords_json
-                FROM assets
-                ORDER BY updated_at DESC
-                LIMIT 4000
-                """
-            ).fetchall()
-            matched = 0
-            for row in rows:
-                if self._score_asset(row, keywords) > 0:
-                    matched += 1
-            if matched == 0:
+    def _fetch_assets_by_uids(self, conn: sqlite3.Connection, uids: List[str]) -> List[sqlite3.Row]:
+        if not uids:
+            return []
+        ordered = [u for u in uids if u]
+        placeholders = ",".join("?" for _ in ordered)
+        return conn.execute(
+            f"""
+            SELECT uid, filename, sha256, size_bytes, primary_path, source_type, duration, resolution,
+                   quality_score, scene_description, mood, objects_json,
+                   semantic_json, semantic_text, keywords_json, updated_at
+            FROM assets
+            WHERE uid IN ({placeholders})
+            """,
+            tuple(ordered),
+        ).fetchall()
+
+    def _hybrid_rank_candidates(
+        self,
+        conn: sqlite3.Connection,
+        rows: List[sqlite3.Row],
+        query: str,
+        keywords: List[str],
+        retrieval_mode: str = "hybrid",
+        vector_scores: Optional[Dict[str, float]] = None,
+    ) -> List[Dict[str, Any]]:
+        if not rows:
+            return []
+        mode = str(retrieval_mode or "hybrid").strip().lower()
+        if mode not in {"hybrid", "keyword", "vector"}:
+            mode = "hybrid"
+
+        row_by_uid: Dict[str, sqlite3.Row] = {}
+        for row in rows:
+            uid = str(row["uid"])
+            if uid not in row_by_uid:
+                row_by_uid[uid] = row
+
+        lexical_scores: Dict[str, int] = {}
+        if mode in {"hybrid", "keyword"}:
+            for uid, row in row_by_uid.items():
+                score = self._score_asset(row, keywords) if keywords else 0
+                if score > 0:
+                    lexical_scores[uid] = score
+
+            if keywords and not lexical_scores:
                 relaxed_keywords = self._relaxed_query_tokens(keywords)
                 if relaxed_keywords and relaxed_keywords != keywords:
-                    for row in rows:
-                        if self._score_asset(row, relaxed_keywords) > 0:
-                            matched += 1
-            return matched
+                    for uid, row in row_by_uid.items():
+                        score = self._score_asset(row, relaxed_keywords)
+                        if score > 0:
+                            lexical_scores[uid] = score
 
-    def search_assets(self, query: str = "", limit: int = 100, offset: int = 0) -> List[Dict]:
+        if mode in {"hybrid", "vector"}:
+            if vector_scores is None:
+                vector_scores = self._vector_search(conn, query, top_k=1400)
+            else:
+                vector_scores = dict(vector_scores)
+        else:
+            vector_scores = {}
+
+        vector_rank = [
+            uid
+            for uid, score in sorted(vector_scores.items(), key=lambda kv: kv[1], reverse=True)
+            if uid in row_by_uid and float(score) >= 0.08
+        ]
+        lexical_rank = [
+            uid
+            for uid, _ in sorted(lexical_scores.items(), key=lambda kv: kv[1], reverse=True)
+            if uid in row_by_uid
+        ]
+
+        if not vector_rank and not lexical_rank:
+            return []
+
+        hybrid_scores: Dict[str, float] = {}
+        for i, uid in enumerate(lexical_rank, start=1):
+            hybrid_scores[uid] = hybrid_scores.get(uid, 0.0) + 1.0 / (VECTOR_RRF_K + i)
+        for i, uid in enumerate(vector_rank, start=1):
+            hybrid_scores[uid] = hybrid_scores.get(uid, 0.0) + 1.0 / (VECTOR_RRF_K + i)
+
+        max_lex = max(lexical_scores.values()) if lexical_scores else 0
+        for uid in list(hybrid_scores.keys()):
+            if mode in {"hybrid", "keyword"} and max_lex > 0 and uid in lexical_scores:
+                hybrid_scores[uid] += 0.30 * (float(lexical_scores[uid]) / float(max_lex))
+            if mode in {"hybrid", "vector"} and uid in vector_scores:
+                hybrid_scores[uid] += 0.70 * max(0.0, min(1.0, (float(vector_scores[uid]) + 1.0) / 2.0))
+
+        ranked_uids = sorted(
+            hybrid_scores.keys(),
+            key=lambda uid: (
+                hybrid_scores.get(uid, 0.0),
+                lexical_scores.get(uid, 0),
+                vector_scores.get(uid, -1.0),
+                str(row_by_uid[uid]["updated_at"] or ""),
+            ),
+            reverse=True,
+        )
+
+        ranked: List[Dict[str, Any]] = []
+        for uid in ranked_uids:
+            ranked.append(
+                {
+                    "row": row_by_uid[uid],
+                    "uid": uid,
+                    "match_score": float(hybrid_scores.get(uid, 0.0)),
+                    "keyword_score": int(lexical_scores.get(uid, 0)),
+                    "vector_score": float(vector_scores.get(uid, 0.0)),
+                }
+            )
+        return ranked
+
+    def count_matching_assets(self, query: str = "", retrieval_mode: str = "hybrid", media_type: str = "all") -> int:
         q = (query or "").strip().lower()
         keywords = self._tokenize_query(q) if q else []
+        mode = str(retrieval_mode or "hybrid").strip().lower()
+        if mode not in {"hybrid", "keyword", "vector"}:
+            mode = "hybrid"
+        media = self._normalize_media_type(media_type)
+        with self._connect() as conn:
+            if not q:
+                where_clause = self._media_type_where_sql(media, alias="")
+                sql = "SELECT COUNT(*) FROM assets"
+                if where_clause:
+                    sql += f" WHERE {where_clause}"
+                return int(conn.execute(sql).fetchone()[0])
+            where_clause = self._media_type_where_sql(media, alias="")
+            sql = """
+                SELECT uid, filename, sha256, size_bytes, primary_path, source_type, duration, resolution,
+                       quality_score, scene_description, mood, objects_json,
+                       semantic_json, semantic_text, keywords_json, updated_at
+                FROM assets
+            """
+            if where_clause:
+                sql += f" WHERE {where_clause}"
+            sql += """
+                ORDER BY updated_at DESC
+                LIMIT 4000
+            """
+            rows = conn.execute(
+                sql
+            ).fetchall()
+            vector_scores = self._vector_search(conn, q, top_k=1400) if (q and mode in {"hybrid", "vector"}) else {}
+            if vector_scores:
+                existing_uids = {str(r["uid"]) for r in rows}
+                missing = [uid for uid in vector_scores.keys() if uid not in existing_uids][:1200]
+                if missing:
+                    fetched = self._fetch_assets_by_uids(conn, missing)
+                    if media != "all":
+                        fetched = [
+                            r for r in fetched
+                            if self._infer_asset_kind(r["filename"], r["primary_path"]) == media
+                        ]
+                    rows = rows + fetched
+
+            ranked = self._hybrid_rank_candidates(
+                conn=conn,
+                rows=rows,
+                query=q,
+                keywords=keywords,
+                retrieval_mode=mode,
+                vector_scores=vector_scores,
+            )
+            return len(ranked)
+
+    def search_assets(
+        self,
+        query: str = "",
+        limit: int = 100,
+        offset: int = 0,
+        retrieval_mode: str = "hybrid",
+        media_type: str = "all",
+    ) -> List[Dict]:
+        q = (query or "").strip().lower()
+        keywords = self._tokenize_query(q) if q else []
+        mode = str(retrieval_mode or "hybrid").strip().lower()
+        if mode not in {"hybrid", "keyword", "vector"}:
+            mode = "hybrid"
+        media = self._normalize_media_type(media_type)
         try:
             limit = max(1, int(limit))
         except Exception:
@@ -3986,9 +5687,9 @@ class GlobalMediaLibrary:
             offset = 0
 
         with self._connect() as conn:
-            if not keywords:
-                rows = conn.execute(
-                    """
+            if not q:
+                where_clause = self._media_type_where_sql(media, alias="a")
+                sql = """
                     SELECT a.uid, a.filename, a.sha256, a.size_bytes, a.primary_path, a.source_type,
                            a.duration, a.resolution, a.quality_score, a.scene_description, a.mood,
                            a.objects_json, a.semantic_json, a.keywords_json, a.updated_at,
@@ -4007,9 +5708,15 @@ class GlobalMediaLibrary:
                                WHERE l2.uid = a.uid AND l2.is_available = 1
                            ) THEN 1 ELSE 0 END AS available_hint
                     FROM assets a
+                """
+                if where_clause:
+                    sql += f" WHERE {where_clause}"
+                sql += """
                     ORDER BY a.updated_at DESC
                     LIMIT ? OFFSET ?
-                    """,
+                """
+                rows = conn.execute(
+                    sql,
                     (limit, offset),
                 ).fetchall()
                 results = []
@@ -4026,6 +5733,7 @@ class GlobalMediaLibrary:
                             "uid": row["uid"],
                             "filename": row["filename"],
                             "path": row["best_path"],
+                            "asset_kind": self._infer_asset_kind(row["filename"], row["best_path"] or row["primary_path"]),
                             "available": bool(row["available_hint"]),
                             "source_type": row["source_type"],
                             "duration": row["duration"],
@@ -4040,86 +5748,84 @@ class GlobalMediaLibrary:
                             "semantic_dimension_names": list(semantic.keys()) if isinstance(semantic, dict) else [],
                             "updated_at": row["updated_at"],
                             "match_score": 1,
+                            "keyword_score": 0,
+                            "vector_score": 0.0,
                         }
                     )
                 return results
 
-            rows = conn.execute(
-                """
+            where_clause = self._media_type_where_sql(media, alias="")
+            sql = """
                 SELECT uid, filename, sha256, size_bytes, primary_path, source_type, duration, resolution,
                        quality_score, scene_description, mood, objects_json,
                        semantic_json, semantic_text, keywords_json, updated_at
                 FROM assets
+            """
+            if where_clause:
+                sql += f" WHERE {where_clause}"
+            sql += """
                 ORDER BY updated_at DESC
-                LIMIT 2000
-                """
+                LIMIT 3500
+            """
+            rows = conn.execute(
+                sql
             ).fetchall()
+            vector_scores = self._vector_search(conn, q, top_k=1400) if mode in {"hybrid", "vector"} else {}
+            if vector_scores:
+                existing_uids = {str(r["uid"]) for r in rows}
+                missing = [uid for uid in vector_scores.keys() if uid not in existing_uids][:1200]
+                if missing:
+                    fetched = self._fetch_assets_by_uids(conn, missing)
+                    if media != "all":
+                        fetched = [
+                            r for r in fetched
+                            if self._infer_asset_kind(r["filename"], r["primary_path"]) == media
+                        ]
+                    rows = rows + fetched
 
-            def _collect_candidates(kws: List[str]) -> List[Dict]:
-                out: List[Dict] = []
-                for row in rows:
-                    score = self._score_asset(row, kws) if kws else 1
-                    if kws and score <= 0:
-                        continue
-                    out.append({
-                        "uid": row["uid"],
-                        "filename": row["filename"],
-                        "sha256": row["sha256"],
-                        "size_bytes": row["size_bytes"],
-                        "primary_path": row["primary_path"],
-                        "source_type": row["source_type"],
-                        "duration": row["duration"],
-                        "resolution": row["resolution"],
-                        "quality_score": row["quality_score"],
-                        "scene_description": row["scene_description"],
-                        "mood": row["mood"],
-                        "objects_json": row["objects_json"],
-                        "semantic_json": row["semantic_json"],
-                        "keywords_json": row["keywords_json"],
-                        "updated_at": row["updated_at"],
-                        "match_score": score,
-                    })
-                return out
-
-            candidates = _collect_candidates(keywords)
-            if keywords and not candidates:
-                relaxed_keywords = self._relaxed_query_tokens(keywords)
-                if relaxed_keywords and relaxed_keywords != keywords:
-                    candidates = _collect_candidates(relaxed_keywords)
-
-            candidates.sort(key=lambda x: (x["match_score"], x["updated_at"]), reverse=True)
-            if not candidates:
+            ranked = self._hybrid_rank_candidates(
+                conn=conn,
+                rows=rows,
+                query=q,
+                keywords=keywords,
+                retrieval_mode=mode,
+                vector_scores=vector_scores,
+            )
+            if not ranked:
                 return []
 
-            paged = candidates[offset: offset + limit]
+            paged = ranked[offset: offset + limit]
             if not paged:
                 return []
             resolve_cap = len(paged)
             results = []
-            for row in paged[:resolve_cap]:
+            for cand in paged[:resolve_cap]:
+                row = cand["row"]
 
                 best_path = self._best_existing_path(
                     conn,
                     row["uid"],
-                    row.get("primary_path"),
+                    row["primary_path"],
                     filename=row["filename"],
                     sha256=row["sha256"],
                     size_bytes=row["size_bytes"],
                     allow_relocate=False,
+                    update_availability=False,
                 )
                 objects = []
                 try:
-                    objects = json.loads(row.get("objects_json") or "[]")
+                    objects = json.loads(row["objects_json"] or "[]")
                 except Exception:
                     objects = []
-                semantic = self._safe_json_loads(row.get("semantic_json"), {})
-                semantic_keywords = self._safe_json_loads(row.get("keywords_json"), [])
+                semantic = self._safe_json_loads(row["semantic_json"], {})
+                semantic_keywords = self._safe_json_loads(row["keywords_json"], [])
 
                 results.append(
                     {
                         "uid": row["uid"],
                         "filename": row["filename"],
                         "path": best_path,
+                        "asset_kind": self._infer_asset_kind(row["filename"], best_path or row["primary_path"]),
                         "available": bool(best_path and Path(best_path).exists()),
                         "source_type": row["source_type"],
                         "duration": row["duration"],
@@ -4133,11 +5839,21 @@ class GlobalMediaLibrary:
                         "semantic_dimensions_count": len(semantic.keys()) if isinstance(semantic, dict) else 0,
                         "semantic_dimension_names": list(semantic.keys()) if isinstance(semantic, dict) else [],
                         "updated_at": row["updated_at"],
-                        "match_score": row["match_score"],
+                        "match_score": cand["match_score"],
+                        "keyword_score": cand["keyword_score"],
+                        "vector_score": cand["vector_score"],
                     }
                 )
 
-            results.sort(key=lambda x: (x["match_score"], x["updated_at"]), reverse=True)
+            results.sort(
+                key=lambda x: (
+                    float(x.get("match_score", 0.0)),
+                    float(x.get("keyword_score", 0)),
+                    float(x.get("vector_score", 0.0)),
+                    str(x.get("updated_at", "")),
+                ),
+                reverse=True,
+            )
             return results[:limit]
 
     def get_assets(self, uids: List[str]) -> List[Dict]:
@@ -4178,6 +5894,7 @@ class GlobalMediaLibrary:
                     "uid": row["uid"],
                     "filename": row["filename"],
                     "path": best_path,
+                    "asset_kind": self._infer_asset_kind(row["filename"], best_path or row["primary_path"]),
                     "available": bool(best_path and Path(best_path).exists()),
                     "source_type": row["source_type"],
                     "duration": row["duration"],
@@ -4219,6 +5936,8 @@ class GlobalMediaLibrary:
                 )
                 if not path:
                     continue
+                if self._infer_asset_kind(row["filename"], path) != "video":
+                    continue
 
                 analysis = {}
                 try:
@@ -4234,6 +5953,7 @@ class GlobalMediaLibrary:
                 materials[row["uid"]] = {
                     "filename": row["filename"],
                     "path": path,
+                    "asset_kind": self._infer_asset_kind(row["filename"], path),
                     "hash": row["uid"],
                     "analysis": analysis,
                     "semantic": semantic if isinstance(semantic, dict) else {},
@@ -4244,8 +5964,15 @@ class GlobalMediaLibrary:
         return materials
 
     def stats(self) -> Dict:
+        runtime = self._embedding_runtime_status()
         with self._connect() as conn:
             total_assets = conn.execute("SELECT COUNT(*) FROM assets").fetchone()[0]
+            video_assets = conn.execute(
+                "SELECT COUNT(*) FROM assets WHERE lower(filename) GLOB '*.mp4' OR lower(filename) GLOB '*.mov' OR lower(filename) GLOB '*.avi' OR lower(filename) GLOB '*.mkv' OR lower(filename) GLOB '*.m4v' OR lower(filename) GLOB '*.hevc' OR lower(filename) GLOB '*.flv' OR lower(filename) GLOB '*.wmv'"
+            ).fetchone()[0]
+            image_assets = conn.execute(
+                "SELECT COUNT(*) FROM assets WHERE lower(filename) GLOB '*.jpg' OR lower(filename) GLOB '*.jpeg' OR lower(filename) GLOB '*.png' OR lower(filename) GLOB '*.webp' OR lower(filename) GLOB '*.bmp' OR lower(filename) GLOB '*.tif' OR lower(filename) GLOB '*.tiff' OR lower(filename) GLOB '*.heic'"
+            ).fetchone()[0]
             total_locations = conn.execute("SELECT COUNT(*) FROM asset_locations").fetchone()[0]
             local_assets = conn.execute("SELECT COUNT(*) FROM assets WHERE source_type='local'").fetchone()[0]
             gdrive_assets = conn.execute("SELECT COUNT(*) FROM assets WHERE source_type='gdrive'").fetchone()[0]
@@ -4277,11 +6004,21 @@ class GlobalMediaLibrary:
                 WHERE is_available=1
                 """
             ).fetchone()[0]
+            embedding_ready_assets = conn.execute(
+                """
+                SELECT COUNT(*)
+                FROM asset_embeddings
+                WHERE embedding_version = ?
+                """,
+                (EMBEDDING_SCHEMA_VERSION,),
+            ).fetchone()[0]
 
         return {
             "db_path": str(self.db_path),
             "cache_dir": str(self.cache_dir),
             "total_assets": total_assets,
+            "video_assets": video_assets,
+            "image_assets": image_assets,
             "total_locations": total_locations,
             "available_assets": available_assets,
             "local_assets": local_assets,
@@ -4290,4 +6027,12 @@ class GlobalMediaLibrary:
             "semantic_dimensions_supported": len(SEMANTIC_DIMENSIONS),
             "semantic_ready_assets": semantic_ready_assets,
             "semantic_pending_assets": semantic_pending_assets,
+            "embedding_enabled": bool(runtime.get("enabled", False)),
+            "embedding_status": runtime.get("reason", ""),
+            "embedding_status_message": runtime.get("message", ""),
+            "embedding_model": self._embedding_model(),
+            "embedding_version": EMBEDDING_SCHEMA_VERSION,
+            "embedding_ready_assets": embedding_ready_assets,
+            "embedding_pending_assets": max(0, int(total_assets) - int(embedding_ready_assets)),
+            "hybrid_search_enabled": True,
         }

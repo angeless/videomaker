@@ -850,3 +850,90 @@ input[type=number].input::-webkit-outer-spin-button {
   transform: translateX(16px);
   background: var(--accent);
 }
+
+/* ── 工作流画布 ──────────────────────────────────────────────────── */
+
+.workflow-canvas-wrap {
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.01);
+  overflow-x: auto;
+}
+
+.workflow-canvas {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 100%;
+}
+
+.workflow-canvas-node {
+  min-width: 220px;
+  max-width: 260px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  cursor: grab;
+  transition: all 0.15s ease;
+}
+
+.workflow-canvas-node:hover {
+  border-color: var(--accent);
+}
+
+.workflow-canvas-node.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(90, 141, 238, 0.35) inset;
+}
+
+.workflow-canvas-node.dragging {
+  opacity: 0.55;
+}
+
+.workflow-canvas-node.drop-target {
+  border-color: var(--warn);
+  box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.35) inset;
+}
+
+.workflow-canvas-node.disabled {
+  opacity: 0.45;
+}
+
+.workflow-canvas-step {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.workflow-canvas-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.workflow-canvas-meta {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.workflow-canvas-arrow {
+  font-size: 18px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.workflow-canvas-end-drop {
+  min-width: 120px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 10px 8px;
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+}
