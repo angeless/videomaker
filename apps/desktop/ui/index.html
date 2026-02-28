@@ -4,11 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>视频制作助手</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=20260228r2" />
   <!-- Alpine.js -->
   <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <!-- Alpine 数据组件 -->
-  <script src="app.js"></script>
+  <script src="app.js?v=20260228r2"></script>
 </head>
 <body>
 
@@ -545,7 +545,7 @@
   <div class="main" x-show="topModule==='production'">
 
     <!-- ── 左侧导航 ──────────────────────────────────────────── -->
-    <nav class="sidebar">
+    <nav class="sidebar" x-show="productionView==='workflow'">
       <div class="sidebar-section">
         <div class="sidebar-label">工作流</div>
         <template x-for="n in [1,2,3,4,5,6,7]" :key="n">
@@ -574,8 +574,28 @@
     <!-- ── 内容区 ─────────────────────────────────────────────── -->
     <div class="content">
 
+      <div class="card" style="margin-bottom:4px">
+        <div style="display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap">
+          <div style="font-size:13px;color:var(--muted)">生产模式入口</div>
+          <div class="view-switch">
+            <button class="btn"
+                    :class="productionView==='hub' ? 'btn-primary' : 'btn-ghost'"
+                    style="font-size:12px;padding:5px 10px"
+                    @click="switchProductionView('hub')">
+              模块中心
+            </button>
+            <button class="btn"
+                    :class="productionView==='workflow' ? 'btn-primary' : 'btn-ghost'"
+                    style="font-size:12px;padding:5px 10px"
+                    @click="switchProductionView('workflow')">
+              7步流程
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- ── Capability 工作台（独立功能模块）──────────────────── -->
-      <div x-show="projectDir" class="card fade-in" style="margin-bottom:4px">
+      <div class="card fade-in" style="margin-bottom:4px" x-show="productionView==='hub'">
         <div class="card-title">
           <span>🧩</span>
           <span>能力工作台（模块化功能）</span>
@@ -585,53 +605,31 @@
           </button>
         </div>
         <div x-show="capabilityMessage" class="badge badge-info" style="margin-bottom:10px" x-text="capabilityMessage"></div>
+        <div x-show="!projectDir" class="badge badge-warn" style="margin-bottom:10px">
+          当前未打开项目：可直接使用 inline/hybrid 能力（如字幕校准、图片语义、公众号扩写、发布文案、内容发布 dry-run）。
+        </div>
 
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-          <button class="btn" :class="capabilityTab==='topic_library' ? 'btn-primary' : 'btn-ghost'"
-                  style="font-size:12px;padding:5px 10px"
-                  @click="capabilityTab='topic_library'">选题库</button>
-          <button class="btn" :class="capabilityTab==='topic_copy' ? 'btn-primary' : 'btn-ghost'"
-                  style="font-size:12px;padding:5px 10px"
-                  @click="capabilityTab='topic_copy'">选题+文案</button>
-          <button class="btn" :class="capabilityTab==='text_rough' ? 'btn-primary' : 'btn-ghost'"
-                  style="font-size:12px;padding:5px 10px"
-                  @click="capabilityTab='text_rough'; loadTextRoughSource()">文字粗剪</button>
-          <button class="btn" :class="capabilityTab==='short_clip' ? 'btn-primary' : 'btn-ghost'"
-                  style="font-size:12px;padding:5px 10px"
-                  @click="capabilityTab='short_clip'">短视频快剪</button>
-          <button class="btn" :class="capabilityTab==='refinement' ? 'btn-primary' : 'btn-ghost'"
-                  style="font-size:12px;padding:5px 10px"
-                  @click="capabilityTab='refinement'">视频精剪</button>
-          <button class="btn" :class="capabilityTab==='social_export' ? 'btn-primary' : 'btn-ghost'"
-                  style="font-size:12px;padding:5px 10px"
-                  @click="capabilityTab='social_export'">社媒导出</button>
-          <button class="btn" :class="capabilityTab==='audio_voice' ? 'btn-primary' : 'btn-ghost'"
-                  style="font-size:12px;padding:5px 10px"
-                  @click="capabilityTab='audio_voice'">配乐配音</button>
-          <button class="btn" :class="capabilityTab==='subtitle_calibration' ? 'btn-primary' : 'btn-ghost'"
-                  style="font-size:12px;padding:5px 10px"
-                  @click="capabilityTab='subtitle_calibration'">字幕校准</button>
-          <button class="btn" :class="capabilityTab==='image_semantic' ? 'btn-primary' : 'btn-ghost'"
-                  style="font-size:12px;padding:5px 10px"
-                  @click="capabilityTab='image_semantic'">图片语义</button>
-          <button class="btn" :class="capabilityTab==='article_expand' ? 'btn-primary' : 'btn-ghost'"
-                  style="font-size:12px;padding:5px 10px"
-                  @click="capabilityTab='article_expand'">公众号扩写</button>
-          <button class="btn" :class="capabilityTab==='content_publish' ? 'btn-primary' : 'btn-ghost'"
-                  style="font-size:12px;padding:5px 10px"
-                  @click="capabilityTab='content_publish'; loadContentPublishPlatforms()">内容发布</button>
-          <button class="btn" :class="capabilityTab==='workflow_builder' ? 'btn-primary' : 'btn-ghost'"
-                  style="font-size:12px;padding:5px 10px"
-                  @click="capabilityTab='workflow_builder'; loadWorkflowCatalog(); loadWorkflowList(); loadWorkflowRuns()">自定义工作流</button>
-          <button class="btn" :class="capabilityTab==='idempotency_cache' ? 'btn-primary' : 'btn-ghost'"
-                  style="font-size:12px;padding:5px 10px"
-                  @click="capabilityTab='idempotency_cache'; loadIdempotencyCache(true)">幂等缓存</button>
-          <button class="btn" :class="capabilityTab==='agent_templates' ? 'btn-primary' : 'btn-ghost'"
-                  style="font-size:12px;padding:5px 10px"
-                  @click="capabilityTab='agent_templates'; loadAgentTemplates()">Agent模板</button>
-          <button class="btn" :class="capabilityTab==='agent_observability' ? 'btn-primary' : 'btn-ghost'"
-                  style="font-size:12px;padding:5px 10px"
-                  @click="capabilityTab='agent_observability'; loadAgentObservability()">Agent观测</button>
+        <div class="capability-groups">
+          <template x-for="group in capabilityGroups" :key="group.key">
+            <div class="capability-group">
+              <div class="capability-group-title" x-text="group.title"></div>
+              <div class="capability-cards">
+                <template x-for="item in group.items" :key="item.tab">
+                  <button class="capability-card"
+                          :class="capabilityTab===item.tab ? 'active' : ''"
+                          @click="openCapabilityTab(item.tab)">
+                    <div class="capability-card-main">
+                      <div class="capability-card-title" x-text="item.label"></div>
+                      <div class="capability-card-hint" x-text="item.hint"></div>
+                    </div>
+                    <span class="badge"
+                          :class="capabilityModeClass(item.mode)"
+                          x-text="capabilityModeText(item.mode)"></span>
+                  </button>
+                </template>
+              </div>
+            </div>
+          </template>
         </div>
 
         <div x-show="capabilityTab==='topic_library'" class="fade-in">
@@ -1467,6 +1465,81 @@
           <div class="card" style="margin-top:10px" x-show="articleExpandResult">
             <div class="card-title">公众号扩写结果</div>
             <textarea class="json-editor" style="min-height:200px" :value="jsonPretty(articleExpandResult)" readonly></textarea>
+          </div>
+        </div>
+
+        <div x-show="capabilityTab==='publish_prep'" class="fade-in">
+          <div class="form-grid">
+            <div class="form-field">
+              <div class="input-label">输入模式</div>
+              <select class="input" x-model="publishPrepInput.input_mode">
+                <option value="inline">inline</option>
+                <option value="project">project</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <div class="input-label">内容类型</div>
+              <select class="input" x-model="publishPrepInput.platform_content_type">
+                <option value="video_post">video_post</option>
+                <option value="article_post">article_post</option>
+              </select>
+            </div>
+            <div class="form-field full">
+              <div class="input-label">平台列表（逗号）</div>
+              <input class="input" x-model="publishPrepInput.platforms"
+                     placeholder="xiaohongshu,ixigua,douyin,wechat_channels,wechat_mp,youtube,instagram,twitter,threads,facebook,blog" />
+            </div>
+            <div class="form-field full">
+              <div class="input-label">脚本文本</div>
+              <textarea class="json-editor" style="min-height:100px" x-model="publishPrepInput.script_text"></textarea>
+            </div>
+            <div class="form-field full">
+              <div class="input-label">旁白文本</div>
+              <textarea class="json-editor" style="min-height:100px" x-model="publishPrepInput.voiceover_text"></textarea>
+            </div>
+            <div class="form-field full">
+              <div class="toggle-wrap">
+                <label class="toggle">
+                  <input type="checkbox" x-model="publishPrepInput.use_saved_profiles" />
+                  <span class="toggle-slider"></span>
+                </label>
+                <span style="font-size:13px">合并已保存平台 profile</span>
+              </div>
+            </div>
+            <div class="form-field full">
+              <div class="toggle-wrap">
+                <label class="toggle">
+                  <input type="checkbox" x-model="publishPrepInput.use_llm" />
+                  <span class="toggle-slider"></span>
+                </label>
+                <span style="font-size:13px">启用 LLM 文案增强（无 key 自动降级）</span>
+              </div>
+            </div>
+            <div class="form-field">
+              <div class="input-label">LLM Provider（可选）</div>
+              <input class="input" x-model="publishPrepInput.llm_provider" placeholder="openai / anthropic" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">LLM Model（可选）</div>
+              <input class="input" x-model="publishPrepInput.llm_model" placeholder="gpt-4o-mini" />
+            </div>
+            <div class="form-field full">
+              <div class="input-label">profile_overrides JSON（可选）</div>
+              <textarea class="json-editor" style="min-height:120px" x-model="publishPrepInput.profile_overrides_json"></textarea>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+            <button class="btn btn-ghost" @click="loadPublishPrepProfiles()">刷新 profiles</button>
+            <button class="btn btn-primary" @click="generatePublishPrep()">生成发布文案</button>
+            <button class="btn btn-ghost" @click="openCapabilityTab('content_publish')">写入发布模块继续执行</button>
+          </div>
+          <div class="card" style="margin-top:10px">
+            <div class="card-title">当前 profiles</div>
+            <textarea class="json-editor" style="min-height:120px" :value="jsonPretty(publishPrepProfiles)" readonly></textarea>
+          </div>
+          <div class="card" style="margin-top:10px" x-show="publishPrepResult">
+            <div class="card-title">发布文案结果</div>
+            <textarea class="json-editor" style="min-height:220px" :value="jsonPretty(publishPrepResult)" readonly></textarea>
           </div>
         </div>
 
@@ -2567,6 +2640,8 @@
         </div>
       </div>
 
+      <div x-show="productionView==='workflow'" class="fade-in">
+
       <!-- 未加载项目时的空状态 -->
       <div x-show="!projectDir" class="empty-state">
         <div class="icon">🎬</div>
@@ -3115,6 +3190,8 @@
           <button class="btn btn-primary" x-show="!finalUrl && jobStatus!=='running'"
                   @click="runCurrentStep()">▶ 开始渲染</button>
         </div>
+      </div>
+
       </div>
 
     </div><!-- /content -->

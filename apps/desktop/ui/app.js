@@ -12,6 +12,7 @@ document.addEventListener("alpine:init", () => {
     steps:       [],
     config:      {},
     topModule:   "analysis",      // analysis | production
+    productionView: "hub",        // hub | workflow
 
     // ── 全局素材库（语义分析模块）──────────────────────────────
     libraryStats: {
@@ -161,6 +162,48 @@ document.addEventListener("alpine:init", () => {
     // ── 能力工作台（Capability）──────────────────────────────────
     capabilityTab: "topic_library",
     capabilityMessage: "",
+    capabilityGroups: [
+      {
+        key: "creative",
+        title: "创作链路",
+        items: [
+          { tab: "topic_library", label: "选题库", hint: "模板库与素材初始化", mode: "project" },
+          { tab: "topic_copy", label: "选题+文案", hint: "选题映射文案草稿", mode: "project" },
+          { tab: "text_rough", label: "文字粗剪", hint: "句级删减与时长控制", mode: "project" },
+          { tab: "short_clip", label: "短视频快剪", hint: "精华片段快速规划", mode: "project" },
+          { tab: "refinement", label: "视频精剪", hint: "NLE 交接与导回", mode: "project" },
+          { tab: "audio_voice", label: "配乐配音", hint: "旁白/BGM/混音", mode: "project" },
+        ],
+      },
+      {
+        key: "semantics",
+        title: "语义与文案",
+        items: [
+          { tab: "subtitle_calibration", label: "字幕校准", hint: "中英文+时间轴", mode: "hybrid" },
+          { tab: "image_semantic", label: "图片语义", hint: "图像分析与语义检索", mode: "hybrid" },
+          { tab: "article_expand", label: "公众号扩写", hint: "文章结构化扩写", mode: "hybrid" },
+          { tab: "publish_prep", label: "发布文案", hint: "分平台标题/描述/关键词", mode: "hybrid" },
+        ],
+      },
+      {
+        key: "distribution",
+        title: "分发与发布",
+        items: [
+          { tab: "social_export", label: "社媒导出", hint: "多平台规格导出", mode: "hybrid" },
+          { tab: "content_publish", label: "内容发布", hint: "跨平台发布执行", mode: "hybrid" },
+        ],
+      },
+      {
+        key: "automation",
+        title: "自动化与治理",
+        items: [
+          { tab: "workflow_builder", label: "自定义工作流", hint: "节点编排与重跑", mode: "hybrid" },
+          { tab: "idempotency_cache", label: "幂等缓存", hint: "去重与重试治理", mode: "hybrid" },
+          { tab: "agent_templates", label: "Agent 模板", hint: "技能模板与变量", mode: "hybrid" },
+          { tab: "agent_observability", label: "Agent 观测", hint: "成本/失败/重放", mode: "hybrid" },
+        ],
+      },
+    ],
     capabilities: [],
     capabilitiesLoading: false,
     topicLibraryLoading: false,
@@ -280,6 +323,20 @@ document.addEventListener("alpine:init", () => {
       llm_model: "",
     },
     articleExpandResult: null,
+    publishPrepInput: {
+      input_mode: "inline",
+      script_text: "",
+      voiceover_text: "",
+      platforms: "xiaohongshu,ixigua,douyin,wechat_channels,wechat_mp,youtube,instagram,twitter,threads,facebook,blog",
+      platform_content_type: "video_post",
+      use_saved_profiles: true,
+      use_llm: false,
+      llm_provider: "",
+      llm_model: "",
+      profile_overrides_json: "{}",
+    },
+    publishPrepProfiles: [],
+    publishPrepResult: null,
     contentPublishInput: {
       input_mode: "project",
       platforms: "xiaohongshu,ixigua,douyin,wechat_channels,wechat_mp,youtube,instagram,twitter,threads,facebook,blog",
@@ -507,7 +564,9 @@ document.addEventListener("alpine:init", () => {
 
       if (this.projectDir) {
         this.topModule = "production";
-        await this.loadStepData();
+        if (this.productionView === "workflow") {
+          await this.loadStepData();
+        }
         await this.loadCapabilityWorkbench();
       } else {
         this.topModule = "analysis";
@@ -558,6 +617,7 @@ document.addEventListener("alpine:init", () => {
 
       // 切换了项目（或首次加载）→ 同步 activePanel 并清空所有缓存
       if (prevDir !== this.projectDir) {
+        this.productionView = "hub";
         this.activePanel  = this.currentStep;
         this.materials    = {};
         this.frames       = [];
@@ -603,6 +663,8 @@ document.addEventListener("alpine:init", () => {
         this.imageSemanticAnalyze = null;
         this.imageSemanticSearch = null;
         this.articleExpandResult = null;
+        this.publishPrepProfiles = [];
+        this.publishPrepResult = null;
         this.contentPublishPlatforms = [];
         this.contentPublishSession = null;
         this.contentPublishPlan = null;
@@ -708,9 +770,23 @@ document.addEventListener("alpine:init", () => {
       this.topModule = moduleName;
       if (moduleName === "analysis") {
         await this.searchLibrary();
-      } else if (moduleName === "production" && this.projectDir) {
+      } else if (moduleName === "production") {
+        if (this.projectDir && this.productionView === "workflow") {
+          this.activePanel = this.currentStep;
+          await this.loadStepData();
+        }
+        await this.loadCapabilityWorkbench();
+      }
+    },
+
+    async switchProductionView(viewName) {
+      const v = `${viewName || ""}`.trim().toLowerCase();
+      this.productionView = v === "workflow" ? "workflow" : "hub";
+      if (this.productionView === "workflow" && this.projectDir) {
         this.activePanel = this.currentStep;
         await this.loadStepData();
+      }
+      if (this.productionView === "hub") {
         await this.loadCapabilityWorkbench();
       }
     },
@@ -1810,14 +1886,21 @@ document.addEventListener("alpine:init", () => {
     // ── Capability Workbench ──────────────────────────────────────
 
     async loadCapabilityWorkbench() {
-      if (!this.projectDir) return;
       await this.loadCapabilities();
+      await this.loadContentPublishPlatforms();
+      await this.loadPublishPrepProfiles();
+      if (!this.projectDir) {
+        const entry = this.capabilityEntryByTab(this.capabilityTab);
+        if (this.capabilityModeText(entry && entry.mode ? entry.mode : "hybrid") === "project") {
+          this.capabilityTab = "subtitle_calibration";
+        }
+        return;
+      }
       await this.loadTopicLibrary();
       await this.loadTextRoughSource();
       await this.loadSocialExportTemplates();
       await this.loadExportProfiles();
       await this.loadSocialExportHistory();
-      await this.loadContentPublishPlatforms();
       await this.loadWorkflowCatalog();
       await this.loadWorkflowList();
       await this.loadWorkflowRuns();
@@ -1836,7 +1919,6 @@ document.addEventListener("alpine:init", () => {
     },
 
     async loadCapabilities() {
-      if (!this.projectDir) return;
       this.capabilitiesLoading = true;
       const data = await this.api("GET", "/api/capabilities");
       this.capabilitiesLoading = false;
@@ -1845,6 +1927,60 @@ document.addEventListener("alpine:init", () => {
         return;
       }
       this.capabilities = Array.isArray(data.capabilities) ? data.capabilities : [];
+    },
+
+    capabilityModeText(mode) {
+      const m = `${mode || "hybrid"}`.trim().toLowerCase();
+      if (m === "inline") return "inline";
+      if (m === "project") return "project";
+      return "hybrid";
+    },
+
+    capabilityModeClass(mode) {
+      const m = this.capabilityModeText(mode);
+      if (m === "inline") return "badge-success";
+      if (m === "project") return "badge-warn";
+      return "badge-info";
+    },
+
+    capabilityEntryByTab(tab) {
+      const key = `${tab || ""}`.trim();
+      if (!key) return null;
+      for (const group of (this.capabilityGroups || [])) {
+        const items = Array.isArray(group && group.items) ? group.items : [];
+        const hit = items.find(x => `${x && x.tab ? x.tab : ""}`.trim() === key);
+        if (hit) return hit;
+      }
+      return null;
+    },
+
+    async openCapabilityTab(tab) {
+      const key = `${tab || ""}`.trim();
+      if (!key) return;
+      this.productionView = "hub";
+      this.capabilityTab = key;
+      const entry = this.capabilityEntryByTab(key);
+      const mode = this.capabilityModeText(entry && entry.mode ? entry.mode : "hybrid");
+      if (!this.projectDir && mode === "project") {
+        this.capabilityMessage = `模块「${entry && entry.label ? entry.label : key}」需要先打开项目后使用`;
+        return;
+      }
+      if (key === "text_rough") await this.loadTextRoughSource();
+      if (key === "social_export") {
+        await this.loadSocialExportTemplates();
+        await this.loadExportProfiles();
+        await this.loadSocialExportHistory();
+      }
+      if (key === "publish_prep") await this.loadPublishPrepProfiles();
+      if (key === "content_publish") await this.loadContentPublishPlatforms();
+      if (key === "workflow_builder") {
+        await this.loadWorkflowCatalog();
+        await this.loadWorkflowList();
+        await this.loadWorkflowRuns();
+      }
+      if (key === "idempotency_cache") await this.loadIdempotencyCache(true);
+      if (key === "agent_templates") await this.loadAgentTemplates();
+      if (key === "agent_observability") await this.loadAgentObservability();
     },
 
     async loadIdempotencyCache(resetOffset = false) {
@@ -3082,8 +3218,61 @@ document.addEventListener("alpine:init", () => {
       this.capabilityMessage = `公众号扩写完成：生成标题 ${titles.length || 0} 条`;
     },
 
+    async loadPublishPrepProfiles() {
+      const data = await this.api("GET", "/api/capabilities/publish_prep/profiles");
+      if (data.error) {
+        this.capabilityMessage = `发布文案 profiles 读取失败：${data.error}`;
+        return;
+      }
+      this.publishPrepProfiles = Array.isArray(data.profiles) ? data.profiles : [];
+    },
+
+    async generatePublishPrep() {
+      const overrides = this.parseJsonSafe(this.publishPrepInput.profile_overrides_json, null);
+      if (overrides === null || typeof overrides !== "object" || Array.isArray(overrides)) {
+        this.capabilityMessage = "发布文案 profile_overrides_json 需为 JSON 对象";
+        return;
+      }
+      const payload = {
+        input_mode: this.publishPrepInput.input_mode || "inline",
+        script_text: this.publishPrepInput.script_text || "",
+        voiceover_text: this.publishPrepInput.voiceover_text || "",
+        platforms: this.parseDelimitedList(this.publishPrepInput.platforms || ""),
+        platform_content_type: this.publishPrepInput.platform_content_type || "video_post",
+        use_saved_profiles: !!this.publishPrepInput.use_saved_profiles,
+        profile_overrides: overrides,
+        use_llm: !!this.publishPrepInput.use_llm,
+        llm_provider: this.publishPrepInput.llm_provider || "",
+        llm_model: this.publishPrepInput.llm_model || "",
+      };
+      const data = await this.api("POST", "/api/capabilities/publish_prep/generate", payload);
+      if (data.error) {
+        this.capabilityMessage = `发布文案生成失败：${data.error}`;
+        return;
+      }
+      this.publishPrepResult = data.result || null;
+      const first = (
+        this.publishPrepResult &&
+        Array.isArray(this.publishPrepResult.platform_results) &&
+        this.publishPrepResult.platform_results.length > 0
+      )
+        ? this.publishPrepResult.platform_results[0]
+        : null;
+      const content = (first && first.content && typeof first.content === "object") ? first.content : null;
+      if (content) {
+        this.contentPublishInput.title = `${content.title || this.contentPublishInput.title || ""}`;
+        this.contentPublishInput.description = `${content.description || content.body || this.contentPublishInput.description || ""}`;
+        if (Array.isArray(content.keywords)) {
+          this.contentPublishInput.keywords = content.keywords.join(",");
+        }
+      }
+      const n = (this.publishPrepResult && Array.isArray(this.publishPrepResult.platform_results))
+        ? this.publishPrepResult.platform_results.length
+        : 0;
+      this.capabilityMessage = `发布文案生成完成：覆盖 ${n} 个平台`;
+    },
+
     async loadContentPublishPlatforms() {
-      if (!this.projectDir) return;
       const data = await this.api("GET", "/api/capabilities/content_publish/platforms");
       if (data.error) {
         this.capabilityMessage = `发布平台列表读取失败：${data.error}`;
@@ -4890,6 +5079,7 @@ document.addEventListener("alpine:init", () => {
         || s.status === "waiting_review"
         || s.status === "error";
       if (!accessible) return;
+      this.productionView = "workflow";
       this.activePanel = n;   // 只改面板，不改工作流进度
       await this.loadStepData();
     },

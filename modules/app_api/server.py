@@ -11185,7 +11185,11 @@ def api_audio_voice_run():
 @app.route("/")
 def serve_index():
     ui_dir = APP_UI_DIR
-    return send_file(str(ui_dir / "index.html"))
+    resp = send_file(str(ui_dir / "index.html"))
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 
 
 @app.route("/<path:filename>")
@@ -11196,7 +11200,11 @@ def serve_static(filename):
         abort(403)
     if not target.exists():
         abort(404)
-    return send_file(str(target))
+    resp = send_file(str(target))
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 
 
 # ── 工厂函数（供 app.py 调用）─────────────────────────────────────────
