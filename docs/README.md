@@ -2,6 +2,7 @@
 
 本目录用于指导阶段2模块化重构与后续并行开发。
 
+- `changelog-v0.3.1.md`：v0.3.1 变更记录（P0.4 帧读取安全上限）
 - `module-index.md`：模块职责、目录草案、受保护区/可改区
 - `module-dependency-matrix.md`：允许/禁止依赖规则与边界约束
 - `file-migration-map.md`：文件迁移路径与回滚映射

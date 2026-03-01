@@ -208,8 +208,10 @@ class AdvancedBeautyFilter:
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
 
+        # P0.4: 安全上限防止损坏视频导致无限循环
+        max_frames = max(total * 2, int(fps * 600)) if total > 0 else int(fps * 600)
         processed = 0
-        while True:
+        while processed < max_frames:
             ret, frame = cap.read()
             if not ret:
                 break

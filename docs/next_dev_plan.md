@@ -25,6 +25,12 @@
 - 已完成任务调度服务化首版：新增 `modules/app_api/services/job_runtime.py`，`_run_in_bg`、重任务队列与 worker 执行已迁移。
 - 已完成幂等存储服务化首版：新增 `modules/app_api/services/idempotency_store.py`，capability idempotency 读写/过期/裁剪逻辑已迁移。
 
+### v0.3.1 增量（2026-03-01）
+- **P0.4 OpenCV 帧读取安全上限**：`beauty.py`、`pipeline.py`、`auto_render.py` 三个文件的 `while True` 循环改为 `while idx < max_frames`，`max_frames = max(2 * 报告帧数, fps * 600)`，防止损坏视频导致无限循环。
+- P2.8（README 重写）和 P2.9（Blog 真实导出）在 main 分支已有，无需移植。
+- 回归验证：136/136 测试通过。
+- 详见 `docs/changelog-v0.3.1.md`。
+
 ## Phase 1（高优先，1-2 周）
 
 1. 真实发布引擎（替换模拟）

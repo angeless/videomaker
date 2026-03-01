@@ -476,8 +476,10 @@ class RenderPipeline:
             tmp_vid, _cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h)
         )
 
+        # P0.4: 安全上限防止损坏视频导致无限循环
+        max_frames = max(total_frames * 2, int(fps * 600)) if total_frames > 0 else int(fps * 600)
         frame_idx = 0
-        while True:
+        while frame_idx < max_frames:
             if callable(self._should_cancel):
                 try:
                     if bool(self._should_cancel()):
