@@ -4,23 +4,63 @@
 使用 pywebview (WKWebView) + Flask，支持 Intel & Silicon Mac
 
 用法:
-  python app.py                              # 启动，选择/新建项目
-  python app.py --project /path/to/project  # 直接打开已有项目
+  python apps/desktop/launcher.py                              # 启动，选择/新建项目
+  python apps/desktop/launcher.py --project /path/to/project  # 直接打开已有项目
 """
 
-import time
-import socket
 import argparse
-import threading
+import importlib.util
+import os
+import socket
+import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-import webview
-from modules.app_api.server import create_app, set_window
+
+def _module_available(module_name: str) -> bool:
+    try:
+        return importlib.util.find_spec(module_name) is not None
+    except Exception:
+        return False
+
+
+def _ensure_runtime_dependencies(auto_install: bool = True):
+    required = [
+        ("flask", "Flask"),
+        ("webview", "pywebview"),
+    ]
+    missing = [pkg for module_name, pkg in required if not _module_available(module_name)]
+    if not missing:
+        return
+
+    if not auto_install:
+        miss = ", ".join(missing)
+        raise RuntimeError(f"缺少依赖: {miss}。请先安装 requirements.txt")
+
+    req = REPO_ROOT / "requirements.txt"
+    if not req.exists():
+        raise RuntimeError(f"缺少依赖清单文件: {req}")
+
+    print(f"[launcher] 检测到缺少依赖: {', '.join(missing)}，正在自动安装...")
+    try:
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install", "-r", str(req)],
+            cwd=str(REPO_ROOT),
+        )
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(
+            f"自动安装依赖失败（exit={exc.returncode}），请检查网络或 Python 环境后重试"
+        ) from exc
+
+    still_missing = [pkg for module_name, pkg in required if not _module_available(module_name)]
+    if still_missing:
+        raise RuntimeError(f"依赖安装后仍缺失: {', '.join(still_missing)}")
 
 # ── 端口选择（避免冲突）──────────────────────────────────────────────
 
@@ -46,7 +86,20 @@ def _start_flask(flask_app, port: int):
 def main():
     parser = argparse.ArgumentParser(description="视频制作助手 GUI")
     parser.add_argument("--project", help="直接打开的项目目录路径")
+    parser.add_argument(
+        "--skip-bootstrap",
+        action="store_true",
+        help="跳过依赖自动检测与安装（调试模式）",
+    )
     args = parser.parse_args()
+
+    _ensure_runtime_dependencies(auto_install=not bool(args.skip_bootstrap))
+
+    # 桌面运行默认开启本地 API token 防护；测试/CLI 可用环境变量覆盖。
+    os.environ.setdefault("VIDEOEDITOR_REQUIRE_LOCAL_TOKEN", "1")
+
+    import webview  # noqa: WPS433
+    from modules.app_api.server import create_app, set_window  # noqa: WPS433
 
     port = _find_free_port(9527)
     flask_app = create_app(project_dir=args.project)

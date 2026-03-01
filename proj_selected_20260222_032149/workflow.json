@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "project_dir": "/Users/angelwang/videoeditor/proj_selected_20260222_032149",
+  "videos_dir": "",
+  "current_step": 2,
+  "steps": {
+    "1": {
+      "status": "done",
+      "review_status": "approved",
+      "output": "data/materials.json",
+      "video_count": 2,
+      "completed_at": "2026-02-22T03:21:49.708147"
+    },
+    "2": {
+      "status": "pending",
+      "review_status": null
+    },
+    "3": {
+      "status": "not_started",
+      "review_status": null
+    },
+    "4": {
+      "status": "not_started",
+      "review_status": null
+    },
+    "5": {
+      "status": "not_started",
+      "review_status": null
+    },
+    "6": {
+      "status": "not_started",
+      "review_status": null
+    },
+    "7": {
+      "status": "not_started",
+      "review_status": null
+    }
+  },
+  "config": {
+    "use_semantic_index": false,
+    "ai_provider": "openai",
+    "ai_base_url": "https://api.openai.com/v1",
+    "ai_model": "gpt-4o-mini",
+    "render": {
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "crf_rough": 28,
+      "crf_final": 18,
+      "preset_rough": "ultrafast",
+      "preset_final": "slow",
+      "enable_skin_smooth": true,
+      "enable_color_grading": true,
+      "enable_skill_enhance": true,
+      "aesthetic_preset": "travel_story",
+      "transition_style": "fade",
+      "transition_duration": 0.35,
+      "bgm_volume": 0.3,
+      "subtitle_font": "PingFangSC-Regular",
+      "subtitle_size": 56,
+      "audio_bitrate": "192k"
+    },
+    "material_source": "global_library",
+    "selected_video_uids": [
+      "38ab9ef3e591f7d50fb308a26858c597861a38039ee570193272c89111466134",
+      "902e6611cd0c57f7729d05259b60020a6ba13d934d182826357e3d0d51c19e61"
+    ],
+    "selected_video_paths": [
+      "/Users/angelwang/Movies/kutaisi/冬季的梅斯蒂亚.mp4",
+      "/Users/angelwang/videoeditor/.video_library/cache/gdrive/ff00e163d8f4365e/2025/1128 百度盘备份 加拿大心酸史/IMG_1315.MOV"
+    ]
+  }
+}

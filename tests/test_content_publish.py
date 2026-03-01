@@ -1,6 +1,7 @@
 from pathlib import Path
 import sys
 import types
+import json as pyjson
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -55,17 +56,130 @@ def test_content_publish_run_posted_with_authenticated_session_and_blog_dual_for
             "description": "这是一次短视频旅行记录",
             "keywords": ["旅行", "vlog"],
         },
-        platform_ids=["blog", "youtube"],
+        platform_ids=["blog"],
         platform_content_type="video_post",
         dry_run=False,
         session=session,
     )
-    result = run_publish_plan(plan=plan, session=session, dry_run=False)
+    result = run_publish_plan(plan=plan, session=session, dry_run=False, output_root=str(ROOT / ".tmp_publish_blog"))
     assert result["status"] == "posted"
-    assert result["summary"]["posted"] == 2
+    assert result["summary"]["posted"] == 1
     blog_step = next(item for item in result["steps"] if item["platform_id"] == "blog")
     assert blog_step["content"]["markdown_frontmatter"].startswith("---")
     assert "<article>" in blog_step["content"]["html"]
+    assert blog_step["artifacts"]["markdown_path"].endswith(".md")
+    assert blog_step["artifacts"]["html_path"].endswith(".html")
+
+
+def test_content_publish_run_fails_without_connector_for_non_blog_platform():
+    session = bootstrap_publish_session(authenticated=True, expires_in_minutes=60)
+    plan = build_publish_plan(
+        content={"title": "标题", "description": "描述"},
+        platform_ids=["youtube"],
+        platform_content_type="video_post",
+        dry_run=False,
+        session=session,
+        connectors={},
+    )
+    result = run_publish_plan(plan=plan, session=session, dry_run=False, connectors={})
+    assert result["status"] in {"failed", "blocked"}
+    assert result["summary"]["posted"] == 0
+    assert (result["summary"]["failed"] + result["summary"]["blocked"]) >= 1
+
+
+def test_content_publish_plan_youtube_api_requires_token_for_live_run(tmp_path):
+    session = bootstrap_publish_session(authenticated=True, expires_in_minutes=60)
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"fake-video")
+    plan = build_publish_plan(
+        content={"title": "标题", "description": "描述", "media_urls": [str(video)]},
+        platform_ids=["youtube"],
+        platform_content_type="video_post",
+        dry_run=False,
+        session=session,
+        connectors={"youtube": {"kind": "youtube_api"}},
+    )
+    assert plan["status"] == "blocked"
+    assert plan["steps"][0]["connector_ready"] is False
+    assert "未配置发布连接器" in plan["steps"][0]["reason"]
+
+
+def test_content_publish_run_youtube_api_success(monkeypatch, tmp_path):
+    from modules.capabilities import content_publish as cp
+
+    class _FakeResp:
+        def __init__(self, *, status=200, body="", headers=None):
+            self.status = status
+            self._body = body.encode("utf-8")
+            self.headers = headers or {}
+
+        def read(self):
+            return self._body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            return False
+
+    calls = []
+
+    def _fake_urlopen(req, timeout=0):
+        calls.append(
+            {
+                "url": req.full_url,
+                "method": req.get_method(),
+                "headers": dict(req.header_items()),
+                "timeout": timeout,
+            }
+        )
+        if len(calls) == 1:
+            return _FakeResp(
+                status=200,
+                body="",
+                headers={"Location": "https://upload.youtube.local/session/abc"},
+            )
+        return _FakeResp(
+            status=200,
+            body=pyjson.dumps({"id": "yt_video_123"}),
+            headers={},
+        )
+
+    monkeypatch.setattr(cp.urlrequest, "urlopen", _fake_urlopen)
+
+    session = bootstrap_publish_session(authenticated=True, expires_in_minutes=60)
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"fake-video-binary")
+    connectors = {
+        "youtube": {
+            "kind": "youtube_api",
+            "token": "yt_access_token_abc",
+            "privacy_status": "private",
+            "category_id": "22",
+        }
+    }
+    plan = build_publish_plan(
+        content={"title": "标题", "description": "描述", "media_urls": [str(video)]},
+        platform_ids=["youtube"],
+        platform_content_type="video_post",
+        dry_run=False,
+        session=session,
+        connectors=connectors,
+    )
+    assert plan["status"] == "planned"
+    assert plan["steps"][0]["connector_ready"] is True
+
+    result = run_publish_plan(plan=plan, session=session, dry_run=False, connectors=connectors)
+    assert result["status"] == "posted"
+    assert result["summary"]["posted"] == 1
+    step = result["steps"][0]
+    assert step["connector"]["kind"] == "youtube_api"
+    assert step["post_id"] == "yt_video_123"
+    assert "youtube.com/watch?v=yt_video_123" in step["post_url"]
+    assert len(calls) == 2
+    assert calls[0]["method"] == "POST"
+    assert "uploadType=resumable" in calls[0]["url"]
+    assert calls[1]["method"] == "PUT"
 
 
 def test_content_publish_run_waiting_auth_when_session_expired():

@@ -4,8 +4,14 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
+import json
+import mimetypes
+import re
 import random
+from urllib import error as urlerror
+from urllib import request as urlrequest
 import uuid
 
 
@@ -74,6 +80,311 @@ DEFAULT_AUTOMATION = {
     "cookie_auto_refresh": False,
     "auth_refresh_mode": "qrcode",
 }
+
+
+def _safe_slug(text: str, fallback: str = "post") -> str:
+    normalized = re.sub(r"[^\w\u4e00-\u9fff-]+", "-", str(text or "").strip().lower())
+    normalized = re.sub(r"-{2,}", "-", normalized).strip("-")
+    return normalized or fallback
+
+
+def _trim_text(text: Any, max_len: int = 360) -> str:
+    s = str(text or "").strip()
+    if len(s) <= max_len:
+        return s
+    return f"{s[: max_len - 3]}..."
+
+
+def _resolve_platform_connector(platform_id: str, connectors: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    data = connectors if isinstance(connectors, dict) else {}
+    pid = str(platform_id or "").strip().lower()
+    if not pid:
+        return {}
+    direct = data.get(pid)
+    if isinstance(direct, dict):
+        return dict(direct)
+    alias = data.get("default")
+    if isinstance(alias, dict):
+        return dict(alias)
+    return {}
+
+
+def _build_webhook_headers(connector: Dict[str, Any]) -> Dict[str, str]:
+    headers = {"Content-Type": "application/json"}
+    custom_headers = connector.get("headers")
+    if isinstance(custom_headers, dict):
+        for key, value in custom_headers.items():
+            k = str(key or "").strip()
+            if not k:
+                continue
+            headers[k] = str(value or "").strip()
+    token = str(connector.get("token", "") or "").strip()
+    if token and "authorization" not in {k.lower() for k in headers.keys()}:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
+
+
+def _extract_response_field(payload: Any, keys: List[str]) -> str:
+    if isinstance(payload, dict):
+        for key in keys:
+            value = payload.get(key)
+            if value is not None and str(value).strip():
+                return str(value).strip()
+        data = payload.get("data")
+        if isinstance(data, dict):
+            for key in keys:
+                value = data.get(key)
+                if value is not None and str(value).strip():
+                    return str(value).strip()
+    return ""
+
+
+def _publish_via_webhook(
+    *,
+    step: Dict[str, Any],
+    connector: Dict[str, Any],
+    session: Dict[str, Any],
+    timeout_s: float = 25.0,
+) -> Dict[str, Any]:
+    endpoint = str(connector.get("endpoint", "") or "").strip()
+    if not endpoint:
+        raise ValueError("connector.endpoint 不能为空")
+    method = str(connector.get("method", "POST") or "POST").strip().upper() or "POST"
+    body = {
+        "platform_id": step.get("platform_id"),
+        "platform_name": step.get("platform_name"),
+        "content_type": step.get("content_type"),
+        "content": step.get("content", {}),
+        "session": {
+            "session_id": str(session.get("session_id", "") or ""),
+            "authenticated": bool(session.get("authenticated", False)),
+        },
+        "requested_at": datetime.now().isoformat(timespec="seconds"),
+    }
+    payload_bytes = json.dumps(body, ensure_ascii=False).encode("utf-8")
+    req = urlrequest.Request(
+        endpoint,
+        data=payload_bytes,
+        method=method,
+        headers=_build_webhook_headers(connector),
+    )
+    timeout_final = max(float(connector.get("timeout_s", timeout_s) or timeout_s), 1.0)
+    try:
+        with urlrequest.urlopen(req, timeout=timeout_final) as resp:
+            status_code = int(getattr(resp, "status", 200) or 200)
+            resp_body = resp.read().decode("utf-8", errors="ignore")
+    except urlerror.HTTPError as exc:
+        tail = ""
+        try:
+            tail = exc.read().decode("utf-8", errors="ignore")
+        except Exception:
+            tail = ""
+        raise RuntimeError(f"发布连接器返回 HTTP {exc.code}: {_trim_text(tail or exc.reason, 180)}") from exc
+    except Exception as exc:
+        raise RuntimeError(f"发布连接器调用失败: {exc}") from exc
+
+    parsed: Any = {}
+    if resp_body.strip():
+        try:
+            parsed = json.loads(resp_body)
+        except Exception:
+            parsed = {"raw": _trim_text(resp_body, 600)}
+    post_id = _extract_response_field(parsed, ["post_id", "id", "publish_id"]) or f"{step.get('platform_id')}_{uuid.uuid4().hex[:10]}"
+    post_url = _extract_response_field(parsed, ["url", "post_url", "link"])
+    return {
+        "post_id": post_id,
+        "post_url": post_url,
+        "connector_response": parsed,
+        "connector_http_status": status_code,
+        "connector_endpoint": endpoint,
+    }
+
+
+def _normalize_connector_kind(connector: Dict[str, Any]) -> str:
+    return str(connector.get("kind", "webhook") or "webhook").strip().lower() or "webhook"
+
+
+def _connector_is_ready(platform_id: str, connector: Dict[str, Any]) -> bool:
+    pid = str(platform_id or "").strip().lower()
+    if pid == "blog":
+        return True
+    if not isinstance(connector, dict) or not connector:
+        return False
+    kind = _normalize_connector_kind(connector)
+    if kind == "youtube_api" and pid == "youtube":
+        token = str(connector.get("access_token", "") or connector.get("token", "") or "").strip()
+        return bool(token)
+    return bool(str(connector.get("endpoint", "") or "").strip())
+
+
+def _youtube_upload_source(step: Dict[str, Any], connector: Dict[str, Any]) -> Path:
+    content = step.get("content", {}) if isinstance(step.get("content"), dict) else {}
+    source = str(connector.get("media_file", "") or "").strip()
+    if not source:
+        source = str(content.get("video_file", "") or "").strip()
+    if not source:
+        media_urls = content.get("media_urls", []) if isinstance(content.get("media_urls"), list) else []
+        if media_urls:
+            source = str(media_urls[0] or "").strip()
+    if not source:
+        raise ValueError("youtube_api 需要 media_file 或 content.media_urls[0] 指向本地视频文件")
+    if source.startswith("http://") or source.startswith("https://"):
+        raise ValueError("youtube_api 当前仅支持本地视频文件上传，不支持 URL 直传")
+    path = Path(source).expanduser().resolve()
+    if not path.exists() or not path.is_file():
+        raise ValueError(f"youtube_api 视频文件不存在: {path}")
+    return path
+
+
+def _youtube_metadata(step: Dict[str, Any], connector: Dict[str, Any]) -> Dict[str, Any]:
+    content = step.get("content", {}) if isinstance(step.get("content"), dict) else {}
+    privacy_status = str(connector.get("privacy_status", "private") or "private").strip().lower()
+    if privacy_status not in {"private", "public", "unlisted"}:
+        privacy_status = "private"
+    category_id = str(connector.get("category_id", "22") or "22").strip() or "22"
+    publish_at = str(connector.get("publish_at", "") or "").strip()
+
+    snippet = {
+        "title": str(content.get("title") or "Untitled").strip() or "Untitled",
+        "description": str(content.get("description") or "").strip(),
+        "categoryId": category_id,
+        "tags": content.get("keywords", []) if isinstance(content.get("keywords"), list) else [],
+    }
+    status: Dict[str, Any] = {"privacyStatus": privacy_status}
+    if publish_at:
+        status["publishAt"] = publish_at
+    return {"snippet": snippet, "status": status}
+
+
+def _youtube_auth_headers(connector: Dict[str, Any], content_type: str = "application/json; charset=UTF-8") -> Dict[str, str]:
+    token = str(connector.get("access_token", "") or connector.get("token", "") or "").strip()
+    if not token:
+        raise ValueError("youtube_api 缺少 access_token/token")
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": content_type,
+    }
+    custom_headers = connector.get("headers")
+    if isinstance(custom_headers, dict):
+        for key, value in custom_headers.items():
+            k = str(key or "").strip()
+            if not k:
+                continue
+            headers[k] = str(value or "").strip()
+    return headers
+
+
+def _publish_youtube_via_api(
+    *,
+    step: Dict[str, Any],
+    connector: Dict[str, Any],
+    timeout_s: float = 120.0,
+) -> Dict[str, Any]:
+    source = _youtube_upload_source(step, connector)
+    meta = _youtube_metadata(step, connector)
+    size = int(source.stat().st_size)
+    media_type = mimetypes.guess_type(source.name)[0] or "application/octet-stream"
+    notify_subscribers = str(bool(connector.get("notify_subscribers", False))).lower()
+
+    init_url = (
+        "https://www.googleapis.com/upload/youtube/v3/videos"
+        f"?uploadType=resumable&part=snippet,status&notifySubscribers={notify_subscribers}"
+    )
+    init_headers = _youtube_auth_headers(connector)
+    init_headers["X-Upload-Content-Type"] = media_type
+    init_headers["X-Upload-Content-Length"] = str(size)
+    init_body = json.dumps(meta, ensure_ascii=False).encode("utf-8")
+    req_init = urlrequest.Request(init_url, data=init_body, method="POST", headers=init_headers)
+
+    timeout_final = max(float(connector.get("timeout_s", timeout_s) or timeout_s), 3.0)
+    try:
+        with urlrequest.urlopen(req_init, timeout=timeout_final) as init_resp:
+            upload_url = str(init_resp.headers.get("Location", "") or "").strip()
+    except urlerror.HTTPError as exc:
+        tail = ""
+        try:
+            tail = exc.read().decode("utf-8", errors="ignore")
+        except Exception:
+            tail = ""
+        raise RuntimeError(f"YouTube 初始化上传失败 HTTP {exc.code}: {_trim_text(tail or exc.reason, 220)}") from exc
+    except Exception as exc:
+        raise RuntimeError(f"YouTube 初始化上传失败: {exc}") from exc
+
+    if not upload_url:
+        raise RuntimeError("YouTube 未返回可用的上传地址（Location）")
+
+    upload_headers = _youtube_auth_headers(connector, content_type=media_type)
+    upload_headers["Content-Length"] = str(size)
+    data = source.read_bytes()
+    req_upload = urlrequest.Request(upload_url, data=data, method="PUT", headers=upload_headers)
+    try:
+        with urlrequest.urlopen(req_upload, timeout=max(timeout_final, 30.0)) as upload_resp:
+            status_code = int(getattr(upload_resp, "status", 200) or 200)
+            body = upload_resp.read().decode("utf-8", errors="ignore")
+    except urlerror.HTTPError as exc:
+        tail = ""
+        try:
+            tail = exc.read().decode("utf-8", errors="ignore")
+        except Exception:
+            tail = ""
+        raise RuntimeError(f"YouTube 上传失败 HTTP {exc.code}: {_trim_text(tail or exc.reason, 220)}") from exc
+    except Exception as exc:
+        raise RuntimeError(f"YouTube 上传失败: {exc}") from exc
+
+    parsed: Any = {}
+    if body.strip():
+        try:
+            parsed = json.loads(body)
+        except Exception:
+            parsed = {"raw": _trim_text(body, 800)}
+    video_id = _extract_response_field(parsed, ["id", "video_id"])
+    post_url = f"https://www.youtube.com/watch?v={video_id}" if video_id else ""
+    return {
+        "post_id": video_id or f"youtube_{uuid.uuid4().hex[:10]}",
+        "post_url": post_url,
+        "connector_response": parsed,
+        "connector_http_status": status_code,
+        "connector_endpoint": "youtube_api",
+        "artifacts": {
+            "uploaded_file": str(source.resolve()),
+            "size_bytes": size,
+            "media_type": media_type,
+        },
+    }
+
+
+def _publish_blog_artifacts(step: Dict[str, Any], *, output_root: str = "") -> Dict[str, Any]:
+    root = Path(str(output_root or "").strip()).expanduser()
+    if str(root).strip() == "":
+        root = Path.cwd() / "output" / "content_publish"
+    blog_dir = root / "blog"
+    blog_dir.mkdir(parents=True, exist_ok=True)
+
+    content = step.get("content", {}) if isinstance(step.get("content"), dict) else {}
+    title = str(content.get("title") or "Untitled").strip() or "Untitled"
+    slug = _safe_slug(title, fallback=f"post-{datetime.now().strftime('%Y%m%d-%H%M%S')}")
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    md_path = blog_dir / f"{stamp}_{slug}.md"
+    html_path = blog_dir / f"{stamp}_{slug}.html"
+
+    markdown = str(content.get("markdown_frontmatter") or content.get("article_markdown") or "").strip()
+    html = str(content.get("html") or content.get("article_html") or "").strip()
+    if not markdown:
+        markdown = f"---\ntitle: {title}\n---\n\n{str(content.get('description') or '').strip()}".strip()
+    if not html:
+        safe_body = str(content.get("description") or "").replace("\n", "<br>")
+        html = f"<article><h1>{title}</h1><p>{safe_body}</p></article>"
+
+    md_path.write_text(markdown, encoding="utf-8")
+    html_path.write_text(html, encoding="utf-8")
+    return {
+        "post_id": f"blog_{stamp}_{slug}",
+        "post_url": str(md_path.resolve()),
+        "artifacts": {
+            "markdown_path": str(md_path.resolve()),
+            "html_path": str(html_path.resolve()),
+        },
+    }
 
 
 def normalize_platform_id(platform_id: str) -> str:
@@ -207,6 +518,7 @@ def build_publish_plan(
     dry_run: bool = True,
     session: Optional[Dict[str, Any]] = None,
     humanization: Optional[Dict[str, Any]] = None,
+    connectors: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     platforms = normalize_platforms(platform_ids)
     if not platforms:
@@ -221,15 +533,23 @@ def build_publish_plan(
     strategy = dict(DEFAULT_HUMANIZATION)
     if isinstance(humanization, dict):
         strategy.update(humanization)
+    connector_map = connectors if isinstance(connectors, dict) else {}
 
     steps: List[Dict[str, Any]] = []
     warnings: List[str] = []
     for pid in platforms:
         profile = PUBLISH_PLATFORMS[pid]
         supported = profile.supports_video if content_type == "video_post" else profile.supports_article
+        connector = _resolve_platform_connector(pid, connector_map)
+        connector_kind = _normalize_connector_kind(connector) if connector else ""
+        connector_ready = _connector_is_ready(pid, connector)
         state = "planned" if supported else "blocked"
         reason = "" if supported else f"{profile.name} 暂不支持 {content_type}"
         if not supported:
+            warnings.append(reason)
+        if supported and (not dry_run) and pid != "blog" and not connector_ready:
+            state = "blocked"
+            reason = f"{profile.name} 未配置发布连接器（connector）"
             warnings.append(reason)
 
         content_out = {
@@ -251,6 +571,9 @@ def build_publish_plan(
                 "content_type": content_type,
                 "content": content_out,
                 "auth_required": not dry_run,
+                "connector_kind": connector_kind or ("builtin_blog" if pid == "blog" else ""),
+                "connector_required": (not dry_run) and pid != "blog",
+                "connector_ready": bool(connector_ready),
             }
         )
 
@@ -260,6 +583,8 @@ def build_publish_plan(
     status = "planned"
     if requires_auth and not auth_ready:
         status = "waiting_auth"
+    elif steps and all(str(s.get("state", "")).lower() == "blocked" for s in steps):
+        status = "blocked"
 
     return {
         "status": status,
@@ -275,6 +600,9 @@ def build_publish_plan(
         "strategy": strategy,
         "steps": steps,
         "warnings": warnings,
+        "connectors_configured": sorted(
+            [pid for pid in platforms if _connector_is_ready(pid, _resolve_platform_connector(pid, connector_map))]
+        ),
     }
 
 
@@ -285,6 +613,8 @@ def run_publish_plan(
     dry_run: bool = False,
     rerun_failed_only: bool = False,
     random_seed: Optional[int] = 7,
+    connectors: Optional[Dict[str, Any]] = None,
+    output_root: str = "",
 ) -> Dict[str, Any]:
     src_plan = plan if isinstance(plan, dict) else {}
     steps = src_plan.get("steps", []) if isinstance(src_plan.get("steps"), list) else []
@@ -298,6 +628,7 @@ def run_publish_plan(
     auth_ready = bool(sess.get("authenticated", False)) and not session_expired
 
     rng = random.Random(int(random_seed if random_seed is not None else 7))
+    connector_map = connectors if isinstance(connectors, dict) else {}
     run_logs: List[str] = []
     out_steps: List[Dict[str, Any]] = []
     posted = 0
@@ -315,11 +646,6 @@ def run_publish_plan(
             out_steps.append({**item, "state": current_state, "run_state": "skipped"})
             continue
 
-        if current_state == "blocked":
-            blocked += 1
-            out_steps.append({**item, "run_state": "blocked"})
-            continue
-
         if waiting_auth:
             blocked += 1
             out_steps.append(
@@ -333,6 +659,11 @@ def run_publish_plan(
             )
             continue
 
+        if current_state == "blocked":
+            blocked += 1
+            out_steps.append({**item, "run_state": "blocked"})
+            continue
+
         if run_dry:
             out_steps.append({**item, "state": "planned", "run_state": "dry_run"})
             continue
@@ -343,29 +674,60 @@ def run_publish_plan(
         sampled_delay = rng.randint(min_delay, max_delay)
         run_logs.append(f"{item.get('platform_id')} -> delay {sampled_delay}ms")
 
-        # deterministic publish simulation
-        if str(item.get("platform_id", "")) == "threads" and str(item.get("content", {}).get("title", "")) == "":
+        platform_id = str(item.get("platform_id", "") or "").strip().lower()
+        if not platform_id:
+            failed += 1
+            out_steps.append({**item, "state": "failed", "run_state": "failed", "error": "缺少 platform_id"})
+            continue
+
+        try:
+            publish_result: Dict[str, Any] = {}
+            if platform_id == "blog":
+                publish_result = _publish_blog_artifacts(item, output_root=output_root)
+            else:
+                connector = _resolve_platform_connector(platform_id, connector_map)
+                if not connector:
+                    raise RuntimeError(f"{platform_id} 未配置发布连接器（connector）")
+                kind = _normalize_connector_kind(connector)
+                if kind == "webhook":
+                    publish_result = _publish_via_webhook(step=item, connector=connector, session=sess)
+                elif kind == "youtube_api" and platform_id == "youtube":
+                    publish_result = _publish_youtube_via_api(step=item, connector=connector)
+                else:
+                    raise RuntimeError(f"暂不支持 connector.kind={kind}")
+
+            posted += 1
+            out_steps.append(
+                {
+                    **item,
+                    "state": "posted",
+                    "run_state": "posted",
+                    "post_id": str(publish_result.get("post_id") or f"{platform_id}_{uuid.uuid4().hex[:10]}"),
+                    "post_url": str(publish_result.get("post_url", "") or ""),
+                    "posted_at": datetime.now().isoformat(timespec="seconds"),
+                    "connector": {
+                        "kind": (
+                            "builtin_blog"
+                            if platform_id == "blog"
+                            else ("youtube_api" if str(publish_result.get("connector_endpoint", "") or "") == "youtube_api" else "webhook")
+                        ),
+                        "endpoint": str(publish_result.get("connector_endpoint", "") or ""),
+                    },
+                    "artifacts": publish_result.get("artifacts", {}),
+                    "connector_response": publish_result.get("connector_response", {}),
+                }
+            )
+        except Exception as exc:
             failed += 1
             out_steps.append(
                 {
                     **item,
                     "state": "failed",
                     "run_state": "failed",
-                    "error": "threads 发布要求 title 非空",
+                    "error": str(exc),
                 }
             )
             continue
-
-        posted += 1
-        out_steps.append(
-            {
-                **item,
-                "state": "posted",
-                "run_state": "posted",
-                "post_id": f"{item.get('platform_id')}_{uuid.uuid4().hex[:10]}",
-                "posted_at": datetime.now().isoformat(timespec="seconds"),
-            }
-        )
 
     if waiting_auth:
         overall_status = "waiting_auth"
@@ -386,6 +748,9 @@ def run_publish_plan(
             "expires_at": str(sess.get("expires_at", "") or ""),
         },
         "strategy": exec_strategy,
+        "connectors_configured": sorted(
+            [pid for pid in src_plan.get("platform_ids", []) if _connector_is_ready(str(pid), _resolve_platform_connector(str(pid), connector_map))]
+        ),
         "summary": {
             "total": len(out_steps),
             "posted": posted,

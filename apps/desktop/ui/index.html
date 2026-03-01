@@ -4,11 +4,24 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>视频制作助手</title>
-  <link rel="stylesheet" href="styles.css?v=20260228r2" />
+  <link rel="stylesheet" href="styles.css?v=20260228r6" />
   <!-- Alpine.js -->
-  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script defer src="vendor/alpine.min.js?v=3.14.8"></script>
+  <script src="modules/app_store.js?v=20260301r3"></script>
+  <script src="modules/runtime_mixin.js?v=20260301r2"></script>
+  <script src="modules/settings_mixin.js?v=20260301r1"></script>
+  <script src="modules/project_workflow_mixin.js?v=20260301r1"></script>
+  <script src="modules/capability_admin_mixin.js?v=20260301r2"></script>
+  <script src="modules/agent_templates_mixin.js?v=20260301r1"></script>
+  <script src="modules/common_utils_mixin.js?v=20260301r1"></script>
+  <script src="modules/editing_capabilities_mixin.js?v=20260301r2"></script>
+  <script src="modules/semantic_publish_mixin.js?v=20260301r3"></script>
+  <script src="modules/distribution_audio_mixin.js?v=20260301r1"></script>
+  <script src="modules/material_semantics_mixin.js?v=20260301r1"></script>
+  <script src="modules/library_mixin.js?v=20260228r1"></script>
+  <script src="modules/workflow_builder_mixin.js?v=20260228r1"></script>
   <!-- Alpine 数据组件 -->
-  <script src="app.js?v=20260228r2"></script>
+  <script src="app.js?v=20260301r23"></script>
 </head>
 <body>
 
@@ -19,7 +32,7 @@
   ─────────────────────────────────────────────────────────────-->
   <div class="titlebar">
     <span class="title">视频制作助手</span>
-    <span class="badge badge-info" style="font-size:10px;padding:2px 6px">UI da5484d</span>
+    <span class="badge badge-info" style="font-size:10px;padding:2px 6px">UI n8n-canvas-r6</span>
     <span class="project-path" x-text="projectDir || '未选择项目'"></span>
     <div style="display:flex;gap:8px;margin-left:16px">
       <button class="btn" :class="topModule==='analysis' ? 'btn-primary' : 'btn-ghost'"
@@ -115,6 +128,45 @@
     </div>
   </div>
 
+  <div x-show="showOnboardingWizard" style="
+    position:fixed;inset:0;z-index:120;
+    background:rgba(0,0,0,0.78);
+    display:flex;align-items:center;justify-content:center;
+  " x-transition.opacity>
+    <div class="card fade-in" style="width:760px;max-width:92vw;max-height:86vh;overflow:auto">
+      <div class="card-title">首次使用引导</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:12px">
+        按下面 3 步完成基础配置，后续都可在“应用设置”里修改。
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+        <span class="badge badge-info">1. AI Key</span>
+        <span class="badge badge-info">2. 素材目录</span>
+        <span class="badge badge-info">3. 功能概览</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px">
+        <div class="card" style="margin:0">
+          <div style="font-weight:600">1) AI 配置</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:6px">先选择 Provider/Model 并填入 Key，语义检索和文案增强会更稳定。</div>
+          <button class="btn btn-ghost" style="margin-top:8px" @click="openAiSettingsSection()">打开 AI 设置</button>
+        </div>
+        <div class="card" style="margin:0">
+          <div style="font-weight:600">2) 素材目录</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:6px">设置默认素材目录后，新建项目会自动带出路径，减少重复填写。</div>
+          <button class="btn btn-ghost" style="margin-top:8px" @click="focusUiSettingsCard()">打开应用设置</button>
+        </div>
+        <div class="card" style="margin:0">
+          <div style="font-weight:600">3) 功能入口</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:6px">创作工具台用于单模块调用；连线编排用于多步骤自动化。</div>
+          <button class="btn btn-ghost" style="margin-top:8px" @click="switchModule('production')">进入制作模块</button>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+        <button class="btn btn-ghost" @click="dismissOnboardingWizard(false)">稍后再看</button>
+        <button class="btn btn-primary" @click="dismissOnboardingWizard(true)">完成引导</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ──────────────────────────────────────────────────────────
        主体布局
   ─────────────────────────────────────────────────────────────-->
@@ -122,6 +174,95 @@
     <div class="card-title">
       <span>🧠</span>
       <span>素材语义分析模块</span>
+    </div>
+
+    <div class="card" id="ui-settings-card" style="margin-bottom:14px">
+      <div class="card-title">应用设置（无需命令行）</div>
+      <div class="form-grid">
+        <div class="form-field">
+          <div class="input-label">默认素材目录</div>
+          <div style="display:flex;gap:8px">
+            <input class="input" x-model="uiSettings.default_videos_dir" placeholder="/path/to/videos" />
+            <button class="btn btn-ghost" @click="pickFolder('uiSettings.default_videos_dir')">选择…</button>
+          </div>
+        </div>
+        <div class="form-field">
+          <div class="input-label">默认项目目录</div>
+          <div style="display:flex;gap:8px">
+            <input class="input" x-model="uiSettings.default_project_dir" placeholder="/path/to/projects" />
+            <button class="btn btn-ghost" @click="pickFolder('uiSettings.default_project_dir')">选择…</button>
+          </div>
+        </div>
+        <div class="form-field">
+          <div class="input-label">字体缩放</div>
+          <input class="input" type="range" min="0.85" max="1.45" step="0.05" x-model.number="uiSettings.font_scale" @change="applyUiSettings()" />
+          <div style="font-size:12px;color:var(--muted);margin-top:6px" x-text="`当前缩放：${(uiSettings.font_scale || 1).toFixed(2)}x`"></div>
+        </div>
+        <div class="form-field">
+          <div class="input-label">创作者术语模式</div>
+          <label style="display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;margin-top:8px">
+            <input type="checkbox" x-model="uiSettings.creator_mode" />
+            <span>开启后优先显示创作者术语（如“创作工具台/连线编排”）</span>
+          </label>
+        </div>
+        <div class="form-field">
+          <div class="input-label">自动打开上次项目</div>
+          <label style="display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;margin-top:8px">
+            <input type="checkbox" x-model="uiSettings.auto_open_last_project" />
+            <span>下次启动自动恢复上次项目</span>
+          </label>
+        </div>
+        <div class="form-field">
+          <div class="input-label">制作默认视图</div>
+          <select class="input" x-model="uiSettings.preferred_production_view">
+            <option value="hub">创作工具台</option>
+            <option value="workflow">连线编排</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
+        <button class="btn btn-primary" @click="saveUiSettings()" :disabled="uiSettingsSaving">
+          <span x-show="!uiSettingsSaving">保存应用设置</span>
+          <span x-show="uiSettingsSaving">保存中…</span>
+        </button>
+        <button class="btn btn-ghost" @click="loadUiSettings()" :disabled="uiSettingsLoading">刷新</button>
+        <button class="btn btn-ghost" @click="showOnboardingWizard = true">打开首次引导</button>
+        <span style="font-size:12px;color:var(--muted)" x-show="uiSettingsMessage" x-text="uiSettingsMessage"></span>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-title">启动前自检 / 系统诊断</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+        <button class="btn btn-primary" @click="runSystemPreflight(true)" :disabled="preflightLoading">
+          <span x-show="!preflightLoading">重新自检</span>
+          <span x-show="preflightLoading">自检中…</span>
+        </button>
+        <span style="font-size:12px;color:var(--muted)" x-show="preflightLastRunAt" x-text="`最近自检：${preflightLastRunAt}`"></span>
+        <span class="badge badge-success" x-show="preflightReport && preflightReport.startup_ready">可启动</span>
+        <span class="badge badge-danger" x-show="preflightReport && !preflightReport.startup_ready">有阻塞项</span>
+      </div>
+      <div style="font-size:12px;color:var(--muted)" x-show="preflightMessage" x-text="preflightMessage"></div>
+      <div x-show="preflightReport && preflightReport.summary" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+        <span class="badge badge-success" x-text="`通过 ${preflightReport.summary.ok || 0}`"></span>
+        <span class="badge badge-warn" x-text="`警告 ${preflightReport.summary.warning || 0}`"></span>
+        <span class="badge badge-danger" x-text="`阻塞 ${preflightReport.summary.error || 0}`"></span>
+        <span class="badge badge-info" x-text="`评分 ${preflightReport.summary.score || 0}`"></span>
+      </div>
+      <div x-show="preflightReport && preflightReport.checks && preflightReport.checks.length > 0"
+           style="margin-top:8px;max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:8px">
+        <template x-for="item in (preflightReport.checks || [])" :key="item.id">
+          <div style="padding:6px 0;border-bottom:1px dashed var(--border)">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span class="badge" :class="preflightBadgeClass(item.status)" x-text="preflightStatusText(item.status)"></span>
+              <span style="font-size:13px;font-weight:600" x-text="item.title"></span>
+              <span style="font-size:11px;color:var(--muted)" x-text="item.id"></span>
+            </div>
+            <div style="font-size:12px;color:var(--muted);margin-top:4px" x-text="item.detail"></div>
+            <div style="font-size:12px;color:var(--muted);margin-top:4px" x-show="item.hint" x-text="`建议：${item.hint}`"></div>
+          </div>
+        </template>
+      </div>
     </div>
 
     <div class="card" style="margin-bottom:14px">
@@ -228,7 +369,7 @@
           </div>
           <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--muted);font-size:12px">
             <span>本次最多下载并分析</span>
-            <input class="input" type="number" min="1" max="500" x-model.number="ingestDriveMaxVideos"
+            <input class="input" type="number" min="1" max="5000" x-model.number="ingestDriveMaxVideos"
                    style="width:96px;padding:6px 8px" />
             <span>个视频</span>
           </div>
@@ -262,7 +403,7 @@
           </div>
           <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--muted);font-size:12px">
             <span>本次最多下载并分析</span>
-            <input class="input" type="number" min="1" max="2000" x-model.number="ingestDriveImageMaxItems"
+            <input class="input" type="number" min="1" max="8000" x-model.number="ingestDriveImageMaxItems"
                    style="width:96px;padding:6px 8px" />
             <span>张图片</span>
           </div>
@@ -324,6 +465,17 @@
         CPU=<span x-text="(systemLoad && systemLoad.cpu_count) || 0"></span>，
         比率=<span x-text="(systemLoad && systemLoad.load_ratio_1m) || 0"></span>
       </div>
+      <div style="margin-top:8px;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span x-text="`任务队列：运行 ${taskQueue.running_count || 0}/${taskQueue.max_running || 1}，排队 ${taskQueue.queued_count || 0}`"></span>
+        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" @click="refreshTaskQueue()">刷新队列</button>
+      </div>
+      <div x-show="taskQueue.queued && taskQueue.queued.length>0"
+           style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
+        <template x-for="item in (taskQueue.queued || []).slice(0,6)" :key="`queued-${item.job_id}`">
+          <span class="badge badge-warn"
+                x-text="`#${item.queue_position || '-'} ${_jobKindZh(item.kind)} (${item.job_id})`"></span>
+        </template>
+      </div>
       <div x-show="ingestPreviewLoading" style="margin-top:8px;color:var(--muted)">预览扫描中，请稍候…</div>
       <div x-show="ingestPreviewError" class="badge badge-danger" style="margin-top:8px" x-text="ingestPreviewError"></div>
       <div x-show="ingestPreview" style="margin-top:10px;border-top:1px dashed var(--border);padding-top:10px">
@@ -366,35 +518,49 @@
       </div>
     </div>
 
-    <div class="card" style="margin-bottom:14px">
+    <div class="card" id="ai-settings-card" style="margin-bottom:14px">
       <div class="card-title">AI 配置（用于脚本脑爆与脚本生成）</div>
       <div class="form-grid">
         <div class="form-field">
           <div class="input-label">AI Provider</div>
-          <select class="input" x-model="aiSettings.provider" @change="onProviderChanged()">
-            <option value="openai">openai</option>
-            <option value="anthropic">anthropic</option>
-            <option value="moonshot">moonshot</option>
-            <option value="kimi">kimi</option>
-            <option value="qwen">qwen</option>
-            <option value="gemini">gemini</option>
-            <option value="maxmini">maxmini</option>
+          <select class="input" x-model="aiSettings.provider" @change="onProviderChanged(true)">
+            <template x-for="item in aiProviderOptions()" :key="`provider-${item.provider_id}`">
+              <option :value="item.provider_id" x-text="`${item.provider_id} (${item.label || item.provider_id})`"></option>
+            </template>
           </select>
         </div>
         <div class="form-field">
-          <div class="input-label">Model（可选）</div>
-          <input class="input" type="text" x-model="aiSettings.ai_model" placeholder="如 gpt-4o-mini / claude-sonnet-4-6" />
+          <div class="input-label">Model（可下拉选择，也可手填）</div>
+          <input class="input" list="ai-model-options" type="text" x-model="aiSettings.ai_model"
+                 @change="onAiModelChanged()"
+                 placeholder="如 gpt-4o-mini / claude-sonnet-4-6" />
+          <datalist id="ai-model-options">
+            <template x-for="m in aiModelOptions()" :key="`ai-model-${m}`">
+              <option :value="m"></option>
+            </template>
+          </datalist>
         </div>
         <div class="form-field">
-          <div class="input-label">Embedding Model（可选）</div>
-          <input class="input" type="text" x-model="aiSettings.embedding_model" placeholder="如 text-embedding-3-small" />
+          <div class="input-label">Embedding Model（可选，不选用默认）</div>
+          <input class="input" list="embedding-model-options" type="text" x-model="aiSettings.embedding_model"
+                 placeholder="留空默认 text-embedding-3-small" />
+          <datalist id="embedding-model-options">
+            <template x-for="m in embeddingModelOptions()" :key="`embedding-model-${m}`">
+              <option :value="m"></option>
+            </template>
+            <option value="text-embedding-3-small"></option>
+            <option value="text-embedding-3-large"></option>
+            <option value="text-embedding-ada-002"></option>
+          </datalist>
+          <div style="font-size:12px;color:var(--muted);margin-top:6px"
+               x-text="`当前生效 Embedding 模型：${embeddingModelResolved()}`"></div>
         </div>
         <div class="form-field full">
           <div class="input-label">Base URL（可选）</div>
           <input class="input" type="text" x-model="aiSettings.ai_base_url" placeholder="如 https://api.openai.com/v1" />
           <div style="display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap">
             <span style="font-size:12px;color:var(--muted)"
-                  x-text="recommendedBaseUrl() ? `推荐：${recommendedBaseUrl()}` : '当前 provider 无默认推荐地址'"></span>
+                  x-text="recommendedBaseUrl(aiSettings.provider, aiSettings.ai_model) ? `推荐：${recommendedBaseUrl(aiSettings.provider, aiSettings.ai_model)}` : '当前 provider/model 无默认推荐地址'"></span>
             <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" @click="fillRecommendedBaseUrl()">
               一键填充推荐地址
             </button>
@@ -424,6 +590,9 @@
             清空 Anthropic Key
           </label>
         </div>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-top:8px">
+        密钥存储：<span x-text="(aiStatus.secret_storage && aiStatus.secret_storage.available) ? `系统凭据（${aiStatus.secret_storage.backend || 'secure'}）` : `降级本地配置（${(aiStatus.secret_storage && aiStatus.secret_storage.reason) || 'secret backend unavailable'})`"></span>
       </div>
       <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
         <button class="btn btn-primary" @click="saveAiSettings()" :disabled="aiSaving">
@@ -461,6 +630,24 @@
         <span class="badge badge-info" x-text="`当前: ${retrievalModeZh(libraryRetrievalMode)}`"></span>
         <span class="badge" :class="libraryEmbeddingEnabled ? 'badge-success' : 'badge-warn'"
               x-text="libraryEmbeddingEnabled ? `向量可用（${libraryEmbeddingReadyAssets}）` : `向量不可用（${embeddingStatusZh(libraryEmbeddingStatus)}）`"></span>
+      </div>
+      <div class="card" style="margin-bottom:10px;padding:10px" x-show="!libraryEmbeddingEnabled">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span class="badge badge-warn">向量检索未启用</span>
+          <span style="font-size:12px;color:var(--muted)" x-text="libraryEmbeddingStatusMessage || '请配置 OpenAI Key 后再试'"></span>
+          <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" @click="openAiSettingsSection()">
+            定位到 AI 配置
+          </button>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">
+          <input class="input" type="password" x-model="aiSettings.openai_api_key" placeholder="快速填 OpenAI Key（sk-...）"
+                 style="max-width:360px" />
+          <button class="btn btn-primary" style="font-size:12px;padding:5px 10px"
+                  :disabled="aiSaving || !(aiSettings.openai_api_key || '').trim()"
+                  @click="saveVectorOpenAiKey()">
+            一键启用向量检索
+          </button>
+        </div>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:10px">
         <input class="input" type="text" x-model="libraryQuery"
@@ -577,19 +764,19 @@
 
       <div class="card" style="margin-bottom:4px">
         <div style="display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap">
-          <div style="font-size:13px;color:var(--muted)">生产模式入口</div>
+          <div style="font-size:13px;color:var(--muted)" x-text="productionModeHeading()"></div>
           <div class="view-switch">
             <button class="btn"
                     :class="productionView==='hub' ? 'btn-primary' : 'btn-ghost'"
                     style="font-size:12px;padding:5px 10px"
                     @click="switchProductionView('hub')">
-              模块中心
+              <span x-text="productionViewLabel('hub')"></span>
             </button>
             <button class="btn"
                     :class="productionView==='workflow' ? 'btn-primary' : 'btn-ghost'"
                     style="font-size:12px;padding:5px 10px"
                     @click="switchProductionView('workflow')">
-              7步流程
+              <span x-text="productionViewLabel('workflow')"></span>
             </button>
           </div>
         </div>
@@ -599,7 +786,7 @@
       <div class="card fade-in" style="margin-bottom:4px" x-show="productionView==='hub'">
         <div class="card-title">
           <span>🧩</span>
-          <span>能力工作台（模块化功能）</span>
+          <span x-text="capabilityHubTitle()"></span>
           <button class="btn btn-ghost" style="margin-left:auto;font-size:12px;padding:4px 10px"
                   @click="loadCapabilityWorkbench()" :disabled="capabilitiesLoading || topicLibraryLoading">
             刷新能力数据
@@ -607,7 +794,7 @@
         </div>
         <div x-show="capabilityMessage" class="badge badge-info" style="margin-bottom:10px" x-text="capabilityMessage"></div>
         <div x-show="!projectDir" class="badge badge-warn" style="margin-bottom:10px">
-          当前未打开项目：可直接使用 inline/hybrid 能力（如字幕校准、图片语义、公众号扩写、发布文案、内容发布 dry-run）。
+          当前未打开项目：仍可直接使用单功能模式（如字幕校准、图片语义、公众号扩写、发布文案、内容发布预演）。
         </div>
 
         <div class="capability-groups">
@@ -835,11 +1022,31 @@
               </select>
             </div>
           </div>
-          <div style="display:flex;gap:8px;margin-top:10px">
-            <button class="btn btn-primary" @click="buildRefinePlan()">生成精剪策略</button>
-            <button class="btn btn-ghost" @click="buildNleHandoff()">生成 NLE 交接包</button>
-            <button class="btn btn-success" @click="executeNleRefinement()">交接并启动编辑器</button>
-            <button class="btn btn-primary" @click="collectNleMaster()">导回成片</button>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn btn-primary" @click="buildRefinePlan()">生成精剪策略</button>
+          <button class="btn btn-ghost" @click="buildNleHandoff()">生成 NLE 交接包</button>
+          <button class="btn btn-success" @click="executeNleRefinement()">交接并启动编辑器</button>
+          <button class="btn btn-primary" @click="collectNleMaster()">导回成片</button>
+        </div>
+          <div class="card" style="margin-top:10px">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <div class="card-title" style="margin:0">NLE 连接器状态</div>
+              <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px"
+                      @click="loadNleConnectors(handoffInput.editor || '')" :disabled="nleConnectorsLoading">
+                刷新状态
+              </button>
+              <span class="badge badge-info" x-show="nleConnectorsLoading">检测中…</span>
+            </div>
+            <div x-show="nleConnectors && nleConnectors.length>0" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+              <template x-for="item in (nleConnectors || [])" :key="`nle-${item.editor}`">
+                <span class="badge" :class="item.available ? 'badge-success' : 'badge-warn'"
+                      :title="item.hint || item.reason || ''"
+                      x-text="`${item.editor}: ${item.available ? '可用' : '未就绪'}`"></span>
+              </template>
+            </div>
+            <div style="font-size:12px;color:var(--muted);margin-top:6px"
+                 x-show="nleConnectorByEditor(handoffInput.editor || '') && nleConnectorByEditor(handoffInput.editor || '').hint"
+                 x-text="`提示：${nleConnectorByEditor(handoffInput.editor || '').hint}`"></div>
           </div>
           <div class="form-grid" style="margin-top:10px">
             <div class="form-field">
@@ -1390,7 +1597,11 @@
               </select>
             </div>
             <div class="form-field">
-              <div class="input-label">返回条数</div>
+              <div class="input-label">分析上限（最多图片数）</div>
+              <input class="input" type="number" min="1" max="8000" x-model.number="imageSemanticInput.analyze_max_images" />
+            </div>
+            <div class="form-field">
+              <div class="input-label">检索返回条数</div>
               <input class="input" type="number" min="1" x-model.number="imageSemanticInput.limit" />
             </div>
             <div class="form-field full">
@@ -1610,14 +1821,128 @@
               <div class="input-label">Blog Markdown（可选）</div>
               <textarea class="json-editor" style="min-height:90px" x-model="contentPublishInput.article_markdown"></textarea>
             </div>
+            <div class="form-field full">
+              <div class="input-label">平台连接器（真实发布）</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+                <button class="btn" :class="publishConnectorEditorMode==='form' ? 'btn-primary' : 'btn-ghost'"
+                        style="font-size:12px;padding:5px 10px"
+                        @click="publishConnectorEditorMode='form'">表单编辑</button>
+                <button class="btn" :class="publishConnectorEditorMode==='json' ? 'btn-primary' : 'btn-ghost'"
+                        style="font-size:12px;padding:5px 10px"
+                        @click="publishConnectorEditorMode='json'">高级 JSON</button>
+                <button class="btn btn-ghost" style="font-size:12px;padding:5px 10px" @click="addPublishConnectorRow('')">新增连接器</button>
+              </div>
+              <div x-show="publishConnectorEditorMode==='form'" style="border:1px solid var(--border);border-radius:8px;padding:10px">
+                <template x-for="(row, idx) in publishConnectorRows" :key="`connector-row-${idx}-${row.platform_id}`">
+                  <div style="border-bottom:1px dashed var(--border);padding:10px 0">
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                      <span class="badge badge-info" x-text="contentPublishPlatformName(row.platform_id)"></span>
+                      <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" @click="removePublishConnectorRow(idx)">删除</button>
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-top:8px">
+                      <div>
+                        <div class="input-label">平台 ID</div>
+                        <input class="input" x-model="row.platform_id" @input="syncPublishConnectorJsonFromRows()" placeholder="youtube / douyin / wechat_mp / default" />
+                      </div>
+                      <div>
+                        <div class="input-label">类型</div>
+                        <select class="input" x-model="row.kind" @change="syncPublishConnectorJsonFromRows()">
+                          <option value="webhook">webhook</option>
+                          <option value="youtube_api">youtube_api（YouTube直连）</option>
+                        </select>
+                      </div>
+                      <div>
+                        <div class="input-label">方法</div>
+                        <select class="input" x-model="row.method" @change="syncPublishConnectorJsonFromRows()">
+                          <option value="POST">POST</option>
+                          <option value="PUT">PUT</option>
+                          <option value="PATCH">PATCH</option>
+                        </select>
+                      </div>
+                      <div>
+                        <div class="input-label">超时(秒)</div>
+                        <input class="input" type="number" min="1" max="120" x-model.number="row.timeout_s" @change="syncPublishConnectorJsonFromRows()" />
+                      </div>
+                    </div>
+                    <div style="margin-top:8px">
+                      <div class="input-label">发布网关 Endpoint</div>
+                      <input class="input" x-model="row.endpoint" @input="syncPublishConnectorJsonFromRows()"
+                             :placeholder="row.kind === 'youtube_api' ? 'youtube_api 可留空（将使用官方上传 API）' : 'https://your-gateway.example.com/publish'" />
+                    </div>
+                    <div style="margin-top:8px">
+                      <div class="input-label">Token（留空则保留已存 token）</div>
+                      <input class="input" type="password" x-model="row.token" @input="syncPublishConnectorJsonFromRows()"
+                             :placeholder="row.kind === 'youtube_api' ? 'YouTube OAuth Access Token' : 'Bearer token（仅新增或替换时填写）'" />
+                      <div style="font-size:12px;color:var(--muted);margin-top:4px" x-show="row.token_masked">
+                        已保存 token：<span x-text="row.token_masked"></span>
+                      </div>
+                    </div>
+                    <div x-show="row.kind==='youtube_api'" style="margin-top:8px;border:1px dashed var(--border);border-radius:8px;padding:8px">
+                      <div style="font-size:12px;color:var(--muted);margin-bottom:8px">YouTube 直连参数</div>
+                      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px">
+                        <div>
+                          <div class="input-label">视频文件（可选）</div>
+                          <input class="input" x-model="row.media_file" @input="syncPublishConnectorJsonFromRows()"
+                                 placeholder="/path/to/video.mp4（留空取 media_urls 第一个）" />
+                        </div>
+                        <div>
+                          <div class="input-label">隐私状态</div>
+                          <select class="input" x-model="row.privacy_status" @change="syncPublishConnectorJsonFromRows()">
+                            <option value="private">private</option>
+                            <option value="unlisted">unlisted</option>
+                            <option value="public">public</option>
+                          </select>
+                        </div>
+                        <div>
+                          <div class="input-label">分类 ID</div>
+                          <input class="input" x-model="row.category_id" @input="syncPublishConnectorJsonFromRows()" placeholder="22" />
+                        </div>
+                        <div style="display:flex;align-items:center">
+                          <label style="display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px">
+                            <input type="checkbox" x-model="row.notify_subscribers" @change="syncPublishConnectorJsonFromRows()" />
+                            <span>通知订阅者</span>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                    <div style="margin-top:8px;border:1px dashed var(--border);border-radius:8px;padding:8px">
+                      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+                        <span style="font-size:12px;color:var(--muted)">Headers</span>
+                        <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" @click="addPublishConnectorHeader(idx)">+ Header</button>
+                      </div>
+                      <template x-for="(header, hidx) in (row.header_items || [])" :key="`header-${idx}-${hidx}`">
+                        <div style="display:grid;grid-template-columns:minmax(120px,1fr) minmax(180px,2fr) auto;gap:8px;margin-bottom:6px">
+                          <input class="input" x-model="header.key" @input="syncPublishConnectorJsonFromRows()" placeholder="Header-Key" />
+                          <input class="input" x-model="header.value" @input="syncPublishConnectorJsonFromRows()" placeholder="Header-Value" />
+                          <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" @click="removePublishConnectorHeader(idx, hidx)">删除</button>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </template>
+                <div style="font-size:12px;color:var(--muted);margin-top:8px">
+                  说明：`blog` 平台无需连接器；`youtube_api` 为平台直连；其他平台建议接入你自己的发布网关（webhook）。
+                </div>
+              </div>
+              <div x-show="publishConnectorEditorMode==='json'">
+                <textarea class="json-editor" style="min-height:140px" x-model="contentPublishInput.connectors_json"
+                          placeholder='{\"youtube\":{\"kind\":\"webhook\",\"endpoint\":\"https://...\",\"token\":\"...\"}}'></textarea>
+                <div style="font-size:12px;color:var(--muted);margin-top:6px">
+                  高级模式下可直接编辑 JSON；敏感字段显示掩码时会自动按“保持原值”处理。
+                </div>
+              </div>
+            </div>
           </div>
           <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
             <button class="btn btn-ghost" @click="loadContentPublishPlatforms()">刷新平台列表</button>
+            <button class="btn btn-ghost" @click="loadPublishSettings()" :disabled="publishSettingsLoading">读取连接器</button>
+            <button class="btn btn-ghost" @click="savePublishSettings()" :disabled="publishSettingsSaving">保存连接器</button>
             <button class="btn btn-primary" @click="bootstrapContentPublishSession()">初始化会话</button>
             <button class="btn btn-primary" @click="buildContentPublishPlan()">生成发布计划</button>
             <button class="btn btn-success" @click="runContentPublish()">执行发布</button>
             <button class="btn btn-ghost" @click="rerunContentPublishFailed()">仅复跑失败项</button>
           </div>
+          <div x-show="publishSettingsMessage" style="font-size:12px;color:var(--muted);margin-top:8px" x-text="publishSettingsMessage"></div>
           <div class="card" style="margin-top:10px" x-show="contentPublishSession">
             <div class="card-title">发布会话</div>
             <textarea class="json-editor" style="min-height:100px" :value="jsonPretty(contentPublishSession)" readonly></textarea>
@@ -1682,83 +2007,180 @@
           </div>
 
           <div class="card" style="margin-top:10px">
-            <div class="card-title">节点编排器（可视化顺序编辑）</div>
+            <div class="card-title">节点编排器（连线式画布）</div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
               <select class="input" style="max-width:240px" x-model="workflowQuickAddCapability">
                 <template x-for="item in workflowCatalog" :key="`cap-${item.capability_id}`">
                   <option :value="item.capability_id" x-text="item.capability_id"></option>
                 </template>
               </select>
+              <button class="btn" :class="workflowSimpleMode ? 'btn-primary' : 'btn-ghost'"
+                      @click="workflowSimpleMode = !workflowSimpleMode">
+                <span x-text="workflowSimpleMode ? '简易画布模式' : '高级编辑模式'"></span>
+              </button>
               <button class="btn btn-ghost" @click="addWorkflowStep(workflowQuickAddCapability)">添加节点</button>
               <button class="btn btn-ghost" @click="addWorkflowConditionStep()">添加条件节点</button>
+              <button class="btn btn-ghost" @click="autoLayoutWorkflowNodes()">自动布局</button>
+              <button class="btn btn-ghost" @click="workflowUndo()" :disabled="!workflowCanUndo()">撤销</button>
+              <button class="btn btn-ghost" @click="workflowRedo()" :disabled="!workflowCanRedo()">重做</button>
+              <button class="btn btn-ghost" @click="workflowCopyActiveNode()">复制节点</button>
+              <button class="btn btn-ghost" @click="workflowPasteNode()" :disabled="!workflowClipboardNode">粘贴节点</button>
               <button class="btn btn-ghost" @click="writeWorkflowEditorToJson()">写回 JSON</button>
               <button class="btn btn-ghost" @click="applyWorkflowRawJsonToEditor()">从 JSON 同步</button>
               <span x-show="workflowStepJsonError" class="badge badge-danger" x-text="workflowStepJsonError"></span>
             </div>
             <div x-show="workflowSteps.length===0" style="font-size:12px;color:var(--muted)">暂无节点，请先添加</div>
-            <div x-show="workflowSteps.length>0" style="display:flex;flex-direction:column;gap:10px">
-              <div class="workflow-canvas-wrap"
-                   @dragover.prevent
-                   @drop.prevent="onWorkflowCanvasDropToEnd($event)">
-                <div class="workflow-canvas">
-                  <template x-for="(step, idx) in workflowSteps" :key="`wf-canvas-${idx}-${step.step_id}`">
-                    <div style="display:flex;align-items:center;gap:8px">
-                      <div class="workflow-canvas-node"
-                           :class="{
-                             'active': idx===workflowActiveStepIndex,
-                             'dragging': idx===workflowCanvasDragIndex,
-                             'drop-target': idx===workflowCanvasDropIndex && workflowCanvasDragIndex>=0 && idx!==workflowCanvasDragIndex,
-                             'disabled': !step.enabled
-                           }"
-                           draggable="true"
-                           @click="setActiveWorkflowStep(idx)"
-                           @dragstart="onWorkflowNodeDragStart(idx, $event)"
-                           @dragover="onWorkflowNodeDragOver(idx, $event)"
-                           @drop="onWorkflowNodeDrop(idx, $event)"
-                           @dragend="onWorkflowNodeDragEnd()">
-                        <div class="workflow-canvas-step" x-text="`#${idx+1}`"></div>
-                        <div class="workflow-canvas-title" x-text="workflowStepDisplay(step)"></div>
-                        <div class="workflow-canvas-meta" x-text="workflowStepInputSummary(step)"></div>
+            <div x-show="workflowSteps.length>0">
+              <div class="workflow-builder-layout">
+                <div class="workflow-builder-left">
+                  <div class="workflow-canvas-toolbar">
+                    <span class="badge badge-info" x-text="`缩放 ${workflowCanvasZoomLabel()}`"></span>
+                    <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" @click="zoomWorkflowCanvas(-0.08)">缩小</button>
+                    <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" @click="zoomWorkflowCanvas(0.08)">放大</button>
+                    <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" @click="fitWorkflowCanvasView()">适配视图</button>
+                    <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" @click="resetWorkflowCanvasView()">重置视图</button>
+                    <span style="font-size:12px;color:var(--muted)">`Ctrl/⌘+滚轮` 缩放，拖动画布空白区域可平移，`Ctrl/⌘+Z/Y` 撤销重做，`Ctrl/⌘+C/V` 复制粘贴节点</span>
+                  </div>
+                  <div class="workflow-canvas-wrap" id="workflow-node-canvas-wrap"
+                       :class="{ 'panning': workflowCanvasPanning }"
+                       @wheel="onWorkflowCanvasWheel($event)"
+                       @mousedown="onWorkflowCanvasMouseDown($event)">
+                    <div class="workflow-canvas-scene" :style="workflowCanvasSceneStyle()">
+                      <div class="workflow-canvas-board" :style="workflowCanvasBoardStyle()">
+                        <svg class="workflow-canvas-edges"
+                             :viewBox="`0 0 ${workflowCanvasSize.width} ${workflowCanvasSize.height}`"
+                             preserveAspectRatio="none">
+                          <template x-for="edge in workflowCanvasEdges()" :key="`wf-edge-canvas-${edge.from}-${edge.to}-${edge.when}-${edge.source}`">
+                            <path class="workflow-canvas-edge"
+                                  :class="{
+                                    'invalid': edge.invalid,
+                                    'kind-success': edge.output_key==='success' || edge.output_key==='true',
+                                    'kind-error': edge.output_key==='error' || edge.output_key==='false',
+                                    'kind-skip': edge.output_key==='skip',
+                                    'kind-default': edge.output_key==='default'
+                                  }"
+                                  :d="edge.path"></path>
+                          </template>
+                          <path x-show="workflowCanvasLinkActive"
+                                class="workflow-canvas-edge draft"
+                                :d="workflowCanvasDraftPath()"></path>
+                        </svg>
+
+                        <template x-for="(step, idx) in workflowSteps" :key="`wf-canvas-${idx}-${step.step_id}`">
+                          <div class="workflow-canvas-node"
+                               :class="[
+                                 workflowNodeRuntimeClass(step),
+                                 {
+                                   'active': idx===workflowActiveStepIndex,
+                                   'dragging': idx===workflowCanvasDragIndex,
+                                   'disabled': !step.enabled
+                                 }
+                               ]"
+                               :style="workflowNodeStyle(step, idx)"
+                               @click="setActiveWorkflowStep(idx)"
+                               @mousedown="onWorkflowNodePointerDown(idx, $event)">
+                            <button type="button"
+                                    class="workflow-port-input"
+                                    :class="{ 'linking-target': workflowCanvasLinkActive }"
+                                    :data-wf-input-index="idx"
+                                    :title="`连接到 ${step.step_id || ('step_'+(idx+1))}`"
+                                    @mouseup.stop.prevent="finishWorkflowConnect(idx)"></button>
+                            <div class="workflow-canvas-step" x-text="`#${idx+1}`"></div>
+                            <div class="workflow-canvas-title" x-text="workflowStepDisplay(step)"></div>
+                            <div class="workflow-canvas-meta" x-text="workflowStepInputSummary(step)"></div>
+                            <div class="workflow-node-runtime-badge"
+                                 x-show="workflowNodeRuntimeText(step)"
+                                 :class="workflowNodeRuntimeClass(step)"
+                                 x-text="workflowNodeRuntimeText(step)"></div>
+                            <div class="workflow-node-ports">
+                              <template x-for="port in workflowNodeOutputs(step)" :key="`wf-port-${idx}-${port.key}`">
+                                <div class="workflow-node-port-row">
+                                  <span class="workflow-node-port-badge" x-text="workflowNodeRouteBadge(port.key)"></span>
+                                  <span class="workflow-node-port-target" x-text="workflowNodeRouteTarget(step, port.key) || '未连接'"></span>
+                                  <button type="button"
+                                          class="workflow-port-output-btn"
+                                          :class="{
+                                            'active': workflowCanvasLinkActive && workflowCanvasLinkFromIndex===idx && workflowCanvasLinkOutputKey===port.key
+                                          }"
+                                          :title="`从 ${port.key} 连线（双击可清空）`"
+                                          @dblclick.stop.prevent="clearWorkflowRoute(idx, port.key)"
+                                          @mousedown.stop.prevent="startWorkflowConnect(idx, port.key, $event)"></button>
+                                </div>
+                              </template>
+                            </div>
+                          </div>
+                        </template>
+
+                        <div class="workflow-canvas-hint">
+                          拖拽节点可自由排布；从右侧端口拖线到左侧端口建立跳转，双击输出端口可清空对应连线。
+                        </div>
                       </div>
-                      <div class="workflow-canvas-arrow" x-show="idx < workflowSteps.length - 1">→</div>
                     </div>
-                  </template>
-                  <div class="workflow-canvas-end-drop" x-show="workflowSteps.length>0">
-                    拖到这里放在末尾
+                    <div class="workflow-minimap"
+                         x-show="workflowSteps.length>0"
+                         @mousedown.stop.prevent="onWorkflowMinimapPointer($event)">
+                      <div class="workflow-minimap-title">Minimap</div>
+                      <svg :viewBox="`0 0 ${workflowMinimapModel().miniWidth} ${workflowMinimapModel().miniHeight}`"
+                           class="workflow-minimap-svg">
+                        <rect x="0" y="0"
+                              :width="workflowMinimapModel().miniWidth"
+                              :height="workflowMinimapModel().miniHeight"
+                              class="workflow-minimap-bg"></rect>
+                        <template x-for="n in workflowMinimapModel().nodes" :key="`mini-${n.step_id}`">
+                          <rect :x="n.x" :y="n.y" :width="n.w" :height="n.h"
+                                class="workflow-minimap-node"
+                                :class="{
+                                  'active': n.active,
+                                  'done': n.status==='done' || n.status==='success',
+                                  'error': n.status==='error' || n.status==='failed' || n.status==='cancelled',
+                                  'running': n.status==='running'
+                                }"></rect>
+                        </template>
+                        <rect :x="workflowMinimapModel().viewport.x"
+                              :y="workflowMinimapModel().viewport.y"
+                              :width="workflowMinimapModel().viewport.w"
+                              :height="workflowMinimapModel().viewport.h"
+                              class="workflow-minimap-viewport"></rect>
+                      </svg>
+                    </div>
+                  </div>
+
+                  <div class="card" style="padding:8px;border:1px solid var(--border)">
+                    <div class="card-title">路由概览</div>
+                    <div x-show="workflowGraphEdgesPreview().length===0" style="font-size:12px;color:var(--muted)">
+                      暂无可用路由（只有单节点或目标未定义）
+                    </div>
+                    <div x-show="workflowGraphEdgesPreview().length>0" style="display:flex;gap:6px;flex-wrap:wrap">
+                      <template x-for="edge in workflowGraphEdgesPreview()" :key="`wf-edge-${edge.from}-${edge.when}-${edge.to}-${edge.source}`">
+                        <span class="badge badge-info" x-text="`${edge.from} --${edge.when}/${edge.source}--> ${edge.to}`"></span>
+                      </template>
+                    </div>
+                    <div x-show="workflowGraphInvalidEdges().length>0" style="margin-top:8px">
+                      <span class="badge badge-danger">存在无效跳转，请检查目标 step_id</span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div class="card" style="padding:8px;border:1px solid var(--border)">
-                <div class="card-title">路由概览</div>
-                <div x-show="workflowGraphEdgesPreview().length===0" style="font-size:12px;color:var(--muted)">
-                  暂无可用路由（只有单节点或目标未定义）
-                </div>
-                <div x-show="workflowGraphEdgesPreview().length>0" style="display:flex;gap:6px;flex-wrap:wrap">
-                  <template x-for="edge in workflowGraphEdgesPreview()" :key="`wf-edge-${edge.from}-${edge.when}-${edge.to}-${edge.source}`">
-                    <span class="badge badge-info" x-text="`${edge.from} --${edge.when}/${edge.source}--> ${edge.to}`"></span>
-                  </template>
-                </div>
-                <div x-show="workflowGraphInvalidEdges().length>0" style="margin-top:8px">
-                  <span class="badge badge-danger">存在无效跳转，请检查目标 step_id</span>
-                </div>
-              </div>
+                <div class="workflow-builder-right">
+                  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+                    <span class="badge badge-info" x-text="`当前编辑节点: ${workflowActiveStepIndex + 1}/${workflowSteps.length}`"></span>
+                    <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px"
+                            @click="setActiveWorkflowStep(workflowActiveStepIndex-1)"
+                            :disabled="workflowActiveStepIndex<=0">上一节点</button>
+                    <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px"
+                            @click="setActiveWorkflowStep(workflowActiveStepIndex+1)"
+                            :disabled="workflowActiveStepIndex>=workflowSteps.length-1">下一节点</button>
+                  </div>
 
-              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                <span class="badge badge-info" x-text="`当前编辑节点: ${workflowActiveStepIndex + 1}/${workflowSteps.length}`"></span>
-                <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px"
-                        @click="setActiveWorkflowStep(workflowActiveStepIndex-1)"
-                        :disabled="workflowActiveStepIndex<=0">上一节点</button>
-                <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px"
-                        @click="setActiveWorkflowStep(workflowActiveStepIndex+1)"
-                        :disabled="workflowActiveStepIndex>=workflowSteps.length-1">下一节点</button>
-              </div>
-
-              <template x-for="(step, idx) in workflowSteps" :key="`wf-editor-${idx}-${step.step_id}`">
-                <div class="card" style="border:1px dashed var(--border);padding:10px" x-show="idx===workflowActiveStepIndex">
+                  <template x-for="(step, idx) in workflowSteps" :key="`wf-editor-${idx}-${step.step_id}`">
+                    <div class="card workflow-node-editor-card" style="border:1px dashed var(--border);padding:10px" x-show="idx===workflowActiveStepIndex">
                   <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
                     <span class="badge badge-info" x-text="`Step ${idx+1}`"></span>
                     <span style="font-size:12px;color:var(--muted)" x-text="step.step_id || '-'"></span>
+                    <span class="badge"
+                          :class="workflowNodeRuntimeClass(step)"
+                          x-show="workflowNodeRuntimeText(step)"
+                          x-text="workflowNodeRuntimeText(step)"></span>
                     <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px;margin-left:auto"
                             @click="moveWorkflowStep(idx, -1)" :disabled="idx===0">上移</button>
                     <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px"
@@ -1766,7 +2188,51 @@
                     <button class="btn btn-danger" style="font-size:11px;padding:3px 8px" @click="removeWorkflowStep(idx)">删除</button>
                   </div>
 
-                  <div class="form-grid">
+                  <div class="form-grid" x-show="workflowSimpleMode">
+                    <div class="form-field">
+                      <div class="input-label">节点类型</div>
+                      <select class="input" x-model="step.node_type" @change="onWorkflowStepNodeTypeChange(idx)">
+                        <option value="action">action</option>
+                        <option value="condition">condition</option>
+                      </select>
+                    </div>
+                    <div class="form-field" x-show="step.node_type==='action'">
+                      <div class="input-label">能力</div>
+                      <select class="input" x-model="step.capability_id" @change="onWorkflowStepCapabilityChange(idx)">
+                        <template x-for="item in workflowCatalog" :key="`wf-simple-cap-${idx}-${item.capability_id}`">
+                          <option :value="item.capability_id" x-text="item.capability_id"></option>
+                        </template>
+                      </select>
+                    </div>
+                    <div class="form-field" x-show="step.node_type==='action'">
+                      <div class="input-label">动作</div>
+                      <select class="input" x-model="step.action" @change="onWorkflowStepChanged()">
+                        <template x-for="action in workflowActionsForCapability(step.capability_id)" :key="`wf-simple-action-${idx}-${action}`">
+                          <option :value="action" x-text="action"></option>
+                        </template>
+                      </select>
+                    </div>
+                    <div class="form-field">
+                      <div class="input-label">step_id</div>
+                      <input class="input" x-model="step.step_id" @change="onWorkflowStepChanged()" placeholder="step_xxx" />
+                    </div>
+                    <div class="form-field">
+                      <div class="input-label">next_step_id</div>
+                      <input class="input" x-model="step.next_step_id" @change="onWorkflowStepChanged()" placeholder="留空默认顺序下一个" />
+                    </div>
+                    <div class="form-field full">
+                      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)">
+                        <input type="checkbox" x-model="step.enabled" @change="onWorkflowStepChanged()" />
+                        节点启用
+                      </label>
+                    </div>
+                    <div class="form-field full" x-show="step.node_type==='action'">
+                      <div class="input-label">input JSON（简易）</div>
+                      <textarea class="json-editor" style="min-height:90px" x-model="step.input_json" @change="onWorkflowStepChanged()"></textarea>
+                    </div>
+                  </div>
+
+                  <div class="form-grid" x-show="!workflowSimpleMode">
                     <div class="form-field">
                       <div class="input-label">step_id</div>
                       <input class="input" x-model="step.step_id" @change="onWorkflowStepChanged()" placeholder="step_subtitle" />
@@ -1847,12 +2313,14 @@
                       <textarea class="json-editor" style="min-height:120px" x-model="step.input_json" @change="onWorkflowStepChanged()"></textarea>
                     </div>
                   </div>
+                    </div>
+                  </template>
                 </div>
-              </template>
+              </div>
             </div>
           </div>
 
-          <details class="card" style="margin-top:10px">
+          <details class="card" style="margin-top:10px" x-show="!workflowSimpleMode">
             <summary style="cursor:pointer;font-size:13px;color:var(--muted)">原始 JSON（高级模式）</summary>
             <div style="margin-top:10px">
               <div class="input-label">步骤 JSON（支持分支跳转）</div>
@@ -2690,6 +3158,7 @@
           <div style="font-size:13px;font-weight:500">
             Step <span x-text="currentStep"></span> 执行中…
           </div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px" x-text="jobEtaLabel()"></div>
           <div class="progress-bar-wrap" style="margin-top:6px">
             <div class="progress-bar" :style="`width:${jobProgress}%`"></div>
           </div>
@@ -3168,6 +3637,7 @@
         <!-- 全局进度 -->
         <div class="card" x-show="jobStatus==='running'">
           <div class="card-title">执行日志</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:8px" x-text="jobEtaLabel()"></div>
           <div class="log-box" id="log-box" x-text="jobLog.join('\n')"
                x-effect="scrollLog()"></div>
         </div>

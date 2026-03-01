@@ -5,8 +5,14 @@ Flask API 服务器 —— 为 pywebview GUI 提供后端接口
 端点:
   GET  /api/status               → 当前 workflow 状态
   GET  /api/system/load          → 系统负载与运行任务
+  GET  /api/system/preflight     → 启动前自检/诊断报告
   GET  /api/settings/ai          → 读取 AI 配置
   POST /api/settings/ai          → 保存 AI 配置
+  GET  /api/settings/ui          → 读取 UI/引导配置
+  POST /api/settings/ui          → 保存 UI/引导配置
+  GET  /api/settings/publish     → 读取发布连接器配置
+  POST /api/settings/publish     → 保存发布连接器配置
+  GET  /api/session/bootstrap    → 获取本地 API 会话 token
   POST /api/library/preview/local/images → 预览本地图片目录
   POST /api/library/ingest/local/images  → 异步分析本地图片语义并入库
   POST /api/init                 → 初始化新项目
@@ -31,6 +37,7 @@ Flask API 服务器 —— 为 pywebview GUI 提供后端接口
   POST /api/capabilities/refinement/handoff
   POST /api/capabilities/refinement/execute
   POST /api/capabilities/refinement/collect_master
+  GET  /api/capabilities/refinement/connectors
   GET/POST /api/capabilities/publish_prep/profiles
   POST /api/capabilities/publish_prep/generate
   POST /api/capabilities/subtitle_calibration/plan
@@ -99,19 +106,53 @@ import traceback
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, List, Any, Tuple
+from typing import Optional, Dict, List, Any, Tuple, Callable
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 APP_UI_DIR = REPO_ROOT / "apps" / "desktop" / "ui"
 
 from flask import Flask, jsonify, request, send_file, abort
+from werkzeug.exceptions import HTTPException, RequestEntityTooLarge
+from modules.app_api.job_store import JobStore
 from modules.app_api.publish_prep_api import create_publish_prep_blueprint
+from modules.app_api.secure_store import build_secret_store, SecretStore
+from modules.app_api.services.idempotency_store import CapabilityIdempotencyStore
+from modules.app_api.services.job_runtime import JobRuntime, ManagedJob as _ManagedJob, ManagedJobLog as _ManagedJobLog
+from modules.app_api.services.preflight_service import run_startup_preflight
+from modules.app_api.routes.agent_template_routes import create_agent_template_blueprint
+from modules.app_api.routes.agent_capability_routes import create_agent_capability_blueprint
+from modules.app_api.routes.agent_observability_routes import create_agent_observability_blueprint
+from modules.app_api.routes.agent_skill_routes import create_agent_skill_blueprint
+from modules.app_api.routes.agent_task_query_routes import create_agent_task_query_blueprint
+from modules.app_api.routes.agent_task_run_routes import create_agent_task_run_blueprint
+from modules.app_api.routes.capability_audio_voice_routes import create_audio_voice_capability_blueprint
+from modules.app_api.routes.capability_content_publish_routes import create_content_publish_capability_blueprint
+from modules.app_api.routes.capability_editing_routes import create_editing_capability_blueprint
+from modules.app_api.routes.capability_social_export_routes import create_social_export_capability_blueprint
+from modules.app_api.routes.capability_text_semantic_routes import create_text_semantic_capability_blueprint
+from modules.app_api.routes.idempotency_routes import create_idempotency_blueprint
+from modules.app_api.routes.job_routes import create_job_blueprint
+from modules.app_api.routes.legacy_project_routes import create_legacy_project_blueprint
+from modules.app_api.routes.library_routes import create_library_blueprint
+from modules.app_api.routes.settings_routes import create_settings_blueprint
+from modules.app_api.routes.system_routes import create_system_blueprint
+from modules.app_api.routes.ui_routes import create_ui_blueprint
+from modules.app_api.routes.workflow_routes import create_workflow_blueprint
 from modules.workflow_engine.workflow import WorkflowState, WorkflowRunner
 from modules.library.global_media_library import GlobalMediaLibrary
 from modules.step2_topic_planning.ai_client import AIClient
 
 app = Flask(__name__, static_folder=None)
 app.config["JSON_AS_ASCII"] = False
+app.config["MAX_CONTENT_LENGTH"] = max(
+    int(os.environ.get("VIDEOEDITOR_MAX_REQUEST_BYTES", str(25 * 1024 * 1024)) or (25 * 1024 * 1024)),
+    1024 * 1024,
+)
+
+_REQUIRE_LOCAL_API_TOKEN = str(os.environ.get("VIDEOEDITOR_REQUIRE_LOCAL_TOKEN", "0") or "0").strip() == "1"
+_LOCAL_API_TOKEN = str(os.environ.get("VIDEOEDITOR_LOCAL_API_TOKEN", "") or uuid.uuid4().hex).strip()
+_LOCAL_CSRF_TOKEN = str(os.environ.get("VIDEOEDITOR_LOCAL_CSRF_TOKEN", "") or uuid.uuid4().hex).strip()
+_REQUIRE_CSRF_PROTECTION = str(os.environ.get("VIDEOEDITOR_REQUIRE_CSRF", "1") or "1").strip() != "0"
 
 # ── 全局状态 ────────────────────────────────────────────────────────
 _project_dir: Optional[Path] = None
@@ -119,20 +160,627 @@ _ws: Optional[WorkflowState] = None
 _jobs: Dict[str, dict] = {}      # job_id → {status, log, progress}
 _window = None                    # pywebview window（由 app.py 注入）
 _library = GlobalMediaLibrary()
+_secret_store: SecretStore = build_secret_store(service_name="videoeditor.ai")
+_job_store: Optional[JobStore] = None
+_job_store_path: Optional[Path] = None
 app.register_blueprint(
     create_publish_prep_blueprint(
         project_dir_getter=lambda: _project_dir,
         ai_settings_getter=lambda: _load_ai_settings(),
     )
 )
+app.register_blueprint(
+    create_settings_blueprint(
+        request_is_local=lambda: _request_is_local(),
+        require_local_token_getter=lambda: bool(_REQUIRE_LOCAL_API_TOKEN),
+        require_csrf_getter=lambda: bool(_REQUIRE_CSRF_PROTECTION and _REQUIRE_LOCAL_API_TOKEN),
+        local_token_getter=lambda: _LOCAL_API_TOKEN,
+        local_csrf_token_getter=lambda: _LOCAL_CSRF_TOKEN,
+        load_ai_settings=lambda: _load_ai_settings(),
+        save_ai_settings=lambda payload: _save_ai_settings(payload),
+        apply_ai_env=lambda payload: _apply_ai_env(payload),
+        public_ai_settings=lambda payload: _public_ai_settings(payload),
+        load_ui_settings=lambda: _load_ui_settings(),
+        save_ui_settings=lambda payload: _save_ui_settings(payload),
+        load_publish_settings=lambda: _load_publish_settings(),
+        save_publish_settings=lambda payload: _save_publish_settings(payload),
+        mask_publish_connectors=lambda payload: _mask_publish_connectors(payload),
+    )
+)
+app.register_blueprint(
+    create_library_blueprint(
+        library_getter=lambda: _library,
+        jobs_getter=lambda: _jobs,
+        run_in_bg=lambda job_id, fn, *args, kind="generic", job_meta=None, **kwargs: _run_in_bg(
+            job_id, fn, *args, kind=kind, job_meta=job_meta, **kwargs
+        ),
+        running_heavy_jobs_getter=lambda: _running_heavy_jobs(),
+        system_load_snapshot_getter=lambda: _system_load_snapshot(),
+        task_queue_snapshot_getter=lambda: _task_queue_snapshot(),
+        cancel_token_getter=lambda: CANCEL_TOKEN,
+        job_cancelled_error_getter=lambda: JobCancelledError,
+    )
+)
+app.register_blueprint(
+    create_workflow_blueprint(
+        parse_request_context=lambda: _parse_request_context(),
+        build_custom_workflow_catalog=lambda: _build_custom_workflow_catalog(),
+        normalize_agent_template_id=lambda value: _normalize_agent_template_id(value),
+        parse_boolish=lambda value, default=False: _parse_boolish(value, default=default),
+        coerce_bool=lambda value, default=False: _coerce_bool(value, default=default),
+        custom_workflow_lock_getter=lambda: _custom_workflow_lock,
+        read_custom_workflow_store=lambda: _read_custom_workflow_store(),
+        save_custom_workflow_store=lambda store: _save_custom_workflow_store(store),
+        normalize_custom_workflow_payload=lambda payload, existing=None: _normalize_custom_workflow_payload(
+            payload, existing=existing
+        ),
+        resolve_custom_workflow_from_payload=lambda payload: _resolve_custom_workflow_from_payload(payload),
+        build_custom_workflow_plan=lambda workflow, payload, dry_run=False: _build_custom_workflow_plan(
+            workflow=workflow, payload=payload, dry_run=dry_run
+        ),
+        start_custom_workflow_run=lambda workflow, payload, request_context, source: _start_custom_workflow_run(
+            workflow=workflow,
+            payload=payload,
+            request_context=request_context,
+            source=source,
+        ),
+        read_custom_workflow_runs=lambda: _read_custom_workflow_runs(),
+        find_custom_workflow_run=lambda run_id: _find_custom_workflow_run(run_id),
+        build_failed_only_workflow_subset=lambda workflow, base_run: _build_failed_only_workflow_subset(
+            workflow=workflow,
+            base_run=base_run,
+        ),
+        project_dir_getter=lambda: _project_dir,
+    )
+)
+app.register_blueprint(
+    create_system_blueprint(
+        state_dict_getter=lambda: _state_dict(),
+        system_load_snapshot_getter=lambda: _system_load_snapshot(),
+        overloaded_getter=lambda: _is_overloaded(),
+        running_heavy_jobs_getter=lambda: _running_heavy_jobs(),
+        task_queue_snapshot_getter=lambda: _task_queue_snapshot(),
+        preflight_snapshot_getter=lambda force=False: _system_preflight_snapshot(force=bool(force)),
+    )
+)
+app.register_blueprint(
+    create_job_blueprint(
+        jobs_getter=lambda: _jobs,
+        load_job_from_store=lambda job_id: _load_job_from_store(job_id),
+        heavy_queue_lock_getter=lambda: _heavy_queue_lock,
+        heavy_job_queue_getter=lambda: _heavy_job_queue,
+        dispatch_heavy_queue_locked=lambda: _dispatch_heavy_queue_locked(),
+        persist_job_snapshot=lambda job_id, event_type="": _persist_job_snapshot(job_id, event_type=event_type),
+        system_load_snapshot_getter=lambda: _system_load_snapshot(),
+        state_dict_getter=lambda: _state_dict(),
+        estimate_job_eta=lambda job: _estimate_job_eta(job),
+    )
+)
+app.register_blueprint(
+    create_legacy_project_blueprint(
+        project_dir_getter=lambda: _project_dir,
+        workflow_state_getter=lambda: _ws,
+        jobs_getter=lambda: _jobs,
+        prepare_project_dirs=lambda project_path: _prepare_project_dirs(project_path),
+        library_getter=lambda: _library,
+        default_project_config=lambda extra=None: _default_project_config(extra),
+        load_state=lambda path: _load_state(path),
+        remember_last_project=lambda path: _remember_last_project(path),
+        state_dict=lambda: _state_dict(),
+        run_in_bg=lambda job_id, fn, *args, kind="generic", job_meta=None, **kwargs: _run_in_bg(
+            job_id, fn, *args, kind=kind, job_meta=job_meta, **kwargs
+        ),
+        choose_path=lambda mode: _choose_path(mode),
+    )
+)
+app.register_blueprint(
+    create_content_publish_capability_blueprint(
+        project_dir_getter=lambda: _project_dir,
+        parse_capability_input_mode=lambda value, default="project": _parse_capability_input_mode(value, default=default),
+        parse_platforms=lambda value: _parse_platforms(value),
+        resolve_content_publish_content=lambda payload, input_mode: _resolve_content_publish_content(
+            payload, input_mode=input_mode
+        ),
+        resolve_content_publish_connectors=lambda payload: _resolve_content_publish_connectors(payload),
+        read_content_publish_sessions=lambda: _read_content_publish_sessions(),
+        save_content_publish_sessions=lambda sessions: _save_content_publish_sessions(sessions),
+        read_content_publish_history=lambda: _read_content_publish_history(),
+        save_content_publish_history=lambda history: _save_content_publish_history(history),
+        read_project_json=lambda filename, fallback=None: _read_project_json(filename, fallback=fallback),
+        project_data_path=lambda filename: _project_data_path(filename),
+    )
+)
+app.register_blueprint(
+    create_text_semantic_capability_blueprint(
+        project_dir_getter=lambda: _project_dir,
+        parse_capability_input_mode=lambda value, default="project": _parse_capability_input_mode(value, default=default),
+        read_script_json=lambda: _read_script_json(),
+        extract_subtitles_from_script=lambda script_payload: _extract_subtitles_from_script(script_payload),
+        script_to_text_blocks=lambda script_payload: _script_to_text_blocks(script_payload),
+        load_ai_settings=lambda: _load_ai_settings(),
+        library_getter=lambda: _library,
+        project_data_path=lambda filename: _project_data_path(filename),
+    )
+)
+app.register_blueprint(
+    create_social_export_capability_blueprint(
+        project_dir_getter=lambda: _project_dir,
+        request_json_any_method=lambda: _request_json_any_method(),
+        parse_capability_input_mode=lambda value, default="project": _parse_capability_input_mode(value, default=default),
+        coerce_social_export_overrides=lambda payload, input_mode: _coerce_social_export_overrides(
+            payload,
+            input_mode=input_mode,
+        ),
+        normalize_export_template_payload=lambda payload: _normalize_export_template_payload(payload),
+        save_social_export_templates=lambda templates: _save_social_export_templates(templates),
+        normalize_export_template_id=lambda template_id: _normalize_export_template_id(template_id),
+        get_social_export_history=lambda: _get_social_export_history(),
+        capability_base_dir=lambda input_mode: _capability_base_dir(input_mode),
+        resolve_path_with_base=lambda path_raw, base_dir=None: _resolve_path_with_base(path_raw, base_dir=base_dir),
+        default_master_video_path=lambda: _default_master_video_path(),
+        parse_platforms=lambda payload_value: _parse_platforms(payload_value),
+        project_data_path=lambda filename: _project_data_path(filename),
+        build_social_export_runner=lambda **kwargs: _build_social_export_runner(**kwargs),
+        run_in_bg=lambda job_id, fn, *args, kind="generic", job_meta=None, **kwargs: _run_in_bg(
+            job_id, fn, *args, kind=kind, job_meta=job_meta, **kwargs
+        ),
+        task_queue_snapshot=lambda: _task_queue_snapshot(),
+    )
+)
+app.register_blueprint(
+    create_audio_voice_capability_blueprint(
+        project_dir_getter=lambda: _project_dir,
+        parse_capability_input_mode=lambda value, default="project": _parse_capability_input_mode(value, default=default),
+        capability_base_dir=lambda input_mode: _capability_base_dir(input_mode),
+        coerce_script_input=lambda payload, input_mode: _coerce_script_input(payload, input_mode=input_mode),
+        project_data_path=lambda filename: _project_data_path(filename),
+        parse_str_list=lambda value: _parse_str_list(value),
+        default_bgm_library_dirs=lambda custom_dir="", custom_dirs=(): _default_bgm_library_dirs(
+            custom_dir=custom_dir,
+            custom_dirs=custom_dirs,
+        ),
+        default_bgm_output_dir=lambda custom_dir="": _default_bgm_output_dir(custom_dir),
+        resolve_path_with_base=lambda path_raw, base_dir=None: _resolve_path_with_base(path_raw, base_dir=base_dir),
+        read_project_json=lambda filename, fallback=None: _read_project_json(filename, fallback=fallback),
+        default_master_video_path=lambda: _default_master_video_path(),
+        is_remote_media_url=lambda url: _is_remote_media_url(url),
+        build_audio_voice_runner=lambda **kwargs: _build_audio_voice_runner(**kwargs),
+        run_in_bg=lambda job_id, fn, *args, kind="generic", job_meta=None, **kwargs: _run_in_bg(
+            job_id, fn, *args, kind=kind, job_meta=job_meta, **kwargs
+        ),
+        task_queue_snapshot=lambda: _task_queue_snapshot(),
+    )
+)
+app.register_blueprint(
+    create_editing_capability_blueprint(
+        project_dir_getter=lambda: _project_dir,
+        workflow_state_getter=lambda: _ws,
+        request_json_any_method=lambda: _request_json_any_method(),
+        parse_capability_input_mode=lambda value, default="project": _parse_capability_input_mode(value, default=default),
+        parse_boolish=lambda value, default=False: _parse_boolish(value, default=default),
+        project_data_path=lambda filename: _project_data_path(filename),
+        slugify=lambda value: _slugify(value),
+        read_project_json=lambda filename, fallback=None: _read_project_json(filename, fallback=fallback),
+        coerce_materials_input=lambda payload, input_mode: _coerce_materials_input(payload, input_mode=input_mode),
+        extract_material_semantics=lambda materials: _extract_material_semantics(materials),
+        coerce_script_input=lambda payload, input_mode: _coerce_script_input(payload, input_mode=input_mode),
+        capability_base_dir=lambda input_mode: _capability_base_dir(input_mode),
+        resolve_path_with_base=lambda path_raw, base_dir=None: _resolve_path_with_base(path_raw, base_dir=base_dir),
+        parse_str_list=lambda value: _parse_str_list(value),
+    )
+)
+app.register_blueprint(
+    create_agent_capability_blueprint(
+        agent_capability_route_map=lambda: _agent_capability_route_map(),
+        list_agent_skills=lambda: _list_agent_skills(),
+        read_agent_cost_model_config=lambda: _read_agent_cost_model_config(),
+    )
+)
+app.register_blueprint(
+    create_agent_skill_blueprint(
+        jobs_getter=lambda: _jobs,
+        parse_request_context=lambda: _parse_request_context(),
+        agent_skill_registry_getter=lambda: _AGENT_SKILL_REGISTRY,
+        list_agent_skills=lambda: _list_agent_skills(),
+        apply_agent_capability_input_defaults=lambda capability_id, input_payload, default_input: _apply_agent_capability_input_defaults(
+            capability_id,
+            input_payload,
+            default_input=default_input,
+        ),
+        normalize_skill_retry_policy=lambda policy: _normalize_skill_retry_policy(policy),
+        normalize_skill_timeout_seconds=lambda value, default=120.0: _normalize_skill_timeout_seconds(value, default=default),
+        execute_agent_skill=lambda **kwargs: _execute_agent_skill(**kwargs),
+        run_in_bg=lambda job_id, fn, *args, kind="generic", job_meta=None, **kwargs: _run_in_bg(
+            job_id, fn, *args, kind=kind, job_meta=job_meta, **kwargs
+        ),
+        extract_template_ids_from_value=lambda payload: _extract_template_ids_from_value(payload),
+    )
+)
+app.register_blueprint(
+    create_agent_observability_blueprint(
+        project_dir_getter=lambda: _project_dir,
+        parse_agent_history_filter_tokens=lambda value: _parse_agent_history_filter_tokens(value),
+        parse_boolish=lambda value, default=False: _parse_boolish(value, default=default),
+        read_agent_task_history=lambda: _read_agent_task_history(),
+        filter_agent_task_history=lambda history, **kwargs: _filter_agent_task_history(history, **kwargs),
+        build_agent_observability_summary=lambda items, top_n=5: _build_agent_observability_summary(items, top_n=top_n),
+        project_data_path=lambda filename: _project_data_path(filename),
+    )
+)
+app.register_blueprint(
+    create_agent_task_query_blueprint(
+        project_dir_getter=lambda: _project_dir,
+        jobs_getter=lambda: _jobs,
+        find_agent_task_history_record=lambda job_id: _find_agent_task_history_record(job_id),
+        build_chain_view_from_history_item=lambda item: _build_chain_view_from_history_item(item),
+        read_agent_task_history=lambda: _read_agent_task_history(),
+        parse_agent_history_filter_tokens=lambda value: _parse_agent_history_filter_tokens(value),
+        filter_agent_task_history=lambda history, **kwargs: _filter_agent_task_history(history, **kwargs),
+        parse_boolish=lambda value, default=False: _parse_boolish(value, default=default),
+        coerce_bool=lambda value, default=False: _coerce_bool(value, default=default),
+        build_agent_task_export_snapshot=lambda job_id, include_logs=True, include_result=True: _build_agent_task_export_snapshot(
+            job_id,
+            include_logs=include_logs,
+            include_result=include_result,
+        ),
+        project_data_path=lambda filename: _project_data_path(filename),
+        extract_agent_replay_spec=lambda replay_raw: _extract_agent_replay_spec(replay_raw),
+        deep_merge_dict=lambda base, override: _deep_merge_dict(base, override),
+        normalize_agent_replay_context=lambda raw: _normalize_agent_replay_context(raw),
+        invoke_agent_primary_call=lambda **kwargs: _invoke_agent_primary_call(**kwargs),
+    )
+)
+app.register_blueprint(
+    create_agent_task_run_blueprint(
+        jobs_getter=lambda: _jobs,
+        parse_request_context=lambda: _parse_request_context(),
+        normalize_skill_budget_limit=lambda raw: _normalize_skill_budget_limit(raw),
+        normalize_agent_skill_steps=lambda skills_raw, default_retry_policy=None, default_timeout_seconds=120.0: _normalize_agent_skill_steps(
+            skills_raw,
+            default_retry_policy=default_retry_policy,
+            default_timeout_seconds=default_timeout_seconds,
+        ),
+        normalize_skill_timeout_seconds=lambda value, default=120.0: _normalize_skill_timeout_seconds(value, default=default),
+        apply_governance_to_skill_flow=lambda **kwargs: _apply_governance_to_skill_flow(**kwargs),
+        apply_agent_capability_input_defaults=lambda capability_id, input_payload: _apply_agent_capability_input_defaults(
+            capability_id,
+            input_payload,
+        ),
+        agent_capability_route_map=lambda: _agent_capability_route_map(),
+        resolve_agent_primary_call=lambda capability_id, routes, action="auto": _resolve_agent_primary_call(
+            capability_id=capability_id,
+            routes=routes,
+            action=action,
+        ),
+        invoke_agent_primary_call=lambda **kwargs: _invoke_agent_primary_call(**kwargs),
+        should_run_conditional_step=lambda condition, previous_results: _should_run_conditional_step(
+            condition,
+            previous_results,
+        ),
+        execute_agent_skill=lambda **kwargs: _execute_agent_skill(**kwargs),
+        record_governance_usage_for_skill_flow=lambda actor_id, summary: _record_governance_usage_for_skill_flow(
+            actor_id=actor_id,
+            summary=summary,
+        ),
+        extract_template_ids_from_value=lambda value: _extract_template_ids_from_value(value),
+        run_in_bg=lambda job_id, fn, *args, kind="generic", job_meta=None, **kwargs: _run_in_bg(
+            job_id, fn, *args, kind=kind, job_meta=job_meta, **kwargs
+        ),
+    )
+)
+app.register_blueprint(
+    create_idempotency_blueprint(
+        parse_boolish=lambda value, default=False: _parse_boolish(value, default=default),
+        normalize_filter_text=lambda value: _normalize_capability_idempotency_filter_text(value),
+        normalize_ttl=lambda value, default: _normalize_capability_idempotency_ttl(value, default=default),
+        collect_records=lambda **kwargs: _collect_capability_idempotency_records(**kwargs),
+        capability_idempotency_ttl_getter=lambda: _CAPABILITY_IDEMPOTENCY_TTL_SECONDS,
+        capability_idempotency_limit_getter=lambda: _CAPABILITY_IDEMPOTENCY_LIMIT,
+        capability_cache_getter=lambda: _capability_idempotency_cache,
+        capability_lock_getter=lambda: _capability_idempotency_lock,
+        filter_entries=lambda entries, ttl_seconds, include_expired: _filter_capability_idempotency_entries(
+            entries,
+            ttl_seconds=ttl_seconds,
+            include_expired=include_expired,
+        ),
+        trim_entries_with_limit=lambda entries, max_entries, ttl_seconds: _trim_capability_idempotency_entries_with_limit(
+            entries,
+            max_entries=max_entries,
+            ttl_seconds=ttl_seconds,
+        ),
+        limit_entries=lambda entries, max_entries: _limit_capability_idempotency_entries(
+            entries,
+            max_entries=max_entries,
+        ),
+        load_store=lambda include_expired=True, ttl_seconds=None: _load_capability_idempotency_store(
+            include_expired=include_expired,
+            ttl_seconds=ttl_seconds,
+        ),
+        save_store=lambda entries: _save_capability_idempotency_store(entries),
+    )
+)
+app.register_blueprint(
+    create_agent_template_blueprint(
+        project_dir_getter=lambda: _project_dir,
+        parse_request_context=lambda: _parse_request_context(),
+        parse_boolish=lambda value, default=False: _parse_boolish(value, default=default),
+        list_agent_templates=lambda **kwargs: _list_agent_templates(**kwargs),
+        normalize_agent_template_payload=lambda payload, scope_default, actor_id_default: _normalize_agent_template_payload(
+            payload,
+            scope_default=scope_default,
+            actor_id_default=actor_id_default,
+        ),
+        read_agent_template_store=lambda: _read_agent_template_store(),
+        validate_agent_template_base_reference=lambda template, store: _validate_agent_template_base_reference(
+            template,
+            store=store,
+        ),
+        save_agent_template_store=lambda store: _save_agent_template_store(store),
+        normalize_agent_template_id=lambda value: _normalize_agent_template_id(value),
+    )
+)
+app.register_blueprint(
+    create_ui_blueprint(
+        app_ui_dir_getter=lambda: APP_UI_DIR,
+    )
+)
+
+
+@app.errorhandler(RequestEntityTooLarge)
+def handle_request_entity_too_large(_exc):
+    limit_mb = int(max(app.config.get("MAX_CONTENT_LENGTH", 0), 0) / (1024 * 1024))
+    return (
+        jsonify(
+            {
+                "error": f"请求内容过大（上限约 {limit_mb}MB）。请减少单次提交内容，或按批次执行。"
+            }
+        ),
+        413,
+    )
+
+
+@app.errorhandler(Exception)
+def handle_unexpected_error(exc):
+    if isinstance(exc, HTTPException):
+        return exc
+    traceback.print_exc()
+    return (
+        jsonify(
+            {
+                "error": "系统发生异常，已记录日志。请重试；若持续失败，请在设置中导出诊断信息。"
+            }
+        ),
+        500,
+    )
+
+
+def _request_is_local() -> bool:
+    remote = str(request.remote_addr or "").strip()
+    if remote in {"127.0.0.1", "::1", "localhost", ""}:
+        return True
+    return False
+
+
+def _is_mutating_method(method: str) -> bool:
+    return str(method or "").strip().upper() in {"POST", "PUT", "PATCH", "DELETE"}
+
+
+def _is_allowed_local_origin(origin: str) -> bool:
+    text = str(origin or "").strip().lower()
+    if not text:
+        return True
+    if text in {"null", "file://"}:
+        return True
+    allowed_prefixes = (
+        "http://127.0.0.1",
+        "https://127.0.0.1",
+        "http://localhost",
+        "https://localhost",
+    )
+    return any(text.startswith(prefix) for prefix in allowed_prefixes)
+
+
+@app.before_request
+def _guard_local_api_token():
+    if request.method == "OPTIONS":
+        return None
+    path = str(request.path or "")
+    if not path.startswith("/api/"):
+        return None
+    enforce_csrf = bool(_REQUIRE_CSRF_PROTECTION and _REQUIRE_LOCAL_API_TOKEN)
+    origin = str(request.headers.get("Origin", "") or "").strip()
+    if enforce_csrf and _is_mutating_method(request.method) and not _is_allowed_local_origin(origin):
+        return jsonify({"error": "非法来源，请在本地应用内发起请求。", "code": "origin_forbidden"}), 403
+    if path == "/api/session/bootstrap":
+        return None
+    if enforce_csrf and _is_mutating_method(request.method):
+        provided_csrf = str(request.headers.get("X-VideoEditor-CSRF", "") or "").strip()
+        if not provided_csrf:
+            provided_csrf = str(request.args.get("_csrf", "") or "").strip()
+        if provided_csrf != _LOCAL_CSRF_TOKEN:
+            return (
+                jsonify(
+                    {
+                        "error": "请求缺少安全校验，请刷新应用后重试。",
+                        "code": "csrf_required",
+                    }
+                ),
+                403,
+            )
+    if not _REQUIRE_LOCAL_API_TOKEN:
+        return None
+    if not _request_is_local():
+        return jsonify({"error": "仅允许本机访问该 API"}), 403
+    provided = str(request.headers.get("X-VideoEditor-Token", "") or "").strip()
+    if not provided:
+        provided = str(request.args.get("_vt", "") or "").strip()
+    if provided != _LOCAL_API_TOKEN:
+        return (
+            jsonify(
+                {
+                    "error": "未授权请求，请先完成本地会话握手。",
+                    "code": "local_auth_required",
+                }
+            ),
+            401,
+        )
+    return None
+
 _heavy_job_submit_lock = threading.Lock()
 _agent_history_lock = threading.Lock()
 _custom_workflow_lock = threading.Lock()
+_HEAVY_JOB_KINDS = {
+    "workflow_step",
+    "library_ingest_local",
+    "library_ingest_local_images",
+    "library_ingest_gdrive",
+    "library_ingest_gdrive_images",
+    "social_export",
+    "audio_voice",
+    "custom_workflow",
+}
+_HEAVY_QUEUE_MAX_RUNNING = max(1, min(int(os.environ.get("VIDEOEDITOR_HEAVY_QUEUE_MAX_RUNNING", "1") or 1), 4))
+_job_runtime: Optional[JobRuntime] = None
+_heavy_queue_lock = threading.Lock()
+_heavy_job_queue = []
 CANCEL_TOKEN = "__CANCELLED__"
+_eta_history_lock = threading.Lock()
+_eta_history_cache: Dict[str, Any] = {
+    "updated_at": 0.0,
+    "avg_by_kind": {},
+    "fallback_avg": 0.0,
+}
+_preflight_lock = threading.Lock()
+_preflight_cache: Dict[str, Any] = {
+    "updated_at": 0.0,
+    "report": None,
+}
+_PREFLIGHT_CACHE_TTL_SECONDS = 15.0
+
+
+def _app_state_db_path() -> Path:
+    base = _library.db_path.parent if hasattr(_library, "db_path") else (REPO_ROOT / ".video_library")
+    path = Path(base) / "app_state.db"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _ensure_job_store() -> JobStore:
+    global _job_store, _job_store_path
+    target = _app_state_db_path().resolve()
+    if _job_store is None or _job_store_path is None or _job_store_path != target:
+        _job_store = JobStore(target)
+        _job_store_path = target
+    return _job_store
+
+
+def _safe_copy(value: Any, fallback: Any):
+    try:
+        return deepcopy(value)
+    except Exception:
+        return fallback
+
+
+def _job_payload_for_store(job: Dict[str, Any]) -> Dict[str, Any]:
+    meta = job.get("meta", {}) if isinstance(job.get("meta"), dict) else {}
+    log_items = job.get("log", []) if isinstance(job.get("log"), list) else []
+    payload = {
+        "status": str(job.get("status", "queued") or "queued"),
+        "kind": str(job.get("kind", "generic") or "generic"),
+        "progress": int(job.get("progress", 0) or 0),
+        "queued_at": job.get("queued_at"),
+        "started_at": job.get("started_at"),
+        "finished_at": job.get("finished_at"),
+        "cancel_requested": bool(job.get("cancel_requested", False)),
+        "cancel_requested_at": job.get("cancel_requested_at"),
+        "queue_position": int(job.get("queue_position", 0) or 0),
+        "error": str(job.get("error", "") or "") or None,
+        "meta": _safe_copy(meta, {}),
+        "result": _safe_copy(job.get("result"), None),
+        "log": [str(item) for item in log_items][-500:],
+        "created_at": str(job.get("created_at", "") or "") or str(job.get("queued_at", "") or ""),
+    }
+    return payload
+
+
+def _persist_job_snapshot(job_id: str, event_type: str = ""):
+    jid = str(job_id or "").strip()
+    if not jid:
+        return
+    job = _jobs.get(jid)
+    if not isinstance(job, dict):
+        return
+    for attempt in range(4):
+        try:
+            store = _ensure_job_store()
+            store.upsert_job(jid, _job_payload_for_store(job))
+            if event_type:
+                store.append_event(
+                    jid,
+                    event_type=event_type,
+                    payload={
+                        "status": str(job.get("status", "unknown") or "unknown"),
+                        "progress": int(job.get("progress", 0) or 0),
+                    },
+                )
+            return
+        except Exception as exc:
+            if "locked" in str(exc).lower() and attempt < 3:
+                time.sleep(0.04 * (attempt + 1))
+                continue
+            return
+
+
+def _make_managed_job(job_id: str, payload: Dict[str, Any]) -> _ManagedJob:
+    if _job_runtime is None:
+        return _ManagedJob(str(job_id or ""), dict(payload or {}))
+    return _job_runtime.make_managed_job(job_id, payload)
+
+
+def _restore_jobs_from_store():
+    global _jobs
+    if _job_runtime is None:
+        return
+    try:
+        store = _ensure_job_store()
+        rows = store.list_jobs(limit=1200)
+    except Exception:
+        return
+    _job_runtime.restore_jobs(rows)
+    _jobs = _job_runtime.jobs
+
+
+def _load_job_from_store(job_id: str) -> Optional[Dict[str, Any]]:
+    jid = str(job_id or "").strip()
+    if not jid or _job_runtime is None:
+        return None
+    try:
+        store = _ensure_job_store()
+        row = store.get_job(jid)
+    except Exception:
+        row = None
+    if not isinstance(row, dict):
+        return None
+    return _job_runtime.adopt_job(jid, row)
+
+
+def _reset_job_store_for_tests():
+    global _job_store, _job_store_path
+    _job_store = None
+    _job_store_path = None
+    if _job_runtime is not None:
+        _job_runtime.jobs.clear()
+        with _job_runtime.heavy_queue_lock:
+            _job_runtime.heavy_job_queue.clear()
+    with _eta_history_lock:
+        _eta_history_cache["updated_at"] = 0.0
+        _eta_history_cache["avg_by_kind"] = {}
+        _eta_history_cache["fallback_avg"] = 0.0
 _capability_idempotency_cache: Dict[str, Dict[str, Any]] = {}
 _capability_idempotency_lock = threading.Lock()
 _CAPABILITY_IDEMPOTENCY_LIMIT = 400
 _CAPABILITY_IDEMPOTENCY_TTL_SECONDS = 7 * 24 * 3600
+_capability_idempotency_store: Optional[CapabilityIdempotencyStore] = None
 _CUSTOM_WORKFLOW_HISTORY_MAX = 500
 _CUSTOM_WORKFLOW_STEP_LIMIT = 60
 _custom_workflow_store_mem: Dict[str, Dict[str, Any]] = {}
@@ -366,6 +1014,33 @@ class JobCancelledError(RuntimeError):
         super().__init__(message)
         self.result = result
 
+
+def _on_job_runtime_finished(job_id: str, job: Dict[str, Any]):
+    kind = str((job or {}).get("kind", "") or "")
+    if kind in {"agent_task", "agent_skill"}:
+        try:
+            _record_agent_task_history_from_job(job_id)
+        except Exception:
+            pass
+    if _ws:
+        try:
+            _ws.load()
+        except Exception:
+            pass
+
+
+_job_runtime = JobRuntime(
+    heavy_job_kinds=_HEAVY_JOB_KINDS,
+    max_running=_HEAVY_QUEUE_MAX_RUNNING,
+    cancel_token=CANCEL_TOKEN,
+    job_cancelled_error_cls=JobCancelledError,
+    persist_snapshot=lambda job_id, event_type="": _persist_job_snapshot(job_id, event_type=event_type),
+    after_job_finished=_on_job_runtime_finished,
+)
+_jobs = _job_runtime.jobs
+_heavy_queue_lock = _job_runtime.heavy_queue_lock
+_heavy_job_queue = _job_runtime.heavy_job_queue
+
 RENDER_DEFAULTS = {
     "width": 1080,
     "height": 1920,
@@ -432,89 +1107,60 @@ def _state_dict() -> dict:
         "social_export_history": recent_history,
         "system": _system_load_snapshot(),
         "running_jobs": _running_heavy_jobs(),
+        "task_queue": _task_queue_snapshot(),
     }
+
+
+def _is_heavy_kind(kind: Any) -> bool:
+    return bool(_job_runtime and _job_runtime.is_heavy_kind(kind))
+
+
+def _count_running_heavy_jobs_locked() -> int:
+    if _job_runtime is None:
+        return 0
+    return _job_runtime._count_running_heavy_jobs_locked()
+
+
+def _queued_heavy_jobs_locked() -> List[Dict[str, Any]]:
+    if _job_runtime is None:
+        return []
+    return _job_runtime._queued_heavy_jobs_locked()
+
+
+def _task_queue_snapshot() -> Dict[str, Any]:
+    if _job_runtime is None:
+        return {"max_running": _HEAVY_QUEUE_MAX_RUNNING, "running_count": 0, "queued_count": 0, "running": [], "queued": []}
+    return _job_runtime.task_queue_snapshot()
+
+
+def _start_job_worker_thread(
+    job_id: str,
+    fn: Callable,
+    args: Tuple[Any, ...],
+    kwargs: Dict[str, Any],
+):
+    if _job_runtime is None:
+        return
+    _job_runtime._start_job_worker_thread(job_id, fn, args, kwargs)
+
+
+def _dispatch_heavy_queue_locked():
+    if _job_runtime is None:
+        return
+    _job_runtime.dispatch_heavy_queue_locked()
 
 
 def _run_in_bg(job_id: str, fn, *args, kind: str = "generic", job_meta: Optional[Dict[str, Any]] = None, **kwargs):
-    """在后台线程运行 fn，捕获 stdout 并更新 _jobs[job_id]。"""
-    _jobs[job_id] = {
-        "status": "running",
-        "log": [],
-        "progress": 0,
-        "kind": kind,
-        "meta": deepcopy(job_meta) if isinstance(job_meta, dict) else {},
-        "started_at": datetime.now().isoformat(timespec="seconds"),
-        "result": None,
-        "cancel_requested": False,
-    }
-
-    class Tee:
-        def __init__(self, real):
-            self._real = real
-        def write(self, s):
-            self._real.write(s)
-            if s.strip():
-                _jobs[job_id]["log"].append(s.rstrip())
-        def flush(self):
-            self._real.flush()
-
-    def _worker():
-        old_stdout = sys.stdout
-        sys.stdout = Tee(old_stdout)
-        try:
-            ret = fn(*args, **kwargs)
-            _jobs[job_id]["result"] = ret
-            _jobs[job_id]["status"] = "done"
-            _jobs[job_id]["progress"] = 100
-        except Exception as e:
-            err_text = str(e)
-            cancelled = isinstance(e, JobCancelledError) or (CANCEL_TOKEN in err_text)
-            if cancelled:
-                _jobs[job_id]["status"] = "cancelled"
-                _jobs[job_id]["error"] = "任务已取消"
-                if isinstance(e, JobCancelledError):
-                    _jobs[job_id]["result"] = e.result
-                _jobs[job_id]["log"].append("[系统] 任务已取消")
-            else:
-                _jobs[job_id]["status"] = "error"
-                _jobs[job_id]["error"] = err_text
-                _jobs[job_id]["log"].append(traceback.format_exc())
-        finally:
-            sys.stdout = old_stdout
-            _jobs[job_id]["finished_at"] = datetime.now().isoformat(timespec="seconds")
-            if str(kind or "") in {"agent_task", "agent_skill"}:
-                try:
-                    _record_agent_task_history_from_job(job_id)
-                except Exception:
-                    pass
-            # 刷新 state
-            if _ws:
-                try:
-                    _ws.load()
-                except Exception:
-                    pass
-
-    t = threading.Thread(target=_worker, daemon=True)
-    t.start()
-    return job_id
+    """在后台线程运行 fn，捕获 stdout 并更新 _jobs[job_id]。重任务自动进入队列。"""
+    if _job_runtime is None:
+        return job_id
+    return _job_runtime.run_in_bg(job_id, fn, *args, kind=kind, job_meta=job_meta, **kwargs)
 
 
 def _running_heavy_jobs() -> list:
-    heavy_kinds = {
-        "workflow_step",
-        "library_ingest_local",
-        "library_ingest_local_images",
-        "library_ingest_gdrive",
-        "library_ingest_gdrive_images",
-        "social_export",
-        "audio_voice",
-        "custom_workflow",
-    }
-    return [
-        {"job_id": jid, "kind": job.get("kind"), "started_at": job.get("started_at")}
-        for jid, job in _jobs.items()
-        if job.get("status") == "running" and job.get("kind") in heavy_kinds
-    ]
+    if _job_runtime is None:
+        return []
+    return _job_runtime.running_heavy_jobs()
 
 
 def _system_load_snapshot() -> Dict:
@@ -530,6 +1176,61 @@ def _system_load_snapshot() -> Dict:
         "load_15m": round(float(l15), 3),
         "load_ratio_1m": round(float(l1) / max(cpu_count, 1), 3),
     }
+
+
+def _system_preflight_snapshot(force: bool = False) -> Dict[str, Any]:
+    now_ts = time.time()
+    with _preflight_lock:
+        report_cached = _preflight_cache.get("report")
+        updated_at = float(_preflight_cache.get("updated_at", 0.0) or 0.0)
+        if (not force) and isinstance(report_cached, dict) and (now_ts - updated_at) <= _PREFLIGHT_CACHE_TTL_SECONDS:
+            return deepcopy(report_cached)
+
+    try:
+        report = run_startup_preflight(
+            repo_root=REPO_ROOT,
+            library_db_path=_library.db_path if hasattr(_library, "db_path") else (REPO_ROOT / ".video_library" / "library.db"),
+            app_state_db_path=_app_state_db_path(),
+            ai_settings=_load_ai_settings(),
+            ui_settings=_load_ui_settings(),
+            secret_storage_status=_secret_store.public_status(),
+            require_local_token=bool(_REQUIRE_LOCAL_API_TOKEN),
+            require_csrf=bool(_REQUIRE_CSRF_PROTECTION and _REQUIRE_LOCAL_API_TOKEN),
+        )
+    except Exception as exc:
+        report = {
+            "ok": False,
+            "startup_ready": False,
+            "summary": {
+                "total": 1,
+                "ok": 0,
+                "warning": 0,
+                "error": 1,
+                "score": 0.0,
+                "generated_at": datetime.now().isoformat(timespec="seconds"),
+            },
+            "checks": [
+                {
+                    "id": "preflight.internal_error",
+                    "title": "系统自检",
+                    "status": "error",
+                    "severity": "error",
+                    "detail": f"系统自检失败: {exc}",
+                    "hint": "请重启应用后重试；若持续失败请导出日志。",
+                    "data": {},
+                }
+            ],
+            "blockers": [],
+            "warnings": [],
+            "recommended_actions": ["请重启应用后重试；若持续失败请导出日志。"],
+            "nle_connectors": [],
+            "meta": {"repo_root": str(REPO_ROOT)},
+        }
+
+    with _preflight_lock:
+        _preflight_cache["updated_at"] = time.time()
+        _preflight_cache["report"] = deepcopy(report)
+    return report
 
 
 def _is_overloaded() -> bool:
@@ -564,6 +1265,202 @@ def _write_settings(data: Dict):
     p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+_DEFAULT_UI_SETTINGS: Dict[str, Any] = {
+    "onboarding_completed": False,
+    "creator_mode": True,
+    "font_scale": 1.0,
+    "preferred_production_view": "hub",
+    "default_videos_dir": "",
+    "default_project_dir": "",
+    "auto_open_last_project": True,
+    "last_project_dir": "",
+}
+
+
+def _normalize_production_view(raw: Any) -> str:
+    key = str(raw or "").strip().lower()
+    if key in {"workflow", "graph"}:
+        return "workflow"
+    return "hub"
+
+
+def _normalize_font_scale(raw: Any) -> float:
+    try:
+        value = float(raw)
+    except Exception:
+        value = 1.0
+    return round(max(0.85, min(value, 1.45)), 2)
+
+
+def _load_ui_settings() -> Dict[str, Any]:
+    src = _read_settings().get("ui", {})
+    if not isinstance(src, dict):
+        src = {}
+    out = dict(_DEFAULT_UI_SETTINGS)
+    out["onboarding_completed"] = bool(src.get("onboarding_completed", out["onboarding_completed"]))
+    out["creator_mode"] = bool(src.get("creator_mode", out["creator_mode"]))
+    out["font_scale"] = _normalize_font_scale(src.get("font_scale", out["font_scale"]))
+    out["preferred_production_view"] = _normalize_production_view(
+        src.get("preferred_production_view", out["preferred_production_view"])
+    )
+    out["default_videos_dir"] = str(src.get("default_videos_dir", out["default_videos_dir"]) or "").strip()
+    out["default_project_dir"] = str(src.get("default_project_dir", out["default_project_dir"]) or "").strip()
+    out["auto_open_last_project"] = bool(src.get("auto_open_last_project", out["auto_open_last_project"]))
+    out["last_project_dir"] = str(src.get("last_project_dir", out["last_project_dir"]) or "").strip()
+    return out
+
+
+def _save_ui_settings(payload: Dict[str, Any]) -> Dict[str, Any]:
+    src = payload if isinstance(payload, dict) else {}
+    settings = _read_settings()
+    ui = settings.get("ui", {})
+    if not isinstance(ui, dict):
+        ui = {}
+
+    if "onboarding_completed" in src:
+        ui["onboarding_completed"] = bool(src.get("onboarding_completed"))
+    if "creator_mode" in src:
+        ui["creator_mode"] = bool(src.get("creator_mode"))
+    if "font_scale" in src:
+        ui["font_scale"] = _normalize_font_scale(src.get("font_scale"))
+    if "preferred_production_view" in src:
+        ui["preferred_production_view"] = _normalize_production_view(src.get("preferred_production_view"))
+    if "default_videos_dir" in src:
+        ui["default_videos_dir"] = str(src.get("default_videos_dir", "") or "").strip()
+    if "default_project_dir" in src:
+        ui["default_project_dir"] = str(src.get("default_project_dir", "") or "").strip()
+    if "auto_open_last_project" in src:
+        ui["auto_open_last_project"] = bool(src.get("auto_open_last_project"))
+    if "last_project_dir" in src:
+        ui["last_project_dir"] = str(src.get("last_project_dir", "") or "").strip()
+
+    settings["ui"] = ui
+    _write_settings(settings)
+    return _load_ui_settings()
+
+
+def _remember_last_project(project_path: Path):
+    if not isinstance(project_path, Path):
+        return
+    try:
+        _save_ui_settings({"last_project_dir": str(project_path.resolve())})
+    except Exception:
+        pass
+
+
+_DEFAULT_PUBLISH_SETTINGS: Dict[str, Any] = {
+    "connectors": {},
+}
+_PUBLISH_SECRET_KEEP_SENTINEL = "__KEEP__"
+
+
+def _normalize_publish_connectors(raw: Any) -> Dict[str, Dict[str, Any]]:
+    if not isinstance(raw, dict):
+        return {}
+    out: Dict[str, Dict[str, Any]] = {}
+    for platform_id, item in raw.items():
+        pid = str(platform_id or "").strip().lower()
+        if not pid:
+            continue
+        if not isinstance(item, dict):
+            continue
+        row = {
+            "kind": str(item.get("kind", "webhook") or "webhook").strip().lower() or "webhook",
+            "endpoint": str(item.get("endpoint", "") or "").strip(),
+            "method": str(item.get("method", "POST") or "POST").strip().upper() or "POST",
+            "timeout_s": max(1.0, min(float(item.get("timeout_s", 25) or 25), 120.0)),
+            "token": str(item.get("token", "") or "").strip(),
+            "headers": item.get("headers", {}) if isinstance(item.get("headers"), dict) else {},
+        }
+        out[pid] = row
+    return out
+
+
+def _merge_publish_connectors_with_existing(
+    existing: Dict[str, Dict[str, Any]],
+    incoming: Dict[str, Dict[str, Any]],
+) -> Dict[str, Dict[str, Any]]:
+    merged: Dict[str, Dict[str, Any]] = {}
+    old = existing if isinstance(existing, dict) else {}
+    new = incoming if isinstance(incoming, dict) else {}
+    for pid, row in new.items():
+        if not isinstance(row, dict):
+            continue
+        prev = old.get(pid, {}) if isinstance(old.get(pid), dict) else {}
+        token = str(row.get("token", "") or "").strip()
+        if token == _PUBLISH_SECRET_KEEP_SENTINEL:
+            token = str(prev.get("token", "") or "").strip()
+
+        headers_raw = row.get("headers", {}) if isinstance(row.get("headers"), dict) else {}
+        prev_headers = prev.get("headers", {}) if isinstance(prev.get("headers"), dict) else {}
+        headers: Dict[str, Any] = {}
+        for hk, hv in headers_raw.items():
+            key = str(hk or "").strip()
+            if not key:
+                continue
+            value = str(hv or "").strip()
+            if value == _PUBLISH_SECRET_KEEP_SENTINEL:
+                value = str(prev_headers.get(key, "") or "").strip()
+            headers[key] = value
+
+        merged[pid] = {
+            "kind": str(row.get("kind", "webhook") or "webhook").strip().lower() or "webhook",
+            "endpoint": str(row.get("endpoint", "") or "").strip(),
+            "method": str(row.get("method", "POST") or "POST").strip().upper() or "POST",
+            "timeout_s": max(1.0, min(float(row.get("timeout_s", 25) or 25), 120.0)),
+            "token": token,
+            "headers": headers,
+        }
+    return merged
+
+
+def _mask_publish_connectors(connectors: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    out: Dict[str, Dict[str, Any]] = {}
+    for pid, item in (connectors or {}).items():
+        if not isinstance(item, dict):
+            continue
+        headers_raw = item.get("headers", {}) if isinstance(item.get("headers"), dict) else {}
+        headers_masked: Dict[str, Any] = {}
+        for hk, hv in headers_raw.items():
+            key = str(hk or "")
+            val = str(hv or "")
+            if key.lower() in {"authorization", "x-api-key", "x-auth-token"}:
+                headers_masked[key] = _mask_secret(val)
+            else:
+                headers_masked[key] = val
+        out[str(pid)] = {
+            **item,
+            "token": _mask_secret(item.get("token", "")),
+            "headers": headers_masked,
+        }
+    return out
+
+
+def _load_publish_settings() -> Dict[str, Any]:
+    src = _read_settings().get("publish", {})
+    if not isinstance(src, dict):
+        src = {}
+    connectors = _normalize_publish_connectors(src.get("connectors", {}))
+    return {
+        "connectors": connectors,
+    }
+
+
+def _save_publish_settings(payload: Dict[str, Any]) -> Dict[str, Any]:
+    src = payload if isinstance(payload, dict) else {}
+    settings = _read_settings()
+    publish = settings.get("publish", {})
+    if not isinstance(publish, dict):
+        publish = {}
+    if "connectors" in src:
+        existing_connectors = _normalize_publish_connectors(publish.get("connectors", {}))
+        incoming_connectors = _normalize_publish_connectors(src.get("connectors", {}))
+        publish["connectors"] = _merge_publish_connectors_with_existing(existing_connectors, incoming_connectors)
+    settings["publish"] = publish
+    _write_settings(settings)
+    return _load_publish_settings()
+
+
 def _mask_secret(value: str) -> str:
     s = str(value or "").strip()
     if not s:
@@ -573,17 +1470,187 @@ def _mask_secret(value: str) -> str:
     return f"{s[:4]}{'*' * (len(s) - 8)}{s[-4:]}"
 
 
+_DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
+_AI_PROVIDER_CATALOG: Dict[str, Dict[str, Any]] = {
+    "openai": {
+        "label": "OpenAI",
+        "aliases": ["openai"],
+        "default_base_url": "https://api.openai.com/v1",
+        "models": ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "o4-mini", "o3-mini"],
+        "embedding_models": ["text-embedding-3-small", "text-embedding-3-large", "text-embedding-ada-002"],
+    },
+    "anthropic": {
+        "label": "Anthropic",
+        "aliases": ["anthropic", "claude"],
+        "default_base_url": "https://api.anthropic.com",
+        "models": ["claude-sonnet-4-6", "claude-3-7-sonnet-latest", "claude-3-5-haiku-latest"],
+        "embedding_models": [],
+    },
+    "moonshot": {
+        "label": "Moonshot / Kimi",
+        "aliases": ["moonshot", "kimi"],
+        "default_base_url": "https://api.moonshot.cn/v1",
+        "models": ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"],
+        "embedding_models": [],
+    },
+    "qwen": {
+        "label": "Qwen",
+        "aliases": ["qwen"],
+        "default_base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "models": ["qwen-plus", "qwen-turbo", "qwen-max"],
+        "embedding_models": [],
+    },
+    "gemini": {
+        "label": "Gemini",
+        "aliases": ["gemini"],
+        "default_base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "models": ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"],
+        "embedding_models": [],
+    },
+    "maxmini": {
+        "label": "MiniMax",
+        "aliases": ["maxmini", "minimax"],
+        "default_base_url": "https://api.minimax.chat/v1",
+        "models": ["abab6.5s-chat", "abab6.5t-chat", "abab6.5g-chat"],
+        "embedding_models": [],
+    },
+}
+_AI_PROVIDER_ALIASES: Dict[str, str] = {}
+for _provider_id, _provider_cfg in _AI_PROVIDER_CATALOG.items():
+    aliases = _provider_cfg.get("aliases", []) if isinstance(_provider_cfg, dict) else []
+    for alias in aliases:
+        key = str(alias or "").strip().lower()
+        if key:
+            _AI_PROVIDER_ALIASES[key] = _provider_id
+    _AI_PROVIDER_ALIASES[_provider_id] = _provider_id
+
+
+def _normalize_ai_provider(provider: Any) -> str:
+    key = str(provider or "").strip().lower()
+    if not key:
+        return ""
+    return _AI_PROVIDER_ALIASES.get(key, key)
+
+
+def _recommended_ai_base_url(provider: Any, model: Any = "") -> str:
+    provider_id = _normalize_ai_provider(provider)
+    item = _AI_PROVIDER_CATALOG.get(provider_id, {}) if provider_id else {}
+    if not isinstance(item, dict):
+        return ""
+    model_base_urls = item.get("model_base_urls", {})
+    if isinstance(model_base_urls, dict):
+        picked_model = str(model or "").strip().lower()
+        if picked_model:
+            for model_id, base_url in model_base_urls.items():
+                if picked_model == str(model_id or "").strip().lower():
+                    return str(base_url or "").strip()
+    return str(item.get("default_base_url", "") or "").strip()
+
+
+def _ai_catalog_payload() -> Dict[str, Any]:
+    providers: List[Dict[str, Any]] = []
+    for provider_id, item in _AI_PROVIDER_CATALOG.items():
+        if not isinstance(item, dict):
+            continue
+        providers.append(
+            {
+                "provider_id": provider_id,
+                "label": str(item.get("label", provider_id) or provider_id),
+                "aliases": [str(x).strip() for x in item.get("aliases", []) if str(x).strip()],
+                "default_base_url": str(item.get("default_base_url", "") or "").strip(),
+                "models": [str(x).strip() for x in item.get("models", []) if str(x).strip()],
+                "embedding_models": [str(x).strip() for x in item.get("embedding_models", []) if str(x).strip()],
+            }
+        )
+    return {
+        "providers": providers,
+        "default_provider": "openai",
+        "default_embedding_model": _DEFAULT_EMBEDDING_MODEL,
+    }
+
+
+def _ai_secret_ref_name(field_name: str) -> str:
+    token = str(field_name or "").strip().lower()
+    if not token:
+        return ""
+    return f"ai.{token}"
+
+
+def _read_ai_secret_field(settings_ai: Dict[str, Any], field_name: str) -> str:
+    if not isinstance(settings_ai, dict):
+        return ""
+    ref_key = f"{field_name}_ref"
+    ref_name = str(settings_ai.get(ref_key, "") or "").strip()
+    store_meta = _secret_store.info()
+    if ref_name and bool(store_meta.available):
+        try:
+            from_store = _secret_store.get(ref_name)
+        except Exception:
+            from_store = ""
+        if from_store:
+            return str(from_store).strip()
+    return str(settings_ai.get(field_name, "") or "").strip()
+
+
+def _persist_ai_secret_field(settings_ai: Dict[str, Any], field_name: str, incoming_value: str, clear_flag: bool) -> None:
+    if not isinstance(settings_ai, dict):
+        return
+    name = str(field_name or "").strip()
+    if not name:
+        return
+    ref_key = f"{name}_ref"
+    ref_name = str(settings_ai.get(ref_key, "") or _ai_secret_ref_name(name)).strip() or _ai_secret_ref_name(name)
+    store_meta = _secret_store.info()
+
+    if clear_flag:
+        if ref_name and bool(store_meta.available):
+            try:
+                _secret_store.delete(ref_name)
+            except Exception:
+                pass
+        settings_ai.pop(name, None)
+        settings_ai.pop(ref_key, None)
+        return
+
+    value = str(incoming_value or "").strip()
+    if value:
+        if ref_name and bool(store_meta.available):
+            try:
+                stored = _secret_store.set(ref_name, value)
+            except Exception:
+                stored = False
+            if stored:
+                settings_ai[ref_key] = ref_name
+                settings_ai.pop(name, None)
+                return
+        settings_ai[name] = value
+        settings_ai.pop(ref_key, None)
+        return
+
+    # No new value passed: try to migrate existing legacy plaintext key into secret store.
+    legacy_value = str(settings_ai.get(name, "") or "").strip()
+    if legacy_value and ref_name and bool(store_meta.available):
+        try:
+            migrated = _secret_store.set(ref_name, legacy_value)
+        except Exception:
+            migrated = False
+        if migrated:
+            settings_ai[ref_key] = ref_name
+            settings_ai.pop(name, None)
+
+
 def _load_ai_settings() -> Dict:
     data = _read_settings().get("ai", {})
     if not isinstance(data, dict):
         data = {}
+    provider = _normalize_ai_provider(data.get("provider", ""))
     return {
-        "provider": str(data.get("provider", "") or "").strip(),
+        "provider": provider or "openai",
         "ai_model": str(data.get("ai_model", "") or "").strip(),
         "embedding_model": str(data.get("embedding_model", "") or "").strip(),
         "ai_base_url": str(data.get("ai_base_url", "") or "").strip(),
-        "openai_api_key": str(data.get("openai_api_key", "") or "").strip(),
-        "anthropic_api_key": str(data.get("anthropic_api_key", "") or "").strip(),
+        "openai_api_key": _read_ai_secret_field(data, "openai_api_key"),
+        "anthropic_api_key": _read_ai_secret_field(data, "anthropic_api_key"),
     }
 
 
@@ -593,7 +1660,7 @@ def _save_ai_settings(payload: Dict) -> Dict:
     if not isinstance(ai, dict):
         ai = {}
 
-    provider = str(payload.get("provider", "") or "").strip()
+    provider = _normalize_ai_provider(payload.get("provider", ""))
     model = str(payload.get("ai_model", "") or "").strip()
     embedding_model = str(payload.get("embedding_model", "") or "").strip()
     base_url = str(payload.get("ai_base_url", "") or "").strip()
@@ -616,15 +1683,10 @@ def _save_ai_settings(payload: Dict) -> Dict:
 
     openai_api_key = str(payload.get("openai_api_key", "") or "").strip()
     anthropic_api_key = str(payload.get("anthropic_api_key", "") or "").strip()
-    if openai_api_key:
-        ai["openai_api_key"] = openai_api_key
-    if anthropic_api_key:
-        ai["anthropic_api_key"] = anthropic_api_key
-
-    if bool(payload.get("clear_openai_api_key", False)):
-        ai.pop("openai_api_key", None)
-    if bool(payload.get("clear_anthropic_api_key", False)):
-        ai.pop("anthropic_api_key", None)
+    clear_openai = bool(payload.get("clear_openai_api_key", False))
+    clear_anthropic = bool(payload.get("clear_anthropic_api_key", False))
+    _persist_ai_secret_field(ai, "openai_api_key", openai_api_key, clear_openai)
+    _persist_ai_secret_field(ai, "anthropic_api_key", anthropic_api_key, clear_anthropic)
 
     settings["ai"] = ai
     _write_settings(settings)
@@ -632,6 +1694,7 @@ def _save_ai_settings(payload: Dict) -> Dict:
 
 
 def _apply_ai_env(ai: Dict):
+    provider = _normalize_ai_provider(ai.get("provider", ""))
     openai_api_key = str(ai.get("openai_api_key", "") or "").strip()
     anthropic_api_key = str(ai.get("anthropic_api_key", "") or "").strip()
     ai_base_url = str(ai.get("ai_base_url", "") or "").strip()
@@ -646,11 +1709,12 @@ def _apply_ai_env(ai: Dict):
         os.environ["ANTHROPIC_API_KEY"] = anthropic_api_key
     else:
         os.environ.pop("ANTHROPIC_API_KEY", None)
-    if ai_base_url:
+    openai_compatible_provider = provider in {"", "openai", "moonshot", "qwen", "gemini", "maxmini"}
+    if ai_base_url and openai_compatible_provider:
         os.environ["OPENAI_BASE_URL"] = ai_base_url
     else:
         os.environ.pop("OPENAI_BASE_URL", None)
-    if ai_model:
+    if ai_model and openai_compatible_provider:
         os.environ["OPENAI_MODEL"] = ai_model
     else:
         os.environ.pop("OPENAI_MODEL", None)
@@ -661,15 +1725,24 @@ def _apply_ai_env(ai: Dict):
 
 
 def _public_ai_settings(ai: Dict) -> Dict:
+    provider = _normalize_ai_provider(ai.get("provider", "")) or "openai"
+    model = str(ai.get("ai_model", "") or "").strip()
+    base_url = str(ai.get("ai_base_url", "") or "").strip()
+    embedding_model = str(ai.get("embedding_model", "") or "").strip()
+    secret_status = _secret_store.public_status()
     return {
-        "provider": ai.get("provider", ""),
-        "ai_model": ai.get("ai_model", ""),
-        "embedding_model": ai.get("embedding_model", ""),
-        "ai_base_url": ai.get("ai_base_url", ""),
+        "provider": provider,
+        "ai_model": model,
+        "embedding_model": embedding_model,
+        "embedding_model_resolved": embedding_model or _DEFAULT_EMBEDDING_MODEL,
+        "ai_base_url": base_url,
+        "recommended_base_url": _recommended_ai_base_url(provider, model),
         "openai_api_key_set": bool(ai.get("openai_api_key")),
         "anthropic_api_key_set": bool(ai.get("anthropic_api_key")),
         "openai_api_key_masked": _mask_secret(ai.get("openai_api_key", "")),
         "anthropic_api_key_masked": _mask_secret(ai.get("anthropic_api_key", "")),
+        "secret_storage": secret_status,
+        "catalog": _ai_catalog_payload(),
     }
 
 
@@ -1132,6 +2205,179 @@ def _duration_from_iso_range(started_at: Any, finished_at: Any) -> float:
     if begin is None or end is None:
         return 0.0
     return max((end - begin).total_seconds(), 0.0)
+
+
+def _trimmed_avg(values: List[float]) -> float:
+    nums = sorted(float(x) for x in values if float(x) > 0.0)
+    if not nums:
+        return 0.0
+    if len(nums) >= 10:
+        trim = max(1, int(len(nums) * 0.1))
+        nums = nums[trim:-trim] or nums
+    return max(sum(nums) / max(len(nums), 1), 0.0)
+
+
+def _refresh_eta_history_cache(*, limit: int = 800, ttl_seconds: float = 30.0) -> Dict[str, Any]:
+    now_ts = time.time()
+    with _eta_history_lock:
+        updated_at = float(_eta_history_cache.get("updated_at", 0.0) or 0.0)
+        if now_ts - updated_at <= max(float(ttl_seconds), 1.0):
+            return deepcopy(_eta_history_cache)
+
+    try:
+        rows = _ensure_job_store().list_jobs(limit=limit)
+    except Exception:
+        rows = []
+    if not isinstance(rows, list):
+        rows = []
+
+    durations_by_kind: Dict[str, List[float]] = {}
+    all_durations: List[float] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("status", "") or "").strip().lower() != "done":
+            continue
+        d = _duration_from_iso_range(row.get("started_at"), row.get("finished_at"))
+        if d < 2.0:
+            continue
+        kind = str(row.get("kind", "") or "").strip()
+        all_durations.append(d)
+        bucket = durations_by_kind.setdefault(kind, [])
+        if len(bucket) < 200:
+            bucket.append(d)
+
+    avg_by_kind = {kind: _trimmed_avg(vals) for kind, vals in durations_by_kind.items()}
+    payload = {
+        "updated_at": now_ts,
+        "avg_by_kind": avg_by_kind,
+        "fallback_avg": _trimmed_avg(all_durations),
+    }
+    with _eta_history_lock:
+        _eta_history_cache.update(payload)
+        return deepcopy(_eta_history_cache)
+
+
+def _historical_avg_duration_for_kind(kind: Any, *, ttl_seconds: float = 30.0) -> float:
+    snapshot = _refresh_eta_history_cache(ttl_seconds=ttl_seconds)
+    avg_by_kind = snapshot.get("avg_by_kind", {})
+    if not isinstance(avg_by_kind, dict):
+        avg_by_kind = {}
+    kind_text = str(kind or "").strip()
+    if kind_text:
+        exact = avg_by_kind.get(kind_text)
+        if isinstance(exact, (int, float)) and float(exact) > 0:
+            return float(exact)
+    fallback_avg = snapshot.get("fallback_avg", 0.0)
+    try:
+        return max(float(fallback_avg), 0.0)
+    except Exception:
+        return 0.0
+
+
+def _estimate_job_eta(job: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(job, dict):
+        return {"available": False, "remaining_seconds": None, "source": "none", "confidence": 0.0}
+
+    status = str(job.get("status", "") or "").strip().lower()
+    kind = str(job.get("kind", "") or "").strip()
+    avg_history = _historical_avg_duration_for_kind(kind)
+
+    if status in {"done", "error", "cancelled", "interrupted"}:
+        return {
+            "available": False,
+            "remaining_seconds": 0,
+            "source": "finished",
+            "confidence": 1.0,
+            "historical_avg_seconds": int(round(avg_history)) if avg_history > 0 else None,
+        }
+
+    if status == "queued":
+        try:
+            queue_position = int(job.get("queue_position", 0) or 0)
+        except Exception:
+            queue_position = 0
+        if avg_history <= 0:
+            return {
+                "available": False,
+                "remaining_seconds": None,
+                "source": "queue_unknown",
+                "confidence": 0.0,
+                "historical_avg_seconds": None,
+                "queue_position": queue_position,
+            }
+        wait_seconds = avg_history * max(queue_position - 1, 0)
+        return {
+            "available": True,
+            "remaining_seconds": int(max(round(wait_seconds), 0)),
+            "source": "history_queue",
+            "confidence": 0.55,
+            "historical_avg_seconds": int(round(avg_history)),
+            "queue_position": queue_position,
+        }
+
+    if status != "running":
+        return {"available": False, "remaining_seconds": None, "source": "unknown", "confidence": 0.0}
+
+    started = _parse_iso_datetime(job.get("started_at"))
+    elapsed = 0.0
+    if started is not None:
+        elapsed = max((datetime.now() - started).total_seconds(), 0.0)
+
+    try:
+        progress = int(job.get("progress", 0) or 0)
+    except Exception:
+        progress = 0
+    progress = max(0, min(progress, 100))
+
+    by_progress: Optional[float] = None
+    if elapsed > 0 and progress >= 2 and progress < 100:
+        by_progress = elapsed * max(100 - progress, 0) / max(progress, 1)
+
+    by_history: Optional[float] = None
+    if avg_history > 0:
+        by_history = max(avg_history - elapsed, 0.0)
+
+    remaining = None
+    source = "none"
+    confidence = 0.0
+
+    if by_progress is not None and by_history is not None:
+        # Blend historical signal and live progress; progress gets more weight once >20%.
+        progress_weight = 0.7 if progress >= 20 else 0.5
+        history_weight = 1.0 - progress_weight
+        remaining = (by_progress * progress_weight) + (by_history * history_weight)
+        source = "blended"
+        confidence = 0.78 if progress >= 20 else 0.62
+    elif by_progress is not None:
+        remaining = by_progress
+        source = "progress"
+        confidence = 0.58 if progress >= 20 else 0.42
+    elif by_history is not None:
+        remaining = by_history
+        source = "history"
+        confidence = 0.5
+
+    if remaining is None:
+        return {
+            "available": False,
+            "remaining_seconds": None,
+            "source": source,
+            "confidence": confidence,
+            "elapsed_seconds": int(round(elapsed)),
+            "historical_avg_seconds": int(round(avg_history)) if avg_history > 0 else None,
+        }
+
+    remaining = max(min(float(remaining), 72 * 3600), 0.0)
+    return {
+        "available": True,
+        "remaining_seconds": int(round(remaining)),
+        "source": source,
+        "confidence": round(confidence, 3),
+        "elapsed_seconds": int(round(elapsed)),
+        "historical_avg_seconds": int(round(avg_history)) if avg_history > 0 else None,
+        "progress": progress,
+    }
 
 
 def _build_agent_task_history_record(job_id: str, job: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -3224,41 +4470,35 @@ def _build_capability_plan_summary(payload: Dict) -> Dict:
     return summary
 
 
+def _capability_idempotency_project_anchor() -> str:
+    if _project_dir is None:
+        return ""
+    try:
+        return str(_project_dir.resolve())
+    except Exception:
+        return str(_project_dir)
+
+
+def _ensure_capability_idempotency_store() -> CapabilityIdempotencyStore:
+    global _capability_idempotency_store
+    if _capability_idempotency_store is None:
+        _capability_idempotency_store = CapabilityIdempotencyStore(
+            store_path_getter=lambda: _project_data_path("capability_idempotency_cache.json"),
+            project_anchor_getter=lambda: _capability_idempotency_project_anchor(),
+            default_ttl_seconds=_CAPABILITY_IDEMPOTENCY_TTL_SECONDS,
+            default_limit=_CAPABILITY_IDEMPOTENCY_LIMIT,
+            memory_cache=_capability_idempotency_cache,
+            lock=_capability_idempotency_lock,
+        )
+    return _capability_idempotency_store
+
+
 def _capability_idempotency_store_path() -> Optional[Path]:
-    return _project_data_path("capability_idempotency_cache.json")
+    return _ensure_capability_idempotency_store().store_path()
 
 
 def _normalize_capability_idempotency_entry(raw: Any) -> Optional[Dict[str, Any]]:
-    if not isinstance(raw, dict):
-        return None
-    body = raw.get("body")
-    if not isinstance(body, dict):
-        return None
-    try:
-        status = int(raw.get("status", 200) or 200)
-    except Exception:
-        status = 200
-    created_at = str(raw.get("created_at", "") or "")
-    return {
-        "status": status,
-        "body": deepcopy(body),
-        "created_at": created_at,
-    }
-
-
-def _parse_iso_datetime(value: str) -> Optional[datetime]:
-    text = str(value or "").strip()
-    if not text:
-        return None
-    try:
-        return datetime.fromisoformat(text)
-    except Exception:
-        try:
-            if text.endswith("Z"):
-                return datetime.fromisoformat(text[:-1] + "+00:00")
-        except Exception:
-            return None
-    return None
+    return _ensure_capability_idempotency_store().normalize_entry(raw)
 
 
 def _capability_idempotency_entry_expired(
@@ -3267,14 +4507,11 @@ def _capability_idempotency_entry_expired(
     ttl_seconds: Optional[int] = None,
     now_epoch: Optional[float] = None,
 ) -> bool:
-    ttl = _CAPABILITY_IDEMPOTENCY_TTL_SECONDS if ttl_seconds is None else int(ttl_seconds)
-    if ttl <= 0:
-        return False
-    created = _parse_iso_datetime(str((entry or {}).get("created_at", "") or ""))
-    if created is None:
-        return False
-    ts_now = time.time() if now_epoch is None else float(now_epoch)
-    return (ts_now - created.timestamp()) > float(ttl)
+    return _ensure_capability_idempotency_store().entry_expired(
+        entry,
+        ttl_seconds=ttl_seconds,
+        now_epoch=now_epoch,
+    )
 
 
 def _filter_capability_idempotency_entries(
@@ -3283,18 +4520,11 @@ def _filter_capability_idempotency_entries(
     ttl_seconds: Optional[int] = None,
     include_expired: bool = False,
 ) -> Dict[str, Dict[str, Any]]:
-    ttl = _CAPABILITY_IDEMPOTENCY_TTL_SECONDS if ttl_seconds is None else int(ttl_seconds)
-    now_epoch = time.time()
-    out: Dict[str, Dict[str, Any]] = {}
-    for key, entry in (entries or {}).items():
-        normalized = _normalize_capability_idempotency_entry(entry)
-        if normalized is None:
-            continue
-        expired = _capability_idempotency_entry_expired(normalized, ttl_seconds=ttl, now_epoch=now_epoch)
-        if expired and not include_expired:
-            continue
-        out[str(key)] = normalized
-    return out
+    return _ensure_capability_idempotency_store().filter_entries(
+        entries,
+        ttl_seconds=ttl_seconds,
+        include_expired=include_expired,
+    )
 
 
 def _load_capability_idempotency_store(
@@ -3302,70 +4532,14 @@ def _load_capability_idempotency_store(
     include_expired: bool = False,
     ttl_seconds: Optional[int] = None,
 ) -> Dict[str, Dict[str, Any]]:
-    p = _capability_idempotency_store_path()
-    if p is None or not p.exists():
-        return {}
-    try:
-        raw = json.loads(p.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-
-    out: Dict[str, Dict[str, Any]] = {}
-    if isinstance(raw, dict) and isinstance(raw.get("records"), list):
-        for item in raw.get("records", []):
-            if not isinstance(item, dict):
-                continue
-            cache_key = str(item.get("cache_key", "") or "").strip()
-            if not cache_key:
-                continue
-            normalized = _normalize_capability_idempotency_entry(item)
-            if normalized is None:
-                continue
-            out[cache_key] = normalized
-        return _filter_capability_idempotency_entries(
-            out,
-            ttl_seconds=_CAPABILITY_IDEMPOTENCY_TTL_SECONDS if ttl_seconds is None else ttl_seconds,
-            include_expired=include_expired,
-        )
-
-    if isinstance(raw, dict):
-        for cache_key, item in raw.items():
-            key = str(cache_key or "").strip()
-            if not key:
-                continue
-            normalized = _normalize_capability_idempotency_entry(item)
-            if normalized is None:
-                continue
-            out[key] = normalized
-    return _filter_capability_idempotency_entries(
-        out,
-        ttl_seconds=_CAPABILITY_IDEMPOTENCY_TTL_SECONDS if ttl_seconds is None else ttl_seconds,
+    return _ensure_capability_idempotency_store().load_store(
         include_expired=include_expired,
+        ttl_seconds=ttl_seconds,
     )
 
 
 def _save_capability_idempotency_store(records: Dict[str, Dict[str, Any]]):
-    p = _capability_idempotency_store_path()
-    if p is None:
-        return
-    p.parent.mkdir(parents=True, exist_ok=True)
-    items = []
-    for cache_key, entry in records.items():
-        normalized = _normalize_capability_idempotency_entry(entry)
-        if normalized is None:
-            continue
-        if not str(normalized.get("created_at", "") or "").strip():
-            normalized["created_at"] = datetime.now().isoformat(timespec="seconds")
-        items.append({
-            "cache_key": str(cache_key),
-            **normalized,
-        })
-    payload = {
-        "version": 1,
-        "updated_at": datetime.now().isoformat(timespec="seconds"),
-        "records": items,
-    }
-    p.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    _ensure_capability_idempotency_store().save_store(records)
 
 
 def _trim_capability_idempotency_entries(
@@ -3373,19 +4547,10 @@ def _trim_capability_idempotency_entries(
     *,
     ttl_seconds: Optional[int] = None,
 ) -> Dict[str, Dict[str, Any]]:
-    filtered = _filter_capability_idempotency_entries(
+    return _ensure_capability_idempotency_store().trim_entries(
         entries,
-        ttl_seconds=ttl_seconds if ttl_seconds is not None else _CAPABILITY_IDEMPOTENCY_TTL_SECONDS,
-        include_expired=False,
+        ttl_seconds=ttl_seconds,
     )
-    if len(filtered) <= _CAPABILITY_IDEMPOTENCY_LIMIT:
-        return filtered
-    ordered = sorted(
-        filtered.items(),
-        key=lambda kv: str((kv[1] or {}).get("created_at", "") or ""),
-    )
-    kept = ordered[-_CAPABILITY_IDEMPOTENCY_LIMIT:]
-    return {k: v for k, v in kept}
 
 
 def _trim_capability_idempotency_entries_with_limit(
@@ -3394,20 +4559,11 @@ def _trim_capability_idempotency_entries_with_limit(
     max_entries: int,
     ttl_seconds: Optional[int] = None,
 ) -> Dict[str, Dict[str, Any]]:
-    max_n = max(int(max_entries or 0), 1)
-    filtered = _filter_capability_idempotency_entries(
+    return _ensure_capability_idempotency_store().trim_entries_with_limit(
         entries,
-        ttl_seconds=ttl_seconds if ttl_seconds is not None else _CAPABILITY_IDEMPOTENCY_TTL_SECONDS,
-        include_expired=False,
+        max_entries=max_entries,
+        ttl_seconds=ttl_seconds,
     )
-    if len(filtered) <= max_n:
-        return filtered
-    ordered = sorted(
-        filtered.items(),
-        key=lambda kv: str((kv[1] or {}).get("created_at", "") or ""),
-    )
-    kept = ordered[-max_n:]
-    return {k: v for k, v in kept}
 
 
 def _limit_capability_idempotency_entries(
@@ -3415,31 +4571,17 @@ def _limit_capability_idempotency_entries(
     *,
     max_entries: int,
 ) -> Dict[str, Dict[str, Any]]:
-    max_n = max(int(max_entries or 0), 1)
-    normalized_map: Dict[str, Dict[str, Any]] = {}
-    for key, entry in (entries or {}).items():
-        normalized = _normalize_capability_idempotency_entry(entry)
-        if normalized is None:
-            continue
-        normalized_map[str(key)] = normalized
-    if len(normalized_map) <= max_n:
-        return normalized_map
-    ordered = sorted(
-        normalized_map.items(),
-        key=lambda kv: str((kv[1] or {}).get("created_at", "") or ""),
+    return _ensure_capability_idempotency_store().limit_entries(
+        entries,
+        max_entries=max_entries,
     )
-    kept = ordered[-max_n:]
-    return {k: v for k, v in kept}
 
 
 def _get_persisted_capability_idempotency_entry(cache_key: str) -> Optional[Dict[str, Any]]:
-    records = _load_capability_idempotency_store(
-        include_expired=False,
+    return _ensure_capability_idempotency_store().get_persisted_entry(
+        cache_key,
         ttl_seconds=_CAPABILITY_IDEMPOTENCY_TTL_SECONDS,
     )
-    item = records.get(cache_key)
-    normalized = _normalize_capability_idempotency_entry(item)
-    return deepcopy(normalized) if normalized is not None else None
 
 
 def _compact_persisted_capability_idempotency_store(
@@ -3447,57 +4589,27 @@ def _compact_persisted_capability_idempotency_store(
     ttl_seconds: Optional[int] = None,
     max_entries: Optional[int] = None,
 ) -> Dict[str, Dict[str, Any]]:
-    records_all = _load_capability_idempotency_store(
-        include_expired=True,
-        ttl_seconds=ttl_seconds if ttl_seconds is not None else _CAPABILITY_IDEMPOTENCY_TTL_SECONDS,
+    return _ensure_capability_idempotency_store().compact_persisted_store(
+        ttl_seconds=ttl_seconds,
+        max_entries=max_entries,
     )
-    if max_entries is None:
-        compacted = _trim_capability_idempotency_entries(records_all)
-    else:
-        compacted = _trim_capability_idempotency_entries_with_limit(
-            records_all,
-            max_entries=max_entries,
-            ttl_seconds=ttl_seconds if ttl_seconds is not None else _CAPABILITY_IDEMPOTENCY_TTL_SECONDS,
-        )
-    if compacted != records_all:
-        _save_capability_idempotency_store(compacted)
-    return compacted
 
 
 def _upsert_persisted_capability_idempotency_entry(cache_key: str, entry: Dict[str, Any]):
-    records = _compact_persisted_capability_idempotency_store(
+    _ensure_capability_idempotency_store().upsert_persisted_entry(
+        cache_key,
+        entry,
         ttl_seconds=_CAPABILITY_IDEMPOTENCY_TTL_SECONDS,
         max_entries=_CAPABILITY_IDEMPOTENCY_LIMIT,
     )
-    normalized = _normalize_capability_idempotency_entry(entry)
-    if normalized is None:
-        return
-    records[str(cache_key)] = normalized
-    trimmed = _trim_capability_idempotency_entries(records)
-    _save_capability_idempotency_store(trimmed)
 
 
 def _make_capability_idempotency_cache_key(path: str, ctx: Dict[str, str]) -> str:
-    project_anchor = ""
-    if _project_dir is not None:
-        try:
-            project_anchor = str(_project_dir.resolve())
-        except Exception:
-            project_anchor = str(_project_dir)
-    return (
-        f"{project_anchor}|"
-        f"{path}|"
-        f"{ctx.get('actor_id', '')}|"
-        f"{ctx.get('idempotency_key', '')}"
-    )
+    return _ensure_capability_idempotency_store().make_cache_key(path, ctx)
 
 
 def _trim_capability_idempotency_cache():
-    if len(_capability_idempotency_cache) <= _CAPABILITY_IDEMPOTENCY_LIMIT:
-        return
-    trimmed = _trim_capability_idempotency_entries(_capability_idempotency_cache)
-    _capability_idempotency_cache.clear()
-    _capability_idempotency_cache.update(trimmed)
+    _ensure_capability_idempotency_store().trim_memory_cache()
 
 
 @app.before_request
@@ -3512,27 +4624,8 @@ def _capability_idempotency_before_request():
     if not ctx.get("idempotency_key"):
         return None
     cache_key = _make_capability_idempotency_cache_key(request.path, ctx)
-    with _capability_idempotency_lock:
-        hit = _capability_idempotency_cache.get(cache_key)
-        replay_source = "memory"
-        if isinstance(hit, dict) and _capability_idempotency_entry_expired(
-            hit,
-            ttl_seconds=_CAPABILITY_IDEMPOTENCY_TTL_SECONDS,
-        ):
-            _capability_idempotency_cache.pop(cache_key, None)
-            hit = None
-        if not isinstance(hit, dict):
-            hit = _get_persisted_capability_idempotency_entry(cache_key)
-            if isinstance(hit, dict):
-                _capability_idempotency_cache[cache_key] = deepcopy(hit)
-                _trim_capability_idempotency_cache()
-                replay_source = "persisted"
-        if isinstance(hit, dict) and _capability_idempotency_entry_expired(
-            hit,
-            ttl_seconds=_CAPABILITY_IDEMPOTENCY_TTL_SECONDS,
-        ):
-            _capability_idempotency_cache.pop(cache_key, None)
-            hit = None
+    store = _ensure_capability_idempotency_store()
+    hit, replay_source = store.lookup(cache_key)
     if not isinstance(hit, dict):
         return None
     body = deepcopy(hit.get("body", {}))
@@ -3583,15 +4676,11 @@ def _capability_context_after_request(response):
             and not idem.get("replayed", False)
         ):
             cache_key = _make_capability_idempotency_cache_key(request.path, ctx)
-            entry = {
-                "status": int(response.status_code),
-                "body": deepcopy(body),
-                "created_at": datetime.now().isoformat(timespec="seconds"),
-            }
-            with _capability_idempotency_lock:
-                _capability_idempotency_cache[cache_key] = deepcopy(entry)
-                _trim_capability_idempotency_cache()
-                _upsert_persisted_capability_idempotency_entry(cache_key, entry)
+            _ensure_capability_idempotency_store().put_success(
+                cache_key,
+                status=int(response.status_code),
+                body=deepcopy(body),
+            )
 
     response.set_data(json.dumps(body, ensure_ascii=False))
     return response
@@ -3659,1042 +4748,7 @@ def _choose_path(mode: str) -> Dict:
 
 # 启动时加载并注入 AI 设置（支持无重启使用）
 _apply_ai_env(_load_ai_settings())
-
-
-# ── API 端点 ─────────────────────────────────────────────────────────
-
-@app.route("/api/status")
-def api_status():
-    return jsonify(_state_dict())
-
-
-@app.route("/api/system/load")
-def api_system_load():
-    return jsonify({
-        "ok": True,
-        "system": _system_load_snapshot(),
-        "overloaded": _is_overloaded(),
-        "running_jobs": _running_heavy_jobs(),
-    })
-
-
-@app.route("/api/settings/ai", methods=["GET"])
-def api_get_ai_settings():
-    ai = _load_ai_settings()
-    return jsonify({"ok": True, **_public_ai_settings(ai)})
-
-
-@app.route("/api/settings/ai", methods=["POST"])
-def api_save_ai_settings():
-    data = request.json or {}
-    ai = _save_ai_settings(data)
-    _apply_ai_env(ai)
-    return jsonify({"ok": True, **_public_ai_settings(ai)})
-
-
-@app.route("/api/init", methods=["POST"])
-def api_init():
-    data = request.json or {}
-    videos_dir = (data.get("videos_dir", "") or "").strip()
-    project_dir = data.get("project_dir", "").strip()
-    selected_uids = data.get("selected_video_uids") or []
-    if isinstance(selected_uids, str):
-        selected_uids = [x.strip() for x in selected_uids.split(",") if x.strip()]
-
-    if selected_uids:
-        if len(selected_uids) > 50:
-            return jsonify({"error": "一次最多选择 50 个视频素材"}), 400
-
-        if not project_dir:
-            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            project_dir = str(Path.cwd() / f"proj_selected_{ts}")
-
-        project_path = Path(project_dir).expanduser().resolve()
-        _prepare_project_dirs(project_path)
-
-        materials = _library.build_workflow_materials(selected_uids)
-        if not materials:
-            return jsonify({"error": "未找到可用素材，请先在素材库分析并选择素材"}), 400
-
-        resolved_uids = [uid for uid in selected_uids if uid in materials]
-        if not resolved_uids:
-            return jsonify({"error": "所选素材均不可用（仅支持视频素材，且需本地路径可访问）"}), 400
-        if len(resolved_uids) != len(selected_uids):
-            return jsonify({"error": "所选素材中包含图片或不可用文件；制作流程当前仅支持视频"}), 400
-
-        selected_paths = [materials[uid]["path"] for uid in resolved_uids]
-        config = _default_project_config({
-            "material_source": "global_library",
-            "selected_video_uids": resolved_uids,
-            "selected_video_paths": selected_paths,
-        })
-        ws = WorkflowState.create(project_path, "", config)
-
-        materials_path = project_path / "data" / "materials.json"
-        materials_path.write_text(
-            json.dumps(materials, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-
-        ws.data["steps"]["1"].update({
-            "status": "done",
-            "review_status": "approved",
-            "output": "data/materials.json",
-            "video_count": len(resolved_uids),
-            "completed_at": datetime.now().isoformat(),
-        })
-        ws.data["steps"]["2"]["status"] = "pending"
-        ws.data["current_step"] = 2
-        ws.save()
-
-        _load_state(project_path)
-        return jsonify({
-            "ok": True,
-            "project_dir": str(project_path),
-            "selected_count": len(resolved_uids),
-            **_state_dict(),
-        })
-
-    if not videos_dir:
-        return jsonify({"error": "videos_dir 不能为空（或传 selected_video_uids）"}), 400
-
-    videos_path = Path(videos_dir).expanduser().resolve()
-    if not videos_path.exists():
-        return jsonify({"error": f"素材目录不存在: {videos_dir}"}), 400
-
-    if not project_dir:
-        project_dir = str(videos_path.parent / f"proj_{videos_path.name}")
-
-    project_path = Path(project_dir).expanduser().resolve()
-    _prepare_project_dirs(project_path)
-    ws = WorkflowState.create(project_path, str(videos_path), _default_project_config())
-    ws.save()
-    _load_state(project_path)
-    return jsonify({"ok": True, "project_dir": str(project_path), **_state_dict()})
-
-
-@app.route("/api/library/stats")
-def api_library_stats():
-    return jsonify(_library.stats())
-
-
-@app.route("/api/library/search")
-def api_library_search():
-    query = (request.args.get("q", "") or "").strip()
-    retrieval_mode = (request.args.get("mode", "hybrid") or "hybrid").strip().lower()
-    media_type = (request.args.get("media_type", "all") or "all").strip().lower()
-    if media_type not in {"all", "video", "image"}:
-        media_type = "all"
-    if retrieval_mode not in {"hybrid", "keyword", "vector"}:
-        retrieval_mode = "hybrid"
-    try:
-        default_limit = "120" if not query else "150"
-        limit = int(request.args.get("limit", default_limit))
-    except Exception:
-        limit = 120 if not query else 150
-    try:
-        offset = int(request.args.get("offset", "0"))
-    except Exception:
-        offset = 0
-    limit = max(1, min(limit, 500))
-    offset = max(0, offset)
-    effective_mode = retrieval_mode if query else "browse"
-    results = _library.search_assets(
-        query=query,
-        limit=limit,
-        offset=offset,
-        retrieval_mode=retrieval_mode,
-        media_type=media_type,
-    )
-    total_matches = _library.count_matching_assets(
-        query=query,
-        retrieval_mode=retrieval_mode,
-        media_type=media_type,
-    )
-    stats = _library.stats()
-    has_more = (offset + len(results)) < total_matches
-    return jsonify({
-        "query": query,
-        "media_type": media_type,
-        "retrieval_mode": effective_mode,
-        "limit": limit,
-        "offset": offset,
-        "count": len(results),
-        "total_matches": total_matches,
-        "total_assets": stats.get("total_assets", 0),
-        "hybrid_search_enabled": bool(stats.get("hybrid_search_enabled", False)),
-        "embedding_enabled": bool(stats.get("embedding_enabled", False)),
-        "embedding_status": stats.get("embedding_status", ""),
-        "embedding_status_message": stats.get("embedding_status_message", ""),
-        "embedding_ready_assets": int(stats.get("embedding_ready_assets", 0)),
-        "truncated": has_more,
-        "has_more": has_more,
-        "results": results,
-    })
-
-
-@app.route("/api/library/assets", methods=["POST"])
-def api_library_assets():
-    data = request.json or {}
-    uids = data.get("uids") or []
-    if not isinstance(uids, list):
-        return jsonify({"error": "uids 必须是数组"}), 400
-    return jsonify({"assets": _library.get_assets(uids)})
-
-
-@app.route("/api/library/preview/local", methods=["POST"])
-def api_library_preview_local():
-    data = request.json or {}
-    source_path = (data.get("path", "") or "").strip()
-    try:
-        max_results = int(data.get("max_results", 30))
-    except Exception:
-        max_results = 30
-    max_results = max(1, min(max_results, 200))
-    if not source_path:
-        return jsonify({"error": "path 不能为空"}), 400
-    running = _running_heavy_jobs()
-    if running:
-        return jsonify({
-            "error": "已有重任务运行中，请等待完成后再预览",
-            "running_jobs": running,
-            "system": _system_load_snapshot(),
-        }), 409
-
-    root = Path(source_path).expanduser().resolve()
-    if not root.exists():
-        return jsonify({"error": f"路径不存在: {root}"}), 400
-
-    videos = _library.discover_videos(root)
-    sample = []
-    for p in videos[:max_results]:
-        try:
-            rel = str(p.relative_to(root))
-        except Exception:
-            rel = str(p)
-        sample.append(rel)
-
-    return jsonify({
-        "ok": True,
-        "preview": {
-            "path": str(root),
-            "video_candidates": len(videos),
-            "max_results": max_results,
-            "sample_videos": sample,
-        },
-    })
-
-
-@app.route("/api/library/ingest/local", methods=["POST"])
-def api_library_ingest_local():
-    data = request.json or {}
-    source_path = (data.get("path", "") or "").strip()
-    try:
-        max_videos = int(data.get("max_videos", 600))
-    except Exception:
-        max_videos = 600
-    max_videos = max(1, min(max_videos, 5000))
-
-    if not source_path:
-        return jsonify({"error": "path 不能为空"}), 400
-    root = Path(source_path).expanduser().resolve()
-    if not root.exists():
-        return jsonify({"error": f"路径不存在: {root}"}), 400
-
-    def _do_local():
-        print(f"[素材分析] 开始本地分析: {source_path} (max_videos={max_videos})")
-
-        def _should_cancel():
-            return bool(_jobs.get(job_id, {}).get("cancel_requested"))
-
-        def _progress(done, total, current_path):
-            if _should_cancel():
-                raise JobCancelledError(CANCEL_TOKEN)
-            if total <= 0:
-                _jobs[job_id]["progress"] = 0
-                return
-            _jobs[job_id]["progress"] = int(done * 100 / max(total, 1))
-            name = Path(current_path).name if current_path else ""
-            _jobs[job_id]["log"].append(f"已处理 {done}/{total} {name}")
-            _jobs[job_id]["log"] = _jobs[job_id]["log"][-220:]
-
-        result = _library.ingest_local_path(
-            source_path,
-            max_videos=max_videos,
-            progress_callback=_progress,
-            should_cancel=_should_cancel,
-        )
-        if result.get("cancelled"):
-            raise JobCancelledError(
-                CANCEL_TOKEN,
-                {"ok": False, "cancelled": True, "result": result, "stats": _library.stats()},
-            )
-        print(
-            f"[素材分析] 本地分析完成: 扫描 {result.get('scanned', 0)}，入库 {result.get('indexed', 0)}，"
-            f"重复 {result.get('dedup_hits', 0)}，失败 {result.get('failed', 0)}"
-        )
-        return {"ok": True, "result": result, "stats": _library.stats()}
-
-    with _heavy_job_submit_lock:
-        running = _running_heavy_jobs()
-        if running:
-            return jsonify({
-                "error": "已有重任务运行中，请等待完成后再开始素材分析",
-                "running_jobs": running,
-                "system": _system_load_snapshot(),
-            }), 409
-        if _is_overloaded():
-            return jsonify({
-                "error": "系统负载过高，暂不启动新分析任务，请稍后重试",
-                "system": _system_load_snapshot(),
-            }), 429
-        job_id = str(uuid.uuid4())[:8]
-        _run_in_bg(job_id, _do_local, kind="library_ingest_local")
-
-    return jsonify({
-        "ok": True,
-        "job_id": job_id,
-        "mode": "async",
-        "max_videos": max_videos,
-        "system": _system_load_snapshot(),
-    })
-
-
-@app.route("/api/library/preview/local/images", methods=["POST"])
-def api_library_preview_local_images():
-    data = request.json or {}
-    source_path = (data.get("path", "") or "").strip()
-    try:
-        max_results = int(data.get("max_results", 30))
-    except Exception:
-        max_results = 30
-    max_results = max(1, min(max_results, 300))
-    if not source_path:
-        return jsonify({"error": "path 不能为空"}), 400
-    running = _running_heavy_jobs()
-    if running:
-        return jsonify({
-            "error": "已有重任务运行中，请等待完成后再预览",
-            "running_jobs": running,
-            "system": _system_load_snapshot(),
-        }), 409
-
-    root = Path(source_path).expanduser().resolve()
-    if not root.exists():
-        return jsonify({"error": f"路径不存在: {root}"}), 400
-
-    images = _library.discover_images(root)
-    sample = []
-    for p in images[:max_results]:
-        try:
-            rel = str(p.relative_to(root))
-        except Exception:
-            rel = str(p)
-        sample.append(rel)
-
-    return jsonify({
-        "ok": True,
-        "preview": {
-            "path": str(root),
-            "image_candidates": len(images),
-            "max_results": max_results,
-            "sample_images": sample,
-        },
-    })
-
-
-@app.route("/api/library/ingest/local/images", methods=["POST"])
-def api_library_ingest_local_images():
-    data = request.json or {}
-    source_path = (data.get("path", "") or "").strip()
-    try:
-        max_images = int(data.get("max_images", 1200))
-    except Exception:
-        max_images = 1200
-    max_images = max(1, min(max_images, 8000))
-
-    if not source_path:
-        return jsonify({"error": "path 不能为空"}), 400
-    root = Path(source_path).expanduser().resolve()
-    if not root.exists():
-        return jsonify({"error": f"路径不存在: {root}"}), 400
-
-    def _do_local_images():
-        print(f"[图片分析] 开始本地分析: {source_path} (max_images={max_images})")
-
-        def _should_cancel():
-            return bool(_jobs.get(job_id, {}).get("cancel_requested"))
-
-        def _progress(done, total, current_path):
-            if _should_cancel():
-                raise JobCancelledError(CANCEL_TOKEN)
-            if total <= 0:
-                _jobs[job_id]["progress"] = 0
-                return
-            _jobs[job_id]["progress"] = int(done * 100 / max(total, 1))
-            name = Path(current_path).name if current_path else ""
-            _jobs[job_id]["log"].append(f"已处理 {done}/{total} {name}")
-            _jobs[job_id]["log"] = _jobs[job_id]["log"][-220:]
-
-        result = _library.ingest_local_images(
-            source_path,
-            max_images=max_images,
-            progress_callback=_progress,
-            should_cancel=_should_cancel,
-        )
-        if result.get("cancelled"):
-            raise JobCancelledError(
-                CANCEL_TOKEN,
-                {"ok": False, "cancelled": True, "result": result, "stats": _library.stats()},
-            )
-        print(
-            f"[图片分析] 本地分析完成: 扫描 {result.get('scanned', 0)}，入库 {result.get('indexed', 0)}，"
-            f"重复 {result.get('dedup_hits', 0)}，失败 {result.get('failed', 0)}"
-        )
-        return {"ok": True, "result": result, "stats": _library.stats()}
-
-    with _heavy_job_submit_lock:
-        running = _running_heavy_jobs()
-        if running:
-            return jsonify({
-                "error": "已有重任务运行中，请等待完成后再开始图片分析",
-                "running_jobs": running,
-                "system": _system_load_snapshot(),
-            }), 409
-        if _is_overloaded():
-            return jsonify({
-                "error": "系统负载过高，暂不启动新分析任务，请稍后重试",
-                "system": _system_load_snapshot(),
-            }), 429
-        job_id = str(uuid.uuid4())[:8]
-        _run_in_bg(job_id, _do_local_images, kind="library_ingest_local_images")
-
-    return jsonify({
-        "ok": True,
-        "job_id": job_id,
-        "mode": "async",
-        "max_images": max_images,
-        "system": _system_load_snapshot(),
-    })
-
-
-@app.route("/api/library/ingest/gdrive", methods=["POST"])
-def api_library_ingest_gdrive():
-    data = request.json or {}
-    url = (data.get("url", "") or "").strip()
-    refresh = bool(data.get("refresh", False))
-    priority_subdirs = data.get("priority_subdirs", "")
-    try:
-        max_videos = int(data.get("max_videos", 80))
-    except Exception:
-        max_videos = 80
-    try:
-        max_scan_folders = int(data.get("max_scan_folders", 120))
-    except Exception:
-        max_scan_folders = 120
-    if max_videos <= 0:
-        max_videos = 80
-    max_videos = min(max_videos, 500)
-    if max_scan_folders <= 0:
-        max_scan_folders = 120
-    max_scan_folders = min(max_scan_folders, 2000)
-    if not url:
-        return jsonify({"error": "url 不能为空"}), 400
-
-    def _do_gdrive():
-        print(
-            f"[素材分析] 开始 Google Drive 分析: max_videos={max_videos}, "
-            f"max_scan_folders={max_scan_folders}, refresh={refresh}"
-        )
-
-        def _should_cancel():
-            return bool(_jobs.get(job_id, {}).get("cancel_requested"))
-
-        def _progress(done, total, current_path):
-            if _should_cancel():
-                raise JobCancelledError(CANCEL_TOKEN)
-            if total <= 0:
-                _jobs[job_id]["progress"] = 0
-                return
-            _jobs[job_id]["progress"] = int(done * 100 / max(total, 1))
-            name = Path(current_path).name if current_path else ""
-            _jobs[job_id]["log"].append(f"已处理 {done}/{total} {name}")
-            _jobs[job_id]["log"] = _jobs[job_id]["log"][-220:]
-
-        result = _library.ingest_google_drive(
-            url,
-            refresh=refresh,
-            max_videos=max_videos,
-            priority_subdirs=priority_subdirs,
-            max_scan_folders=max_scan_folders,
-            progress_callback=_progress,
-            should_cancel=_should_cancel,
-        )
-        if result.get("cancelled"):
-            raise JobCancelledError(
-                CANCEL_TOKEN,
-                {"ok": False, "cancelled": True, "result": result, "stats": _library.stats()},
-            )
-        print(
-            f"[素材分析] Google Drive 分析完成: 列出 {result.get('listed_files', 0)}，"
-            f"候选 {result.get('video_candidates', 0)}，入库 {result.get('indexed', 0)}"
-        )
-        return {"ok": True, "result": result, "stats": _library.stats()}
-
-    with _heavy_job_submit_lock:
-        running = _running_heavy_jobs()
-        if running:
-            return jsonify({
-                "error": "已有重任务运行中，请等待完成后再开始云端分析",
-                "running_jobs": running,
-                "system": _system_load_snapshot(),
-            }), 409
-        if _is_overloaded():
-            return jsonify({
-                "error": "系统负载过高，暂不启动新分析任务，请稍后重试",
-                "system": _system_load_snapshot(),
-            }), 429
-        job_id = str(uuid.uuid4())[:8]
-        _run_in_bg(job_id, _do_gdrive, kind="library_ingest_gdrive")
-
-    return jsonify({
-        "ok": True,
-        "job_id": job_id,
-        "mode": "async",
-        "max_videos": max_videos,
-        "max_scan_folders": max_scan_folders,
-        "system": _system_load_snapshot(),
-    })
-
-
-@app.route("/api/library/preview/gdrive", methods=["POST"])
-def api_library_preview_gdrive():
-    data = request.json or {}
-    url = (data.get("url", "") or "").strip()
-    priority_subdirs = data.get("priority_subdirs", "")
-    try:
-        max_scan_folders = int(data.get("max_scan_folders", 120))
-    except Exception:
-        max_scan_folders = 120
-    try:
-        max_results = int(data.get("max_results", 30))
-    except Exception:
-        max_results = 30
-    if max_scan_folders <= 0:
-        max_scan_folders = 120
-    max_scan_folders = min(max_scan_folders, 2000)
-    if max_results <= 0:
-        max_results = 30
-    max_results = min(max_results, 200)
-    if not url:
-        return jsonify({"error": "url 不能为空"}), 400
-    running = _running_heavy_jobs()
-    if running:
-        return jsonify({
-            "error": "已有重任务运行中，请等待完成后再预览",
-            "running_jobs": running,
-            "system": _system_load_snapshot(),
-        }), 409
-    try:
-        preview = _library.preview_google_drive(
-            url=url,
-            priority_subdirs=priority_subdirs,
-            max_scan_folders=max_scan_folders,
-            max_results=max_results,
-        )
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
-    return jsonify({"ok": True, "preview": preview})
-
-
-@app.route("/api/library/ingest/gdrive/images", methods=["POST"])
-def api_library_ingest_gdrive_images():
-    data = request.json or {}
-    url = (data.get("url", "") or "").strip()
-    refresh = bool(data.get("refresh", False))
-    priority_subdirs = data.get("priority_subdirs", "")
-    try:
-        max_images = int(data.get("max_images", 200))
-    except Exception:
-        max_images = 200
-    try:
-        max_scan_folders = int(data.get("max_scan_folders", 120))
-    except Exception:
-        max_scan_folders = 120
-    if max_images <= 0:
-        max_images = 200
-    max_images = min(max_images, 2000)
-    if max_scan_folders <= 0:
-        max_scan_folders = 120
-    max_scan_folders = min(max_scan_folders, 2000)
-    if not url:
-        return jsonify({"error": "url 不能为空"}), 400
-
-    def _do_gdrive_images():
-        print(
-            f"[图片分析] 开始 Google Drive 分析: max_images={max_images}, "
-            f"max_scan_folders={max_scan_folders}, refresh={refresh}"
-        )
-
-        def _should_cancel():
-            return bool(_jobs.get(job_id, {}).get("cancel_requested"))
-
-        def _progress(done, total, current_path):
-            if _should_cancel():
-                raise JobCancelledError(CANCEL_TOKEN)
-            if total <= 0:
-                _jobs[job_id]["progress"] = 0
-                return
-            _jobs[job_id]["progress"] = int(done * 100 / max(total, 1))
-            name = Path(current_path).name if current_path else ""
-            _jobs[job_id]["log"].append(f"已处理 {done}/{total} {name}")
-            _jobs[job_id]["log"] = _jobs[job_id]["log"][-220:]
-
-        result = _library.ingest_google_drive_images(
-            url,
-            refresh=refresh,
-            max_images=max_images,
-            priority_subdirs=priority_subdirs,
-            max_scan_folders=max_scan_folders,
-            progress_callback=_progress,
-            should_cancel=_should_cancel,
-        )
-        if result.get("cancelled"):
-            raise JobCancelledError(
-                CANCEL_TOKEN,
-                {"ok": False, "cancelled": True, "result": result, "stats": _library.stats()},
-            )
-        print(
-            f"[图片分析] Google Drive 分析完成: 列出 {result.get('listed_files', 0)}，"
-            f"候选 {result.get('image_candidates', 0)}，入库 {result.get('indexed', 0)}"
-        )
-        return {"ok": True, "result": result, "stats": _library.stats()}
-
-    with _heavy_job_submit_lock:
-        running = _running_heavy_jobs()
-        if running:
-            return jsonify({
-                "error": "已有重任务运行中，请等待完成后再开始云端图片分析",
-                "running_jobs": running,
-                "system": _system_load_snapshot(),
-            }), 409
-        if _is_overloaded():
-            return jsonify({
-                "error": "系统负载过高，暂不启动新分析任务，请稍后重试",
-                "system": _system_load_snapshot(),
-            }), 429
-        job_id = str(uuid.uuid4())[:8]
-        _run_in_bg(job_id, _do_gdrive_images, kind="library_ingest_gdrive_images")
-
-    return jsonify({
-        "ok": True,
-        "job_id": job_id,
-        "mode": "async",
-        "max_images": max_images,
-        "max_scan_folders": max_scan_folders,
-        "system": _system_load_snapshot(),
-    })
-
-
-@app.route("/api/library/preview/gdrive/images", methods=["POST"])
-def api_library_preview_gdrive_images():
-    data = request.json or {}
-    url = (data.get("url", "") or "").strip()
-    priority_subdirs = data.get("priority_subdirs", "")
-    try:
-        max_scan_folders = int(data.get("max_scan_folders", 120))
-    except Exception:
-        max_scan_folders = 120
-    try:
-        max_results = int(data.get("max_results", 30))
-    except Exception:
-        max_results = 30
-    if max_scan_folders <= 0:
-        max_scan_folders = 120
-    max_scan_folders = min(max_scan_folders, 2000)
-    if max_results <= 0:
-        max_results = 30
-    max_results = min(max_results, 200)
-    if not url:
-        return jsonify({"error": "url 不能为空"}), 400
-    running = _running_heavy_jobs()
-    if running:
-        return jsonify({
-            "error": "已有重任务运行中，请等待完成后再预览",
-            "running_jobs": running,
-            "system": _system_load_snapshot(),
-        }), 409
-    try:
-        preview = _library.preview_google_drive_images(
-            url=url,
-            priority_subdirs=priority_subdirs,
-            max_scan_folders=max_scan_folders,
-            max_results=max_results,
-        )
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
-    return jsonify({"ok": True, "preview": preview})
-
-
-@app.route("/api/open_project", methods=["POST"])
-def api_open_project():
-    data = request.json or {}
-    project_dir = data.get("project_dir", "").strip()
-    if not project_dir:
-        return jsonify({"error": "project_dir 不能为空"}), 400
-    p = Path(project_dir)
-    if not (p / "workflow.json").exists():
-        return jsonify({"error": "目录内没有 workflow.json，不是有效项目"}), 400
-    _load_state(p)
-    return jsonify({"ok": True, **_state_dict()})
-
-
-@app.route("/api/approve/<int:step>", methods=["POST"])
-def api_approve(step: int):
-    """
-    审核通过某一步骤。
-    Body JSON 包含该步骤 review 文件需要的字段，
-    服务端直接写入 review 文件 YAML 块并触发运行。
-    """
-    if _ws is None or _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-
-    running = _running_heavy_jobs()
-    if running:
-        return jsonify({
-            "error": "已有重任务运行中，请等待完成后再继续",
-            "running_jobs": running,
-            "system": _system_load_snapshot(),
-        }), 409
-    if _is_overloaded():
-        return jsonify({
-            "error": "系统负载过高，已阻止新任务启动，请稍后重试",
-            "system": _system_load_snapshot(),
-        }), 429
-
-    data = request.json or {}
-    review_map = {
-        1: "reviews/01_materials.md",
-        2: "reviews/02_topics.md",
-        3: "reviews/03_script.md",
-        4: "reviews/04_matching.md",
-        5: None,   # 自动通过
-        6: "reviews/05_render_options.md",
-    }
-    review_rel = review_map.get(step)
-
-    if review_rel:
-        review_path = _project_dir / review_rel
-        if not review_path.exists():
-            return jsonify({
-                "error": f"审核文件不存在: {review_rel}（请先运行 Step {step} 生成审核文件）"
-            }), 404
-
-        content = review_path.read_text(encoding="utf-8")
-
-        # 构建新 YAML 块
-        yaml_lines = ["approved: true"]
-        for k, v in data.items():
-            if k == "approved":
-                continue
-            if isinstance(v, str):
-                safe = v.replace('"', '\\"')
-                yaml_lines.append(f'{k}: "{safe}"')
-            elif isinstance(v, bool):
-                yaml_lines.append(f"{k}: {'true' if v else 'false'}")
-            else:
-                yaml_lines.append(f"{k}: {v}")
-        new_yaml = "\n".join(yaml_lines)
-
-        import re
-        # 替换 ```yaml ... ``` 块
-        new_content = re.sub(
-            r"```yaml\n.*?```",
-            f"```yaml\n{new_yaml}\n```",
-            content,
-            count=1,
-            flags=re.DOTALL,
-        )
-        review_path.write_text(new_content, encoding="utf-8")
-
-    # Step 6 参数同步回 workflow config，便于重复执行粗剪/渲染时复用最近配置
-    if step == 6 and isinstance(data, dict):
-        render_cfg = _ws.data.setdefault("config", {}).setdefault("render", {})
-        for k, v in data.items():
-            if k == "approved":
-                continue
-            render_cfg[k] = v
-        _ws.save()
-
-    # 后台运行下一步
-    job_id = str(uuid.uuid4())[:8]
-
-    def _do_run():
-        def _should_cancel():
-            return bool(_jobs.get(job_id, {}).get("cancel_requested"))
-
-        def _progress(payload: Dict):
-            if not isinstance(payload, dict):
-                return
-            progress = payload.get("progress")
-            message = str(payload.get("message", "") or "").strip()
-            if isinstance(progress, (int, float)):
-                _jobs[job_id]["progress"] = max(0, min(99, int(progress)))
-            if message:
-                _jobs[job_id]["log"].append(message)
-                _jobs[job_id]["log"] = _jobs[job_id]["log"][-120:]
-
-        runner = WorkflowRunner(_ws, should_cancel=_should_cancel, progress_callback=_progress)
-        # 解析 review 并标记通过
-        if review_rel:
-            approved, parsed = runner.parse_review(step)
-            if approved:
-                _ws.approve_review(step, parsed)
-        # 运行下一步
-        target = _ws.data.get("current_step", step + 1)
-        method_name = f"step{target}_{'analyze' if target==1 else 'topics' if target==2 else 'script' if target==3 else 'match' if target==4 else 'frames' if target==5 else 'rough' if target==6 else 'render'}"
-        method = getattr(runner, method_name, None)
-        if method:
-            method()
-        _ws.load()
-
-    _run_in_bg(job_id, _do_run, kind="workflow_step")
-    return jsonify({"ok": True, "job_id": job_id})
-
-
-@app.route("/api/run_step", methods=["POST"])
-def api_run_step():
-    """后台运行当前步骤（无需先写 review 文件）。"""
-    if _ws is None:
-        return jsonify({"error": "项目未加载"}), 400
-
-    running = _running_heavy_jobs()
-    if running:
-        return jsonify({
-            "error": "已有重任务运行中，请等待完成后再执行下一步",
-            "running_jobs": running,
-            "system": _system_load_snapshot(),
-        }), 409
-    if _is_overloaded():
-        return jsonify({
-            "error": "系统负载过高，已阻止新任务启动，请稍后重试",
-            "system": _system_load_snapshot(),
-        }), 429
-
-    job_id = str(uuid.uuid4())[:8]
-    target = _ws.data.get("current_step", 1)
-
-    step_method_map = {
-        1: "step1_analyze",
-        2: "step2_topics",
-        3: "step3_script",
-        4: "step4_match",
-        5: "step5_frames",
-        6: "step6_rough",
-        7: "step7_render",
-    }
-    method_name = step_method_map.get(target)
-    if not method_name:
-        return jsonify({"error": f"未知步骤: {target}"}), 400
-
-    def _do():
-        def _should_cancel():
-            return bool(_jobs.get(job_id, {}).get("cancel_requested"))
-
-        def _progress(payload: Dict):
-            if not isinstance(payload, dict):
-                return
-            progress = payload.get("progress")
-            message = str(payload.get("message", "") or "").strip()
-            if isinstance(progress, (int, float)):
-                _jobs[job_id]["progress"] = max(0, min(99, int(progress)))
-            if message:
-                _jobs[job_id]["log"].append(message)
-                _jobs[job_id]["log"] = _jobs[job_id]["log"][-120:]
-
-        runner = WorkflowRunner(_ws, should_cancel=_should_cancel, progress_callback=_progress)
-        getattr(runner, method_name)()
-        _ws.load()
-
-    _run_in_bg(job_id, _do, kind="workflow_step")
-    return jsonify({"ok": True, "job_id": job_id, "step": target})
-
-
-@app.route("/api/job/<job_id>")
-def api_job(job_id: str):
-    job = _jobs.get(job_id)
-    if job is None:
-        return jsonify({"error": "job 不存在"}), 404
-    return jsonify({
-        "status": job["status"],
-        "kind": job.get("kind", "generic"),
-        "log": job["log"][-50:],   # 最近 50 行
-        "progress": job.get("progress", 0),
-        "cancel_requested": bool(job.get("cancel_requested", False)),
-        "error": job.get("error"),
-        "result": job.get("result"),
-        "started_at": job.get("started_at"),
-        "finished_at": job.get("finished_at"),
-        "system": _system_load_snapshot(),
-        "state": _state_dict(),
-    })
-
-
-@app.route("/api/job/<job_id>/cancel", methods=["POST"])
-def api_job_cancel(job_id: str):
-    job = _jobs.get(job_id)
-    if job is None:
-        return jsonify({"error": "job 不存在"}), 404
-    if job.get("status") != "running":
-        return jsonify({
-            "error": "任务不在运行中，无法取消",
-            "status": job.get("status"),
-        }), 409
-    job["cancel_requested"] = True
-    job["cancel_requested_at"] = datetime.now().isoformat(timespec="seconds")
-    job["log"].append("[系统] 收到取消请求，正在安全停止…")
-    return jsonify({
-        "ok": True,
-        "status": job.get("status"),
-        "cancel_requested": True,
-    })
-
-
-@app.route("/api/frames")
-def api_frames():
-    if _project_dir is None:
-        return jsonify([])
-    frames_dir = _project_dir / "preview" / "frames"
-    if not frames_dir.exists():
-        return jsonify([])
-    files = sorted(frames_dir.glob("*.jpg")) + sorted(frames_dir.glob("*.png"))
-    return jsonify([
-        {"name": f.name, "url": f"/api/files/preview/frames/{f.name}"}
-        for f in files
-    ])
-
-
-@app.route("/api/stage_files")
-def api_stage_files():
-    if _project_dir is None:
-        return jsonify({})
-    out_dir = _project_dir / "output"
-    stages = {
-        "stage_01_concat.mp4": 1,
-        "stage_02_beauty.mp4": 2,
-        "stage_03_color.mp4": 3,
-        "stage_04_subtitle.mp4": 4,
-        "final.mp4": 5,
-    }
-    result = {}
-    for fname, n in stages.items():
-        p = out_dir / fname
-        result[fname] = {
-            "exists": p.exists(),
-            "size": p.stat().st_size if p.exists() else 0,
-            "url": f"/api/files/output/{fname}" if p.exists() else None,
-            "stage": n,
-        }
-    return jsonify(result)
-
-
-@app.route("/api/files/<path:rel>")
-def api_files(rel: str):
-    """提供项目目录内的静态文件（视频/图片）。"""
-    if _project_dir is None:
-        abort(404)
-    target = (_project_dir / rel).resolve()
-    # 安全检查：不允许跳出项目目录
-    if not str(target).startswith(str(_project_dir.resolve())):
-        abort(403)
-    if not target.exists():
-        abort(404)
-    return send_file(str(target))
-
-
-@app.route("/api/open_in_finder", methods=["POST"])
-def api_open_in_finder():
-    data = request.json or {}
-    path = data.get("path", "")
-    if path and Path(path).exists():
-        p = Path(path)
-        if p.is_file():
-            subprocess.Popen(["open", "-R", str(p)])
-        else:
-            subprocess.Popen(["open", str(p)])
-    return jsonify({"ok": True})
-
-
-@app.route("/api/dialog/folder", methods=["POST"])
-def api_dialog_folder():
-    """选择文件夹（pywebview 优先，失败时 fallback 到 osascript）。"""
-    result = _choose_path("folder")
-    if result.get("path"):
-        return jsonify({"path": result.get("path"), "cancelled": False})
-    if result.get("cancelled"):
-        return jsonify({"path": None, "cancelled": True})
-    return jsonify({
-        "path": None,
-        "cancelled": False,
-        "error": result.get("error") or "无法打开文件夹选择对话框",
-    }), 400
-
-
-@app.route("/api/dialog/file", methods=["POST"])
-def api_dialog_file():
-    """选择文件（pywebview 优先，失败时 fallback 到 osascript）。"""
-    result = _choose_path("file")
-    if result.get("path"):
-        return jsonify({"path": result.get("path"), "cancelled": False})
-    if result.get("cancelled"):
-        return jsonify({"path": None, "cancelled": True})
-    return jsonify({
-        "path": None,
-        "cancelled": False,
-        "error": result.get("error") or "无法打开文件选择对话框",
-    }), 400
-
-
-@app.route("/api/script", methods=["GET"])
-def api_get_script():
-    """读取 script_matched.json 或 script_draft.json。"""
-    if _project_dir is None:
-        return jsonify({}), 400
-    for name in ["script_matched.json", "script_draft.json"]:
-        p = _project_dir / "data" / name
-        if p.exists():
-            try:
-                return jsonify(json.loads(p.read_text(encoding="utf-8")))
-            except Exception:
-                pass
-    return jsonify({})
-
-
-@app.route("/api/script", methods=["POST"])
-def api_save_script():
-    """保存修改后的脚本到 script_draft.json。"""
-    if _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-    data = request.json
-    if not data:
-        return jsonify({"error": "无效 JSON"}), 400
-    p = _project_dir / "data" / "script_draft.json"
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    return jsonify({"ok": True})
-
-
-@app.route("/api/materials")
-def api_materials():
-    if _project_dir is None:
-        return jsonify({}), 400
-    p = _project_dir / "data" / "materials.json"
-    if not p.exists():
-        return jsonify({})
-    try:
-        return jsonify(json.loads(p.read_text(encoding="utf-8")))
-    except Exception:
-        return jsonify({})
+_restore_jobs_from_store()
 
 
 # ── Capability API ────────────────────────────────────────────────────
@@ -7100,18 +7154,6 @@ def _should_run_conditional_step(
         return True, ""
     return False, "依赖状态不满足 condition"
 
-@app.route("/api/capabilities")
-def api_capabilities():
-    from modules.capabilities import legacy_step_mapping, list_capabilities
-
-    specs = [spec.__dict__ for spec in list_capabilities()]
-    return jsonify({
-        "ok": True,
-        "capabilities": specs,
-        "legacy_step_mapping": legacy_step_mapping(),
-    })
-
-
 def _parse_capability_idempotency_cache_key(cache_key: str) -> Dict[str, str]:
     text = str(cache_key or "")
     parts = text.split("|", 3)
@@ -7269,2638 +7311,6 @@ def _collect_capability_idempotency_records(
     }
 
 
-@app.route("/api/capabilities/idempotency/cache", methods=["GET"])
-def api_capability_idempotency_cache():
-    source = str(request.args.get("source", "merged") or "merged").strip().lower()
-    if source not in {"memory", "persisted", "merged"}:
-        return jsonify({"error": "source 仅支持 memory/persisted/merged"}), 400
-    include_expired = _parse_boolish(request.args.get("include_expired", "false"), default=False)
-    match_mode = str(request.args.get("match_mode", "contains") or "contains").strip().lower()
-    if match_mode not in {"contains", "exact"}:
-        return jsonify({"error": "match_mode 仅支持 contains/exact"}), 400
-    actor_id_filter = _normalize_capability_idempotency_filter_text(request.args.get("actor_id", ""))
-    endpoint_filter = _normalize_capability_idempotency_filter_text(request.args.get("endpoint", ""))
-    idempotency_key_filter = _normalize_capability_idempotency_filter_text(request.args.get("idempotency_key", ""))
-    project_path_filter = _normalize_capability_idempotency_filter_text(request.args.get("project_path", ""))
-    ttl_seconds = _normalize_capability_idempotency_ttl(
-        request.args.get("ttl_seconds", _CAPABILITY_IDEMPOTENCY_TTL_SECONDS),
-        default=_CAPABILITY_IDEMPOTENCY_TTL_SECONDS,
-    )
-    try:
-        limit = int(request.args.get("limit", "200") or "200")
-    except Exception:
-        limit = 200
-    try:
-        offset = int(request.args.get("offset", "0") or "0")
-    except Exception:
-        offset = 0
-
-    payload = _collect_capability_idempotency_records(
-        source=source,
-        ttl_seconds=ttl_seconds,
-        include_expired=include_expired,
-        limit=limit,
-        offset=offset,
-        actor_id_filter=actor_id_filter,
-        endpoint_filter=endpoint_filter,
-        idempotency_key_filter=idempotency_key_filter,
-        project_path_filter=project_path_filter,
-        match_mode=match_mode,
-    )
-    return jsonify({"ok": True, **payload})
-
-
-@app.route("/api/capabilities/idempotency/cache/prune", methods=["POST"])
-def api_capability_idempotency_cache_prune():
-    payload = request.json or {}
-    ttl_seconds = _normalize_capability_idempotency_ttl(
-        payload.get("ttl_seconds", _CAPABILITY_IDEMPOTENCY_TTL_SECONDS),
-        default=_CAPABILITY_IDEMPOTENCY_TTL_SECONDS,
-    )
-    remove_expired = _parse_boolish(payload.get("remove_expired", True), default=True)
-    clear_memory = _parse_boolish(payload.get("clear_memory", False), default=False)
-    clear_persisted = _parse_boolish(payload.get("clear_persisted", False), default=False)
-
-    max_entries_raw = payload.get("max_entries", None)
-    max_entries = None
-    if max_entries_raw not in {None, ""}:
-        try:
-            max_entries = max(1, int(max_entries_raw))
-        except Exception:
-            max_entries = _CAPABILITY_IDEMPOTENCY_LIMIT
-
-    with _capability_idempotency_lock:
-        memory_before = len(_capability_idempotency_cache)
-        memory_after_map = deepcopy(_capability_idempotency_cache)
-        if clear_memory:
-            memory_after_map = {}
-        else:
-            if remove_expired:
-                memory_after_map = _filter_capability_idempotency_entries(
-                    memory_after_map,
-                    ttl_seconds=ttl_seconds,
-                    include_expired=False,
-                )
-            else:
-                memory_after_map = _filter_capability_idempotency_entries(
-                    memory_after_map,
-                    ttl_seconds=ttl_seconds,
-                    include_expired=True,
-                )
-            if max_entries is not None:
-                if remove_expired:
-                    memory_after_map = _trim_capability_idempotency_entries_with_limit(
-                        memory_after_map,
-                        max_entries=max_entries,
-                        ttl_seconds=ttl_seconds,
-                    )
-                else:
-                    memory_after_map = _limit_capability_idempotency_entries(
-                        memory_after_map,
-                        max_entries=max_entries,
-                    )
-            else:
-                if remove_expired:
-                    memory_after_map = _trim_capability_idempotency_entries_with_limit(
-                        memory_after_map,
-                        max_entries=_CAPABILITY_IDEMPOTENCY_LIMIT,
-                        ttl_seconds=ttl_seconds,
-                    )
-                else:
-                    memory_after_map = _limit_capability_idempotency_entries(
-                        memory_after_map,
-                        max_entries=_CAPABILITY_IDEMPOTENCY_LIMIT,
-                    )
-        _capability_idempotency_cache.clear()
-        _capability_idempotency_cache.update(memory_after_map)
-        memory_after = len(_capability_idempotency_cache)
-
-    persisted_before_map = _load_capability_idempotency_store(include_expired=True, ttl_seconds=ttl_seconds)
-    persisted_before = len(persisted_before_map)
-    if clear_persisted:
-        persisted_after_map = {}
-    else:
-        if remove_expired:
-            persisted_after_map = _filter_capability_idempotency_entries(
-                persisted_before_map,
-                ttl_seconds=ttl_seconds,
-                include_expired=False,
-            )
-        else:
-            persisted_after_map = _filter_capability_idempotency_entries(
-                persisted_before_map,
-                ttl_seconds=ttl_seconds,
-                include_expired=True,
-            )
-        if max_entries is not None:
-            if remove_expired:
-                persisted_after_map = _trim_capability_idempotency_entries_with_limit(
-                    persisted_after_map,
-                    max_entries=max_entries,
-                    ttl_seconds=ttl_seconds,
-                )
-            else:
-                persisted_after_map = _limit_capability_idempotency_entries(
-                    persisted_after_map,
-                    max_entries=max_entries,
-                )
-        else:
-            if remove_expired:
-                persisted_after_map = _trim_capability_idempotency_entries_with_limit(
-                    persisted_after_map,
-                    max_entries=_CAPABILITY_IDEMPOTENCY_LIMIT,
-                    ttl_seconds=ttl_seconds,
-                )
-            else:
-                persisted_after_map = _limit_capability_idempotency_entries(
-                    persisted_after_map,
-                    max_entries=_CAPABILITY_IDEMPOTENCY_LIMIT,
-                )
-    _save_capability_idempotency_store(persisted_after_map)
-    persisted_after = len(persisted_after_map)
-
-    snapshot = _collect_capability_idempotency_records(
-        source="merged",
-        ttl_seconds=ttl_seconds,
-        include_expired=False,
-        limit=200,
-    )
-    return jsonify(
-        {
-            "ok": True,
-            "prune": {
-                "ttl_seconds": ttl_seconds,
-                "remove_expired": remove_expired,
-                "clear_memory": clear_memory,
-                "clear_persisted": clear_persisted,
-                "max_entries": max_entries,
-                "memory_before": memory_before,
-                "memory_after": memory_after,
-                "memory_removed": max(memory_before - memory_after, 0),
-                "persisted_before": persisted_before,
-                "persisted_after": persisted_after,
-                "persisted_removed": max(persisted_before - persisted_after, 0),
-            },
-            **snapshot,
-        }
-    )
-
-
-@app.route("/api/agent/capabilities", methods=["GET"])
-def api_agent_capabilities():
-    from modules.capabilities import legacy_step_mapping, list_capabilities
-
-    specs = [spec.__dict__ for spec in list_capabilities()]
-    route_map = _agent_capability_route_map()
-    cost_model_cfg = _read_agent_cost_model_config()
-    for spec in specs:
-        cid = str(spec.get("capability_id", "") or "")
-        spec["agent_routes"] = route_map.get(cid, {})
-
-    return jsonify({
-        "ok": True,
-        "capabilities": specs,
-        "legacy_step_mapping": legacy_step_mapping(),
-        "agent_management_routes": {
-            "templates_list": "GET /api/agent/templates",
-            "templates_upsert": "POST /api/agent/templates",
-            "templates_delete": "DELETE /api/agent/templates/<template_id>",
-            "skills_invoke": "POST /api/agent/skills/invoke",
-            "tasks_history": "GET /api/agent/tasks/history",
-            "tasks_export": "POST /api/agent/tasks/<job_id>/export",
-            "tasks_replay": "POST /api/agent/tasks/<job_id>/replay",
-            "observability_summary": "GET /api/agent/observability",
-            "observability_export": "POST /api/agent/observability/export",
-            "workflows_catalog": "GET /api/workflows/catalog",
-            "workflows_list": "GET /api/workflows",
-            "workflows_upsert": "POST /api/workflows",
-            "workflows_delete": "DELETE /api/workflows/<workflow_id>",
-            "workflows_plan": "POST /api/workflows/plan",
-            "workflows_run": "POST /api/workflows/run",
-            "workflow_runs_history": "GET /api/workflows/runs",
-            "workflow_run_rerun": "POST /api/workflows/runs/<run_id>/rerun",
-        },
-        "agent_skills": _list_agent_skills(),
-        "agent_template_schema": {
-            "scope": ["system", "project", "agent"],
-            "variable_types": ["string", "number", "integer", "boolean", "array", "object"],
-            "fields": [
-                "template_id",
-                "name",
-                "capability_id",
-                "scope",
-                "actor_id",
-                "tags",
-                "content",
-                "base_template_id",
-                "overrides",
-                "variables",
-            ],
-        },
-        "agent_task_modes": {
-            "single_capability": {
-                "required_fields": ["capability_id", "input"],
-                "entrypoint": "POST /api/agent/tasks/run",
-            },
-            "skill_sequence": {
-                "required_fields": ["mode=skill_sequence", "skills[]"],
-                "supported_strategy": ["sequential", "parallel", "conditional"],
-                "entrypoint": "POST /api/agent/tasks/run",
-                "step_fields": [
-                    "skill_id",
-                    "input",
-                    "retry_policy",
-                    "timeout_seconds",
-                    "continue_on_error",
-                    "condition",
-                ],
-                "flow_fields": ["strategy", "max_parallel", "budget_limit"],
-                "condition_fields": ["depends_on", "status_in", "require_all", "if_overall_ok"],
-                "budget_fields": ["max_steps", "max_failures", "max_duration_seconds"],
-            },
-        },
-        "agent_governance": {
-            "policy_file": "data/agent_governance.json",
-            "usage_file": "data/agent_governance_usage.json",
-            "cost_model_file": "data/agent_cost_model.json",
-            "resolution_order": [
-                "default_limits",
-                "actor_limits",
-                "capability_limits",
-                "actor_capability_limits",
-                "dynamic_usage_suggested_limits",
-            ],
-            "behavior": "tighten_only",
-            "cost_model": cost_model_cfg,
-            "usage_fields": [
-                "total_prompt_tokens",
-                "total_completion_tokens",
-                "total_tokens",
-                "total_estimated_cost_usd",
-                "avg_estimated_cost_usd",
-                "recent_runs",
-            ],
-        },
-        "request_context_schema": {
-            "actor_type": {"type": "string", "enum": ["human", "agent"], "default": "agent"},
-            "actor_id": {"type": "string", "max_length": 128},
-            "run_mode": {"type": "string", "enum": ["interactive", "headless"], "default": "headless"},
-            "idempotency_key": {"type": "string", "max_length": 128},
-            "trace_id": {"type": "string", "max_length": 128},
-        },
-    })
-
-
-@app.route("/api/agent/tasks/plan", methods=["POST"])
-def api_agent_tasks_plan():
-    payload = request.json or {}
-    request_ctx = _parse_request_context()
-    mode_hint = str(payload.get("mode", "") or "").strip().lower()
-    strategy = str(payload.get("strategy", "sequential") or "sequential").strip().lower()
-    task_id = str(uuid.uuid4())[:8]
-    dry_run = bool(payload.get("dry_run", True))
-
-    skills_raw = payload.get("skills", None)
-    if mode_hint == "skill_sequence" or isinstance(skills_raw, list):
-        if strategy not in {"sequential", "parallel", "conditional"}:
-            return jsonify({"error": "strategy 仅支持 sequential/parallel/conditional"}), 400
-        explicit_max_parallel = "max_parallel" in payload
-        try:
-            requested_max_parallel = int(payload.get("max_parallel", 4) or 4)
-        except Exception:
-            requested_max_parallel = 4
-        requested_max_parallel = max(1, min(requested_max_parallel, 8))
-        requested_budget = _normalize_skill_budget_limit(payload.get("budget_limit", {}))
-        try:
-            steps = _normalize_agent_skill_steps(
-                skills_raw,
-                default_retry_policy=payload.get("retry_policy", {}),
-                default_timeout_seconds=_normalize_skill_timeout_seconds(payload.get("timeout_seconds", 120), default=120.0),
-            )
-        except Exception as exc:
-            return jsonify({"error": f"skills 解析失败: {exc}"}), 400
-        try:
-            governance_applied = _apply_governance_to_skill_flow(
-                actor_id=str(request_ctx.get("actor_id", "") or ""),
-                steps=steps,
-                requested_budget=requested_budget,
-                requested_max_parallel=requested_max_parallel,
-                explicit_max_parallel=explicit_max_parallel,
-            )
-        except Exception as exc:
-            return jsonify({"error": f"治理校验失败: {exc}"}), 400
-        max_parallel = int(governance_applied.get("max_parallel", 1) or 1)
-        budget_limit = governance_applied.get("budget_limit", {}) if isinstance(governance_applied.get("budget_limit"), dict) else {}
-        governance = governance_applied.get("governance", {}) if isinstance(governance_applied.get("governance"), dict) else {}
-
-        plan = {
-            "task_id": task_id,
-            "mode": "skill_sequence",
-            "dry_run": dry_run,
-            "skill_flow": {
-                "strategy": strategy,
-                "max_parallel": max_parallel,
-                "budget_limit": budget_limit,
-                "governance": governance,
-                "steps": steps,
-            },
-        }
-        return jsonify({
-            "ok": True,
-            "task_plan": plan,
-            "plan_summary": {
-                "task_id": task_id,
-                "mode": "skill_sequence",
-                "strategy": strategy,
-                "total_steps": len(steps),
-                "max_parallel": max_parallel if strategy == "parallel" else 1,
-                "budget_limit": budget_limit,
-                "governance": governance,
-                "conditional_steps": sum(1 for x in steps if isinstance(x.get("condition"), dict) and x.get("condition")),
-            },
-        })
-
-    capability_id = str(payload.get("capability_id", "") or "").strip()
-    input_payload = payload.get("input", {})
-    if not capability_id:
-        return jsonify({"error": "capability_id 不能为空（或使用 mode=skill_sequence + skills）"}), 400
-    if not isinstance(input_payload, dict):
-        return jsonify({"error": "input 必须是对象"}), 400
-    input_payload = _apply_agent_capability_input_defaults(capability_id, input_payload)
-
-    route_map = _agent_capability_route_map()
-    routes = route_map.get(capability_id)
-    if not isinstance(routes, dict) or not routes:
-        return jsonify({"error": f"不支持的 capability_id: {capability_id}"}), 400
-
-    primary = routes.get("plan") or routes.get("draft") or routes.get("list") or next(iter(routes.values()))
-    method, endpoint = primary.split(" ", 1) if " " in primary else ("POST", primary)
-
-    plan = {
-        "task_id": task_id,
-        "capability_id": capability_id,
-        "mode": "single_capability",
-        "primary_call": {
-            "method": method,
-            "endpoint": endpoint,
-            "payload": input_payload,
-        },
-        "available_routes": routes,
-        "dry_run": dry_run,
-    }
-    return jsonify({
-        "ok": True,
-        "task_plan": plan,
-        "plan_summary": {
-            "task_id": task_id,
-            "capability_id": capability_id,
-            "primary_endpoint": endpoint,
-            "available_route_count": len(routes),
-        },
-    })
-
-
-@app.route("/api/agent/tasks/run", methods=["POST"])
-def api_agent_tasks_run():
-    payload = request.json or {}
-    task_plan = payload.get("task_plan", {}) if isinstance(payload.get("task_plan"), dict) else {}
-    request_ctx = _parse_request_context()
-    mode_hint = str(payload.get("mode", "") or task_plan.get("mode", "") or "").strip().lower()
-    dry_run = bool(payload.get("dry_run", task_plan.get("dry_run", False)))
-    task_id = str(task_plan.get("task_id", "") or "") if isinstance(task_plan, dict) else ""
-    if not task_id:
-        task_id = str(uuid.uuid4())[:8]
-    job_id = str(uuid.uuid4())[:8]
-
-    plan_skill_flow = task_plan.get("skill_flow", {}) if isinstance(task_plan.get("skill_flow"), dict) else {}
-    skills_raw = payload.get("skills", None)
-    if skills_raw is None:
-        skills_raw = plan_skill_flow.get("steps", None)
-    if mode_hint == "skill_sequence" or isinstance(skills_raw, list):
-        strategy = str(payload.get("strategy", "") or plan_skill_flow.get("strategy", "sequential") or "sequential").strip().lower()
-        if strategy not in {"sequential", "parallel", "conditional"}:
-            return jsonify({"error": "strategy 仅支持 sequential/parallel/conditional"}), 400
-        explicit_max_parallel = ("max_parallel" in payload) or ("max_parallel" in plan_skill_flow)
-        try:
-            requested_max_parallel = int(payload.get("max_parallel", plan_skill_flow.get("max_parallel", 4)) or 4)
-        except Exception:
-            requested_max_parallel = 4
-        requested_max_parallel = max(1, min(requested_max_parallel, 8))
-        requested_budget = _normalize_skill_budget_limit(payload.get("budget_limit", plan_skill_flow.get("budget_limit", {})))
-        try:
-            steps = _normalize_agent_skill_steps(
-                skills_raw,
-                default_retry_policy=payload.get("retry_policy", plan_skill_flow.get("retry_policy", {})),
-                default_timeout_seconds=_normalize_skill_timeout_seconds(
-                    payload.get("timeout_seconds", plan_skill_flow.get("timeout_seconds", 120)),
-                    default=120.0,
-                ),
-            )
-        except Exception as exc:
-            return jsonify({"error": f"skills 解析失败: {exc}"}), 400
-        try:
-            governance_applied = _apply_governance_to_skill_flow(
-                actor_id=str(request_ctx.get("actor_id", "") or ""),
-                steps=steps,
-                requested_budget=requested_budget,
-                requested_max_parallel=requested_max_parallel,
-                explicit_max_parallel=explicit_max_parallel,
-            )
-        except Exception as exc:
-            return jsonify({"error": f"治理校验失败: {exc}"}), 400
-        max_parallel = int(governance_applied.get("max_parallel", 1) or 1)
-        budget_limit = governance_applied.get("budget_limit", {}) if isinstance(governance_applied.get("budget_limit"), dict) else {}
-        governance = governance_applied.get("governance", {}) if isinstance(governance_applied.get("governance"), dict) else {}
-
-        if strategy == "parallel":
-            has_condition = any(
-                isinstance(step.get("condition"), dict) and bool(step.get("condition"))
-                for step in steps
-            )
-            if has_condition:
-                return jsonify({"error": "strategy=parallel 暂不支持 step.condition，请改用 strategy=conditional"}), 400
-
-        steps_run = deepcopy(steps)
-        if dry_run:
-            for step in steps_run:
-                if str(step.get("method", "")).upper() != "GET":
-                    inp = step.get("input", {})
-                    if isinstance(inp, dict) and "dry_run" not in inp:
-                        inp["dry_run"] = True
-
-        def _run_one_step(idx: int, step: Dict[str, Any]) -> Dict[str, Any]:
-            skill_id = str(step.get("skill_id", "") or "")
-            step_id = str(step.get("step_id", f"step_{idx:02d}") or f"step_{idx:02d}")
-            _jobs[job_id]["log"].append(f"[AgentSkillFlow] {idx}/{len(steps_run)} step_id={step_id} skill={skill_id}")
-            try:
-                result = _execute_agent_skill(
-                    skill_id=skill_id,
-                    input_payload=step.get("input", {}) if isinstance(step.get("input"), dict) else {},
-                    retry_policy=step.get("retry_policy", {}) if isinstance(step.get("retry_policy"), dict) else {},
-                    timeout_seconds=float(step.get("timeout_seconds", 120.0) or 120.0),
-                    request_context=request_ctx,
-                    logger=lambda msg, sid=step_id: _jobs[job_id]["log"].append(f"[AgentSkillFlow:{sid}] {msg}"),
-                )
-                result["step_id"] = step_id
-                result["index"] = idx
-                result["status"] = "done"
-                result["continue_on_error"] = bool(step.get("continue_on_error", False))
-                result["condition"] = deepcopy(step.get("condition", {})) if isinstance(step.get("condition"), dict) else {}
-                return result
-            except Exception as exc:
-                err = str(exc)
-                failure_item = {
-                    "step_id": step_id,
-                    "index": idx,
-                    "skill_id": skill_id,
-                    "skill_name": str(step.get("skill_name", "") or ""),
-                    "capability_id": str(step.get("capability_id", "") or ""),
-                    "status": "error",
-                    "continue_on_error": bool(step.get("continue_on_error", False)),
-                    "error": err,
-                    "condition": deepcopy(step.get("condition", {})) if isinstance(step.get("condition"), dict) else {},
-                }
-                _jobs[job_id]["log"].append(f"[AgentSkillFlow:{step_id}] 失败: {err}")
-                return failure_item
-
-        def _do_run_skill_sequence():
-            _jobs[job_id]["progress"] = 6
-            _jobs[job_id]["log"].append(
-                f"[Agent] task_id={task_id} mode=skill_sequence strategy={strategy}"
-            )
-            started = time.monotonic()
-            step_results: List[Dict[str, Any]] = []
-            previous_by_step: Dict[str, Dict[str, Any]] = {}
-            total = len(steps_run)
-            if strategy in {"sequential", "conditional"}:
-                for idx, step in enumerate(steps_run, start=1):
-                    elapsed = time.monotonic() - started
-                    if budget_limit.get("max_duration_seconds", 0) > 0 and elapsed > int(budget_limit.get("max_duration_seconds", 0)):
-                        raise RuntimeError(
-                            f"预算超限: max_duration_seconds={budget_limit.get('max_duration_seconds')}"
-                        )
-                    _jobs[job_id]["progress"] = min(10 + int((idx - 1) * 80 / max(total, 1)), 88)
-                    step_id = str(step.get("step_id", f"step_{idx:02d}") or f"step_{idx:02d}")
-                    if strategy == "conditional":
-                        should_run, skip_reason = _should_run_conditional_step(
-                            step.get("condition", {}) if isinstance(step.get("condition"), dict) else {},
-                            previous_by_step,
-                        )
-                        if not should_run:
-                            skipped_item = {
-                                "step_id": step_id,
-                                "index": idx,
-                                "skill_id": str(step.get("skill_id", "") or ""),
-                                "skill_name": str(step.get("skill_name", "") or ""),
-                                "capability_id": str(step.get("capability_id", "") or ""),
-                                "status": "skipped",
-                                "continue_on_error": bool(step.get("continue_on_error", False)),
-                                "skip_reason": skip_reason,
-                                "condition": deepcopy(step.get("condition", {})),
-                            }
-                            step_results.append(skipped_item)
-                            previous_by_step[step_id] = skipped_item
-                            _jobs[job_id]["log"].append(f"[AgentSkillFlow:{step_id}] 跳过: {skip_reason}")
-                            continue
-                    item = _run_one_step(idx, step)
-                    step_results.append(item)
-                    previous_by_step[step_id] = item
-                    failed_now = sum(1 for x in step_results if x.get("status") == "error")
-                    if budget_limit.get("max_failures", 0) > 0 and failed_now > int(budget_limit.get("max_failures", 0)):
-                        raise RuntimeError(
-                            f"预算超限: max_failures={budget_limit.get('max_failures')}"
-                        )
-                    if item.get("status") == "error" and not bool(item.get("continue_on_error", False)):
-                        raise RuntimeError(f"step={item.get('step_id')} 执行失败: {item.get('error')}")
-            else:
-                workers = min(max_parallel, max(total, 1))
-                _jobs[job_id]["log"].append(f"[AgentSkillFlow] 并行执行 workers={workers}")
-                ordered: Dict[int, Dict[str, Any]] = {}
-                with ThreadPoolExecutor(max_workers=workers) as pool:
-                    future_map = {
-                        pool.submit(_run_one_step, idx, step): idx
-                        for idx, step in enumerate(steps_run, start=1)
-                    }
-                    completed = 0
-                    for fut in as_completed(future_map):
-                        idx = future_map[fut]
-                        try:
-                            item = fut.result()
-                        except Exception as exc:  # pragma: no cover
-                            item = {
-                                "step_id": f"step_{idx:02d}",
-                                "index": idx,
-                                "skill_id": "",
-                                "status": "error",
-                                "continue_on_error": False,
-                                "error": str(exc),
-                            }
-                        ordered[idx] = item
-                        completed += 1
-                        _jobs[job_id]["progress"] = min(12 + int(completed * 76 / max(total, 1)), 90)
-                step_results = [ordered[i] for i in sorted(ordered.keys())]
-                blocking = [x for x in step_results if x.get("status") == "error" and not bool(x.get("continue_on_error", False))]
-                if blocking:
-                    first = blocking[0]
-                    raise RuntimeError(f"parallel step={first.get('step_id')} 执行失败: {first.get('error')}")
-
-            failed = sum(1 for x in step_results if x.get("status") == "error")
-            skipped = sum(1 for x in step_results if x.get("status") == "skipped")
-            success = sum(1 for x in step_results if x.get("status") == "done")
-            if budget_limit.get("max_failures", 0) > 0 and failed > int(budget_limit.get("max_failures", 0)):
-                raise RuntimeError(f"预算超限: max_failures={budget_limit.get('max_failures')}")
-            elapsed_total = time.monotonic() - started
-            if budget_limit.get("max_duration_seconds", 0) > 0 and elapsed_total > int(budget_limit.get("max_duration_seconds", 0)):
-                raise RuntimeError(
-                    f"预算超限: max_duration_seconds={budget_limit.get('max_duration_seconds')}"
-                )
-            summary_payload = {
-                "task_id": task_id,
-                "mode": "skill_sequence",
-                "strategy": strategy,
-                "dry_run": dry_run,
-                "max_parallel": max_parallel if strategy == "parallel" else 1,
-                "budget_limit": budget_limit,
-                "governance": governance,
-                "total_steps": total,
-                "success_steps": success,
-                "failed_steps": failed,
-                "skipped_steps": skipped,
-                "overall_ok": failed == 0,
-                "steps": step_results,
-                "duration_seconds": round(max(elapsed_total, 0.0), 4),
-            }
-            governance_usage = (
-                _record_governance_usage_for_skill_flow(
-                    actor_id=str(request_ctx.get("actor_id", "") or ""),
-                    summary=summary_payload,
-                )
-                if not dry_run
-                else {"ok": False, "reason": "dry_run"}
-            )
-            if isinstance(governance_usage, dict):
-                summary_payload["governance_usage"] = governance_usage
-            _jobs[job_id]["progress"] = 95
-            return summary_payload
-
-        _run_in_bg(
-            job_id,
-            _do_run_skill_sequence,
-            kind="agent_task",
-            job_meta={
-                "actor_type": str(request_ctx.get("actor_type", "") or ""),
-                "actor_id": str(request_ctx.get("actor_id", "") or ""),
-                "trace_id": str(request_ctx.get("trace_id", "") or ""),
-                "task_mode": "skill_sequence",
-                "strategy": strategy,
-                "template_hits": _extract_template_ids_from_value(payload),
-                "replay": {
-                    "method": "POST",
-                    "endpoint": "/api/agent/tasks/run",
-                    "payload": deepcopy(payload),
-                    "request_context": deepcopy(request_ctx),
-                },
-            },
-        )
-        return jsonify({
-            "ok": True,
-            "job_id": job_id,
-            "task_id": task_id,
-            "mode": "skill_sequence",
-            "strategy": strategy,
-            "max_parallel": max_parallel if strategy == "parallel" else 1,
-            "budget_limit": budget_limit,
-            "governance": governance,
-            "total_steps": len(steps_run),
-            "dry_run": dry_run,
-        })
-
-    capability_id = str(payload.get("capability_id", "") or task_plan.get("capability_id", "") or "").strip()
-    if not capability_id:
-        return jsonify({"error": "capability_id 不能为空（或使用 mode=skill_sequence + skills）"}), 400
-
-    route_map = _agent_capability_route_map()
-    routes = route_map.get(capability_id)
-    if not isinstance(routes, dict) or not routes:
-        return jsonify({"error": f"不支持的 capability_id: {capability_id}"}), 400
-
-    input_payload = payload.get("input", None)
-    if input_payload is None:
-        input_payload = task_plan.get("primary_call", {}).get("payload", {}) if isinstance(task_plan, dict) else {}
-    if not isinstance(input_payload, dict):
-        return jsonify({"error": "input 必须是对象"}), 400
-    input_payload = _apply_agent_capability_input_defaults(capability_id, input_payload)
-
-    action = str(payload.get("action", "auto") or "auto").strip().lower()
-
-    primary_call_raw = task_plan.get("primary_call") if isinstance(task_plan, dict) else None
-    if isinstance(primary_call_raw, dict) and str(primary_call_raw.get("endpoint", "") or "").strip():
-        method = str(primary_call_raw.get("method", "POST") or "POST").strip().upper()
-        endpoint = str(primary_call_raw.get("endpoint", "") or "").strip()
-    else:
-        try:
-            resolved = _resolve_agent_primary_call(capability_id=capability_id, routes=routes, action=action)
-        except Exception as exc:
-            return jsonify({"error": str(exc)}), 400
-        method = resolved["method"]
-        endpoint = resolved["endpoint"]
-
-    call_payload = dict(input_payload)
-    if dry_run and method != "GET" and "dry_run" not in call_payload:
-        call_payload["dry_run"] = True
-
-    def _do_run():
-        _jobs[job_id]["progress"] = 10
-        _jobs[job_id]["log"].append(f"[Agent] task_id={task_id} capability={capability_id}")
-        _jobs[job_id]["log"].append(f"[Agent] 调用 {method} {endpoint}")
-
-        ret = _invoke_agent_primary_call(
-            method=method,
-            endpoint=endpoint,
-            payload=call_payload,
-            request_context=request_ctx,
-        )
-        status_code = int(ret.get("status_code", 0) or 0)
-        data = ret.get("data") if isinstance(ret.get("data"), dict) else {}
-        _jobs[job_id]["progress"] = 85
-        if status_code >= 400 or not bool(data.get("ok", False)):
-            err = str(data.get("error", "") or f"子调用失败（status={status_code}）")
-            raise RuntimeError(err)
-        _jobs[job_id]["progress"] = 95
-        return {
-            "task_id": task_id,
-            "capability_id": capability_id,
-            "primary_call": {
-                "method": method,
-                "endpoint": endpoint,
-                "payload": call_payload,
-            },
-            "status_code": status_code,
-            "response": data,
-        }
-
-    _run_in_bg(
-        job_id,
-        _do_run,
-        kind="agent_task",
-        job_meta={
-            "actor_type": str(request_ctx.get("actor_type", "") or ""),
-            "actor_id": str(request_ctx.get("actor_id", "") or ""),
-            "trace_id": str(request_ctx.get("trace_id", "") or ""),
-            "task_mode": "single_capability",
-            "capability_id": capability_id,
-            "template_hits": _extract_template_ids_from_value(payload),
-            "replay": {
-                "method": "POST",
-                "endpoint": "/api/agent/tasks/run",
-                "payload": deepcopy(payload),
-                "request_context": deepcopy(request_ctx),
-            },
-        },
-    )
-    return jsonify({
-        "ok": True,
-        "job_id": job_id,
-        "task_id": task_id,
-        "capability_id": capability_id,
-        "primary_call": {
-            "method": method,
-            "endpoint": endpoint,
-        },
-    })
-
-
-@app.route("/api/agent/tasks/<job_id>", methods=["GET"])
-def api_agent_task_status(job_id: str):
-    job = _jobs.get(job_id)
-    if not isinstance(job, dict) or job.get("kind") not in {"agent_task", "agent_skill"}:
-        history_item = _find_agent_task_history_record(job_id)
-        if not isinstance(history_item, dict):
-            return jsonify({"error": "agent task/skill 不存在"}), 404
-
-        status = str(history_item.get("status", "unknown") or "unknown").strip().lower()
-        chain_view = _build_chain_view_from_history_item(history_item)
-        return jsonify({
-            "ok": True,
-            "job_id": str(history_item.get("job_id", "") or job_id),
-            "status": status,
-            "kind": str(history_item.get("kind", "agent_task") or "agent_task"),
-            "source": "history",
-            "progress": 100,
-            "log": [],
-            "error": history_item.get("error", ""),
-            "result": {"history_summary": history_item},
-            "chain_view": chain_view,
-            "started_at": history_item.get("started_at"),
-            "finished_at": history_item.get("finished_at"),
-        })
-    kind = str(job.get("kind", "agent_task") or "agent_task")
-    result_payload = job.get("result") if isinstance(job.get("result"), dict) else {}
-
-    def _to_int(value: Any) -> int:
-        try:
-            parsed = int(value)
-        except Exception:
-            parsed = 0
-        return max(parsed, 0)
-
-    def _to_float(value: Any) -> float:
-        try:
-            parsed = float(value)
-        except Exception:
-            parsed = 0.0
-        return max(parsed, 0.0)
-
-    def _build_chain_view(kind_value: str, result: Dict[str, Any], fallback_status: str) -> Dict[str, Any]:
-        mode = "single_capability"
-        status_norm = str(fallback_status or "unknown").strip().lower()
-        if status_norm == "done":
-            overall_status = "done"
-        elif status_norm in {"error", "cancelled"}:
-            overall_status = "error"
-        else:
-            overall_status = "running"
-
-        nodes: List[Dict[str, Any]] = []
-        edges: List[Dict[str, Any]] = []
-        total_prompt_tokens = 0
-        total_completion_tokens = 0
-        total_cost_usd = 0.0
-
-        if kind_value == "agent_skill":
-            mode = "skill_invoke"
-            usage_tokens = result.get("usage_tokens", {}) if isinstance(result.get("usage_tokens"), dict) else {}
-            estimated_cost = result.get("estimated_cost", {}) if isinstance(result.get("estimated_cost"), dict) else {}
-            p = _to_int(usage_tokens.get("prompt_tokens", 0))
-            c = _to_int(usage_tokens.get("completion_tokens", 0))
-            cost = _to_float(estimated_cost.get("total_cost_usd", 0.0))
-            total_prompt_tokens += p
-            total_completion_tokens += c
-            total_cost_usd += cost
-            nodes.append({
-                "node_id": str(result.get("invoke_id", "") or result.get("skill_id", "skill")),
-                "node_type": "skill",
-                "status": "done" if bool(result.get("status_code", 0)) and _to_int(result.get("status_code", 0)) < 400 else overall_status,
-                "skill_id": str(result.get("skill_id", "") or ""),
-                "capability_id": str(result.get("capability_id", "") or ""),
-                "duration_seconds": round(_to_float(result.get("duration_seconds", 0.0)), 4),
-                "prompt_tokens": p,
-                "completion_tokens": c,
-                "estimated_cost_usd": round(cost, 8),
-            })
-        elif str(result.get("mode", "") or "").strip().lower() == "skill_sequence":
-            mode = "skill_sequence"
-            steps = result.get("steps", [])
-            if not isinstance(steps, list):
-                steps = []
-            known_step_ids = set()
-            for idx, item in enumerate(steps, start=1):
-                if not isinstance(item, dict):
-                    continue
-                step_id = str(item.get("step_id", "") or f"step_{idx:02d}")
-                known_step_ids.add(step_id)
-                usage_tokens = item.get("usage_tokens", {}) if isinstance(item.get("usage_tokens"), dict) else {}
-                estimated_cost = item.get("estimated_cost", {}) if isinstance(item.get("estimated_cost"), dict) else {}
-                p = _to_int(usage_tokens.get("prompt_tokens", 0))
-                c = _to_int(usage_tokens.get("completion_tokens", 0))
-                cost = _to_float(estimated_cost.get("total_cost_usd", 0.0))
-                total_prompt_tokens += p
-                total_completion_tokens += c
-                total_cost_usd += cost
-                nodes.append({
-                    "node_id": step_id,
-                    "node_type": "skill",
-                    "index": _to_int(item.get("index", idx)),
-                    "status": str(item.get("status", "unknown") or "unknown"),
-                    "skill_id": str(item.get("skill_id", "") or ""),
-                    "capability_id": str(item.get("capability_id", "") or ""),
-                    "continue_on_error": bool(item.get("continue_on_error", False)),
-                    "duration_seconds": round(_to_float(item.get("duration_seconds", 0.0)), 4),
-                    "prompt_tokens": p,
-                    "completion_tokens": c,
-                    "estimated_cost_usd": round(cost, 8),
-                    "error": str(item.get("error", "") or ""),
-                    "condition": deepcopy(item.get("condition", {})) if isinstance(item.get("condition"), dict) else {},
-                })
-            strategy = str(result.get("strategy", "") or "").strip().lower()
-            for idx, node in enumerate(nodes):
-                node_id = str(node.get("node_id", "") or "")
-                condition = node.get("condition", {}) if isinstance(node.get("condition"), dict) else {}
-                depends_on_raw = condition.get("depends_on", [])
-                depends_on = depends_on_raw if isinstance(depends_on_raw, list) else []
-                deps_added = False
-                for dep in depends_on:
-                    dep_id = str(dep or "").strip()
-                    if not dep_id or dep_id not in known_step_ids:
-                        continue
-                    edges.append({
-                        "from": dep_id,
-                        "to": node_id,
-                        "type": "condition_depends_on",
-                    })
-                    deps_added = True
-                if not deps_added and strategy in {"sequential", "conditional"} and idx > 0:
-                    prev_node_id = str(nodes[idx - 1].get("node_id", "") or "")
-                    if prev_node_id:
-                        edges.append({
-                            "from": prev_node_id,
-                            "to": node_id,
-                            "type": "sequence",
-                        })
-        else:
-            mode = "single_capability"
-            nodes.append({
-                "node_id": str(result.get("task_id", "") or "task"),
-                "node_type": "capability",
-                "status": "done" if bool(result.get("status_code", 0)) and _to_int(result.get("status_code", 0)) < 400 else overall_status,
-                "capability_id": str(result.get("capability_id", "") or ""),
-                "endpoint": str(
-                    (result.get("primary_call", {}) if isinstance(result.get("primary_call"), dict) else {}).get("endpoint", "")
-                    or ""
-                ),
-                "duration_seconds": 0.0,
-                "prompt_tokens": 0,
-                "completion_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            })
-
-        status_done = sum(1 for n in nodes if str(n.get("status", "")).lower() == "done")
-        status_error = sum(1 for n in nodes if str(n.get("status", "")).lower() == "error")
-        status_skipped = sum(1 for n in nodes if str(n.get("status", "")).lower() == "skipped")
-        if nodes and status_error > 0:
-            overall_status = "error"
-        elif nodes and status_done == len(nodes):
-            overall_status = "done"
-        elif nodes and (status_done + status_skipped) == len(nodes):
-            overall_status = "partial"
-
-        return {
-            "mode": mode,
-            "overall_status": overall_status,
-            "node_count": len(nodes),
-            "edge_count": len(edges),
-            "counts": {
-                "done": status_done,
-                "error": status_error,
-                "skipped": status_skipped,
-                "other": max(len(nodes) - status_done - status_error - status_skipped, 0),
-            },
-            "totals": {
-                "prompt_tokens": total_prompt_tokens,
-                "completion_tokens": total_completion_tokens,
-                "total_tokens": total_prompt_tokens + total_completion_tokens,
-                "estimated_cost_usd": round(total_cost_usd, 8),
-            },
-            "nodes": nodes,
-            "edges": edges,
-        }
-
-    chain_view = _build_chain_view(
-        kind_value=kind,
-        result=result_payload,
-        fallback_status=str(job.get("status", "unknown") or "unknown"),
-    )
-    return jsonify({
-        "ok": True,
-        "job_id": job_id,
-        "status": job.get("status", "unknown"),
-        "kind": kind,
-        "source": "memory",
-        "progress": int(job.get("progress", 0) or 0),
-        "log": list(job.get("log", []))[-80:],
-        "error": job.get("error"),
-        "result": result_payload,
-        "chain_view": chain_view,
-        "started_at": job.get("started_at"),
-        "finished_at": job.get("finished_at"),
-    })
-
-
-@app.route("/api/agent/tasks/history", methods=["GET"])
-def api_agent_tasks_history():
-    if _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-
-    actor_id = str(request.args.get("actor_id", "") or "").strip()
-    statuses = _parse_agent_history_filter_tokens(request.args.get("status", ""))
-    task_modes = _parse_agent_history_filter_tokens(request.args.get("task_mode", ""))
-    kinds = _parse_agent_history_filter_tokens(request.args.get("kind", ""))
-    capability_id = str(request.args.get("capability_id", "") or "").strip().lower()
-    skill_id = str(request.args.get("skill_id", "") or "").strip().lower()
-    trace_id = str(request.args.get("trace_id", "") or "").strip()
-    since = str(request.args.get("since", "") or "").strip()
-    until = str(request.args.get("until", "") or "").strip()
-    sort = str(request.args.get("sort", "desc") or "desc").strip().lower()
-    if sort not in {"desc", "asc"}:
-        sort = "desc"
-
-    replay_supported = None
-    replay_supported_raw = request.args.get("replay_supported", None)
-    if replay_supported_raw is not None and str(replay_supported_raw).strip() != "":
-        replay_supported = _parse_boolish(replay_supported_raw, default=False)
-
-    try:
-        limit = int(request.args.get("limit", 100) or 100)
-    except Exception:
-        limit = 100
-    limit = max(1, min(limit, 1000))
-
-    try:
-        offset = int(request.args.get("offset", 0) or 0)
-    except Exception:
-        offset = 0
-    offset = max(offset, 0)
-
-    history = _read_agent_task_history()
-    filtered = _filter_agent_task_history(
-        history,
-        actor_id=actor_id,
-        statuses=statuses,
-        task_modes=task_modes,
-        kinds=kinds,
-        capability_id=capability_id,
-        skill_id=skill_id,
-        trace_id=trace_id,
-        replay_supported=replay_supported,
-        since=since,
-        until=until,
-    )
-    ordered = filtered if sort == "asc" else list(reversed(filtered))
-    total_count = len(ordered)
-    items = ordered[offset:offset + limit]
-    return jsonify({
-        "ok": True,
-        "history_file": "data/agent_task_history.json",
-        "total_count": total_count,
-        "returned_count": len(items),
-        "offset": offset,
-        "limit": limit,
-        "has_more": (offset + len(items)) < total_count,
-        "filters": {
-            "actor_id": actor_id or None,
-            "status": statuses,
-            "task_mode": task_modes,
-            "kind": kinds,
-            "capability_id": capability_id or None,
-            "skill_id": skill_id or None,
-            "trace_id": trace_id or None,
-            "replay_supported": replay_supported,
-            "since": since or None,
-            "until": until or None,
-            "sort": sort,
-        },
-        "items": items,
-    })
-
-
-@app.route("/api/agent/tasks/<job_id>/export", methods=["POST"])
-def api_agent_task_export(job_id: str):
-    if _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-    payload = request.json or {}
-    fmt = str(payload.get("format", "json") or "json").strip().lower()
-    if fmt not in {"json", "csv"}:
-        return jsonify({"error": "format 仅支持 json/csv"}), 400
-    include_logs = _coerce_bool(payload.get("include_logs", True), default=True)
-    include_result = _coerce_bool(payload.get("include_result", True), default=True)
-
-    snapshot = _build_agent_task_export_snapshot(
-        job_id,
-        include_logs=include_logs,
-        include_result=include_result,
-    )
-    if not isinstance(snapshot, dict):
-        return jsonify({"error": "agent task/skill 不存在"}), 404
-
-    safe_job_id = str(job_id or "").strip() or "unknown"
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_path = _project_data_path(f"agent_task_export_{safe_job_id}_{ts}.{fmt}")
-    if out_path is None:
-        return jsonify({"error": "项目未加载"}), 400
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-
-    if fmt == "json":
-        out_path.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
-    else:
-        summary = snapshot.get("summary", {}) if isinstance(snapshot.get("summary"), dict) else {}
-        fieldnames = [
-            "source",
-            "job_id",
-            "status",
-            "kind",
-            "task_mode",
-            "strategy",
-            "actor_type",
-            "actor_id",
-            "trace_id",
-            "capability_ids",
-            "skill_ids",
-            "total_steps",
-            "success_steps",
-            "failed_steps",
-            "skipped_steps",
-            "retry_count",
-            "prompt_tokens",
-            "completion_tokens",
-            "total_tokens",
-            "estimated_cost_usd",
-            "duration_seconds",
-            "template_hits",
-            "template_hit_count",
-            "replay_supported",
-            "error",
-            "started_at",
-            "finished_at",
-        ]
-        row = {
-            "source": str(snapshot.get("source", "") or ""),
-            "job_id": str(summary.get("job_id", "") or snapshot.get("job_id", "") or ""),
-            "status": str(summary.get("status", "") or snapshot.get("status", "") or ""),
-            "kind": str(summary.get("kind", "") or snapshot.get("kind", "") or ""),
-            "task_mode": str(summary.get("task_mode", "") or ""),
-            "strategy": str(summary.get("strategy", "") or ""),
-            "actor_type": str(summary.get("actor_type", "") or ""),
-            "actor_id": str(summary.get("actor_id", "") or ""),
-            "trace_id": str(summary.get("trace_id", "") or ""),
-            "capability_ids": "|".join(str(x) for x in (summary.get("capability_ids", []) if isinstance(summary.get("capability_ids"), list) else [])),
-            "skill_ids": "|".join(str(x) for x in (summary.get("skill_ids", []) if isinstance(summary.get("skill_ids"), list) else [])),
-            "total_steps": int(summary.get("total_steps", 0) or 0),
-            "success_steps": int(summary.get("success_steps", 0) or 0),
-            "failed_steps": int(summary.get("failed_steps", 0) or 0),
-            "skipped_steps": int(summary.get("skipped_steps", 0) or 0),
-            "retry_count": int(summary.get("retry_count", 0) or 0),
-            "prompt_tokens": int(summary.get("prompt_tokens", 0) or 0),
-            "completion_tokens": int(summary.get("completion_tokens", 0) or 0),
-            "total_tokens": int(summary.get("total_tokens", 0) or 0),
-            "estimated_cost_usd": float(summary.get("estimated_cost_usd", 0.0) or 0.0),
-            "duration_seconds": float(summary.get("duration_seconds", 0.0) or 0.0),
-            "template_hits": "|".join(str(x) for x in (summary.get("template_hits", []) if isinstance(summary.get("template_hits"), list) else [])),
-            "template_hit_count": int(summary.get("template_hit_count", 0) or 0),
-            "replay_supported": bool(summary.get("replay_supported", False)),
-            "error": str(summary.get("error", "") or snapshot.get("error", "") or ""),
-            "started_at": str(summary.get("started_at", "") or snapshot.get("started_at", "") or ""),
-            "finished_at": str(summary.get("finished_at", "") or snapshot.get("finished_at", "") or ""),
-        }
-        buf = io.StringIO()
-        writer = csv.DictWriter(buf, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerow(row)
-        out_path.write_text(buf.getvalue(), encoding="utf-8")
-
-    return jsonify({
-        "ok": True,
-        "job_id": safe_job_id,
-        "source": str(snapshot.get("source", "") or ""),
-        "format": fmt,
-        "output": str(out_path),
-        "history_file": "data/agent_task_history.json",
-    })
-
-
-@app.route("/api/agent/tasks/<job_id>/replay", methods=["POST"])
-def api_agent_task_replay(job_id: str):
-    if _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-    job = _jobs.get(job_id)
-    source = "memory"
-    replay_spec: Dict[str, Any] = {}
-    if isinstance(job, dict) and job.get("kind") in {"agent_task", "agent_skill"}:
-        meta = job.get("meta", {}) if isinstance(job.get("meta"), dict) else {}
-        replay_spec = _extract_agent_replay_spec(meta.get("replay", {}))
-        if not replay_spec:
-            history_item = _find_agent_task_history_record(job_id)
-            if isinstance(history_item, dict):
-                history_replay = _extract_agent_replay_spec(history_item.get("replay", {}))
-                if history_replay:
-                    source = "history"
-                    replay_spec = history_replay
-    else:
-        source = "history"
-        history_item = _find_agent_task_history_record(job_id)
-        if not isinstance(history_item, dict):
-            return jsonify({"error": "agent task/skill 不存在"}), 404
-        replay_spec = _extract_agent_replay_spec(history_item.get("replay", {}))
-
-    req = request.json or {}
-    if not isinstance(req, dict):
-        req = {}
-    payload_overrides = req.get("payload_overrides", {})
-    if payload_overrides is None:
-        payload_overrides = {}
-    if not isinstance(payload_overrides, dict):
-        return jsonify({"error": "payload_overrides 必须是对象"}), 400
-    context_overrides = req.get("context_overrides", {})
-    if context_overrides is None:
-        context_overrides = {}
-    if not isinstance(context_overrides, dict):
-        return jsonify({"error": "context_overrides 必须是对象"}), 400
-
-    endpoint = str(replay_spec.get("endpoint", "") or "").strip()
-    method = str(replay_spec.get("method", "POST") or "POST").strip().upper()
-    if not endpoint:
-        return jsonify({"error": "该任务缺少 replay 元数据（仅支持新任务）"}), 400
-    if method not in {"POST", "GET"}:
-        return jsonify({"error": f"不支持的 replay method: {method}"}), 400
-
-    base_payload = replay_spec.get("payload", {}) if isinstance(replay_spec.get("payload"), dict) else {}
-    final_payload = _deep_merge_dict(base_payload, payload_overrides)
-    ctx = _normalize_agent_replay_context(replay_spec.get("request_context", {}))
-    for key in ("actor_type", "actor_id", "run_mode", "trace_id", "idempotency_key"):
-        if key in context_overrides:
-            ctx[key] = str(context_overrides.get(key, "") or "").strip()[:128]
-    ctx = _normalize_agent_replay_context(ctx)
-
-    new_trace_id = str(req.get("new_trace_id", "") or "").strip()[:128]
-    if new_trace_id:
-        ctx["trace_id"] = new_trace_id
-
-    explicit_idem = None
-    if "idempotency_key" in req:
-        explicit_idem = str(req.get("idempotency_key", "") or "").strip()[:128]
-    clear_idempotency = _coerce_bool(req.get("clear_idempotency", True), default=True)
-    if explicit_idem is not None:
-        ctx["idempotency_key"] = explicit_idem
-    elif clear_idempotency:
-        ctx["idempotency_key"] = ""
-
-    for key in ("actor_type", "actor_id", "run_mode", "trace_id"):
-        val = str(ctx.get(key, "") or "").strip()
-        if val:
-            final_payload[key] = val
-    idem_val = str(ctx.get("idempotency_key", "") or "").strip()
-    if idem_val:
-        final_payload["idempotency_key"] = idem_val
-    else:
-        final_payload.pop("idempotency_key", None)
-
-    if "dry_run" in req and "dry_run" not in payload_overrides:
-        final_payload["dry_run"] = _coerce_bool(req.get("dry_run", False), default=False)
-    final_payload["replay_of_job_id"] = job_id
-
-    invoke_ret = _invoke_agent_primary_call(
-        method=method,
-        endpoint=endpoint,
-        payload=final_payload,
-        request_context=ctx,
-    )
-    status_code = int(invoke_ret.get("status_code", 500) or 500)
-    data = invoke_ret.get("data", {}) if isinstance(invoke_ret.get("data"), dict) else {}
-    out = {
-        "ok": status_code < 400 and bool(data.get("ok", False)),
-        "replay_of_job_id": job_id,
-        "source": source,
-        "target": {
-            "method": method,
-            "endpoint": endpoint,
-        },
-        "request_context": ctx,
-        "request_payload": final_payload,
-        "status_code": status_code,
-        "response": data,
-    }
-    if isinstance(data.get("job_id"), str) and str(data.get("job_id", "")).strip():
-        out["new_job_id"] = str(data.get("job_id", "")).strip()
-    return jsonify(out), (status_code if status_code >= 400 else 200)
-
-
-@app.route("/api/agent/observability", methods=["GET"])
-def api_agent_observability():
-    if _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-    actor_id = str(request.args.get("actor_id", "") or "").strip()
-    statuses = _parse_agent_history_filter_tokens(request.args.get("status", ""))
-    task_modes = _parse_agent_history_filter_tokens(request.args.get("task_mode", ""))
-    kinds = _parse_agent_history_filter_tokens(request.args.get("kind", ""))
-    capability_id = str(request.args.get("capability_id", "") or "").strip().lower()
-    skill_id = str(request.args.get("skill_id", "") or "").strip().lower()
-    trace_id = str(request.args.get("trace_id", "") or "").strip()
-    since = str(request.args.get("since", "") or "").strip()
-    until = str(request.args.get("until", "") or "").strip()
-    replay_supported = None
-    replay_supported_raw = request.args.get("replay_supported", None)
-    if replay_supported_raw is not None and str(replay_supported_raw).strip() != "":
-        replay_supported = _parse_boolish(replay_supported_raw, default=False)
-    include_items = _parse_boolish(request.args.get("include_items", "false"), default=False)
-    try:
-        limit = int(request.args.get("limit", 200) or 200)
-    except Exception:
-        limit = 200
-    limit = max(1, min(limit, 2000))
-    try:
-        top_n = int(request.args.get("top_n", 5) or 5)
-    except Exception:
-        top_n = 5
-    top_n = max(1, min(top_n, 20))
-
-    history = _read_agent_task_history()
-    filtered = _filter_agent_task_history(
-        history,
-        actor_id=actor_id,
-        statuses=statuses,
-        task_modes=task_modes,
-        kinds=kinds,
-        capability_id=capability_id,
-        skill_id=skill_id,
-        trace_id=trace_id,
-        replay_supported=replay_supported,
-        since=since,
-        until=until,
-    )
-    picked = filtered[-limit:] if filtered else []
-    summary = _build_agent_observability_summary(picked, top_n=top_n)
-    return jsonify({
-        "ok": True,
-        "actor_id": actor_id,
-        "window_limit": limit,
-        "top_n": top_n,
-        "history_count": len(filtered),
-        "window_count": len(picked),
-        "summary": summary,
-        "history_file": "data/agent_task_history.json",
-        "filters": {
-            "actor_id": actor_id or None,
-            "status": statuses,
-            "task_mode": task_modes,
-            "kind": kinds,
-            "capability_id": capability_id or None,
-            "skill_id": skill_id or None,
-            "trace_id": trace_id or None,
-            "replay_supported": replay_supported,
-            "since": since or None,
-            "until": until or None,
-        },
-        "items": list(reversed(picked)) if include_items else [],
-    })
-
-
-@app.route("/api/agent/observability/export", methods=["POST"])
-def api_agent_observability_export():
-    if _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-    payload = request.json or {}
-    actor_id = str(payload.get("actor_id", "") or "").strip()
-    statuses = _parse_agent_history_filter_tokens(payload.get("status", ""))
-    task_modes = _parse_agent_history_filter_tokens(payload.get("task_mode", ""))
-    kinds = _parse_agent_history_filter_tokens(payload.get("kind", ""))
-    capability_id = str(payload.get("capability_id", "") or "").strip().lower()
-    skill_id = str(payload.get("skill_id", "") or "").strip().lower()
-    trace_id = str(payload.get("trace_id", "") or "").strip()
-    since = str(payload.get("since", "") or "").strip()
-    until = str(payload.get("until", "") or "").strip()
-    replay_supported = None
-    replay_supported_raw = payload.get("replay_supported", None)
-    if replay_supported_raw is not None and str(replay_supported_raw).strip() != "":
-        replay_supported = _parse_boolish(replay_supported_raw, default=False)
-    fmt = str(payload.get("format", "json") or "json").strip().lower()
-    if fmt not in {"json", "csv"}:
-        return jsonify({"error": "format 仅支持 json/csv"}), 400
-    try:
-        limit = int(payload.get("limit", 500) or 500)
-    except Exception:
-        limit = 500
-    limit = max(1, min(limit, 5000))
-    try:
-        top_n = int(payload.get("top_n", 5) or 5)
-    except Exception:
-        top_n = 5
-    top_n = max(1, min(top_n, 20))
-
-    history = _read_agent_task_history()
-    filtered = _filter_agent_task_history(
-        history,
-        actor_id=actor_id,
-        statuses=statuses,
-        task_modes=task_modes,
-        kinds=kinds,
-        capability_id=capability_id,
-        skill_id=skill_id,
-        trace_id=trace_id,
-        replay_supported=replay_supported,
-        since=since,
-        until=until,
-    )
-    picked = filtered[-limit:] if filtered else []
-    summary = _build_agent_observability_summary(picked, top_n=top_n)
-
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    ext = "json" if fmt == "json" else "csv"
-    out_path = _project_data_path(f"agent_observability_{ts}.{ext}")
-    if out_path is None:
-        return jsonify({"error": "项目未加载"}), 400
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-
-    if fmt == "json":
-        body = {
-            "exported_at": datetime.now().isoformat(timespec="seconds"),
-            "actor_id": actor_id,
-            "window_limit": limit,
-            "window_count": len(picked),
-            "filters": {
-                "actor_id": actor_id or None,
-                "status": statuses,
-                "task_mode": task_modes,
-                "kind": kinds,
-                "capability_id": capability_id or None,
-                "skill_id": skill_id or None,
-                "trace_id": trace_id or None,
-                "replay_supported": replay_supported,
-                "since": since or None,
-                "until": until or None,
-            },
-            "summary": summary,
-            "items": list(reversed(picked)),
-        }
-        out_path.write_text(json.dumps(body, ensure_ascii=False, indent=2), encoding="utf-8")
-    else:
-        fieldnames = [
-            "job_id",
-            "status",
-            "kind",
-            "task_mode",
-            "strategy",
-            "actor_type",
-            "actor_id",
-            "trace_id",
-            "capability_ids",
-            "skill_ids",
-            "total_steps",
-            "success_steps",
-            "failed_steps",
-            "skipped_steps",
-            "retry_count",
-            "prompt_tokens",
-            "completion_tokens",
-            "total_tokens",
-            "estimated_cost_usd",
-            "duration_seconds",
-            "template_hits",
-            "template_hit_count",
-            "error",
-            "started_at",
-            "finished_at",
-        ]
-        buf = io.StringIO()
-        writer = csv.DictWriter(buf, fieldnames=fieldnames)
-        writer.writeheader()
-        for item in reversed(picked):
-            if not isinstance(item, dict):
-                continue
-            row = dict(item)
-            for key in ("capability_ids", "skill_ids", "template_hits"):
-                val = row.get(key)
-                row[key] = "|".join(str(x) for x in val) if isinstance(val, list) else ""
-            writer.writerow({k: row.get(k, "") for k in fieldnames})
-        out_path.write_text(buf.getvalue(), encoding="utf-8")
-
-    return jsonify({
-        "ok": True,
-        "format": fmt,
-        "output": str(out_path),
-        "history_file": "data/agent_task_history.json",
-        "window_count": len(picked),
-        "filters": {
-            "actor_id": actor_id or None,
-            "status": statuses,
-            "task_mode": task_modes,
-            "kind": kinds,
-            "capability_id": capability_id or None,
-            "skill_id": skill_id or None,
-            "trace_id": trace_id or None,
-            "replay_supported": replay_supported,
-            "since": since or None,
-            "until": until or None,
-        },
-        "summary": summary,
-    })
-
-
-@app.route("/api/agent/skills/invoke", methods=["POST"])
-def api_agent_skills_invoke():
-    payload = request.json or {}
-    request_ctx = _parse_request_context()
-    skill_id = str(payload.get("skill_id", "") or "").strip()
-    if not skill_id:
-        return jsonify({"error": "skill_id 不能为空"}), 400
-
-    skill_spec = _AGENT_SKILL_REGISTRY.get(skill_id)
-    if not isinstance(skill_spec, dict):
-        return jsonify({
-            "error": f"不支持的 skill_id: {skill_id}",
-            "available_skills": [x.get("skill_id") for x in _list_agent_skills()],
-        }), 400
-
-    input_payload = payload.get("input", {})
-    if input_payload is None:
-        input_payload = {}
-    if not isinstance(input_payload, dict):
-        return jsonify({"error": "input 必须是对象"}), 400
-    input_payload = _apply_agent_capability_input_defaults(
-        str(skill_spec.get("capability_id", "") or ""),
-        input_payload,
-        default_input=skill_spec.get("default_input", {}),
-    )
-
-    retry_policy = _normalize_skill_retry_policy(payload.get("retry_policy", {}))
-    timeout_seconds = _normalize_skill_timeout_seconds(payload.get("timeout_seconds", 120), default=120.0)
-
-    method = str(skill_spec.get("method", "POST") or "POST").strip().upper()
-    endpoint = str(skill_spec.get("endpoint", "") or "").strip()
-    if not endpoint:
-        return jsonify({"error": f"skill 配置缺少 endpoint: {skill_id}"}), 500
-
-    job_id = str(uuid.uuid4())[:8]
-    invoke_id = str(uuid.uuid4())[:8]
-
-    def _do_invoke():
-        _jobs[job_id]["progress"] = 8
-        _jobs[job_id]["log"].append(f"[AgentSkill] invoke_id={invoke_id} skill_id={skill_id}")
-        _jobs[job_id]["log"].append(f"[AgentSkill] 调用 {method} {endpoint}")
-        ret = _execute_agent_skill(
-            skill_id=skill_id,
-            input_payload=input_payload,
-            retry_policy=retry_policy,
-            timeout_seconds=timeout_seconds,
-            request_context=request_ctx,
-            logger=lambda msg: _jobs[job_id]["log"].append(f"[AgentSkill] {msg}"),
-        )
-        _jobs[job_id]["progress"] = 95
-        ret["invoke_id"] = invoke_id
-        return ret
-
-    _run_in_bg(
-        job_id,
-        _do_invoke,
-        kind="agent_skill",
-        job_meta={
-            "actor_type": str(request_ctx.get("actor_type", "") or ""),
-            "actor_id": str(request_ctx.get("actor_id", "") or ""),
-            "trace_id": str(request_ctx.get("trace_id", "") or ""),
-            "task_mode": "skill_invoke",
-            "skill_id": skill_id,
-            "capability_id": str(skill_spec.get("capability_id", "") or ""),
-            "template_hits": _extract_template_ids_from_value(payload),
-            "replay": {
-                "method": "POST",
-                "endpoint": "/api/agent/skills/invoke",
-                "payload": deepcopy(payload),
-                "request_context": deepcopy(request_ctx),
-            },
-        },
-    )
-    return jsonify({
-        "ok": True,
-        "job_id": job_id,
-        "invoke_id": invoke_id,
-        "skill_id": skill_id,
-        "skill_name": str(skill_spec.get("name", "") or ""),
-        "capability_id": str(skill_spec.get("capability_id", "") or ""),
-        "primary_call": {
-            "method": method,
-            "endpoint": endpoint,
-        },
-        "retry_policy": retry_policy,
-        "timeout_seconds": timeout_seconds,
-        "status_endpoint": f"/api/agent/tasks/{job_id}",
-    })
-
-
-@app.route("/api/agent/templates", methods=["GET"])
-def api_agent_templates_list():
-    if _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-    ctx = _parse_request_context()
-    capability_id = str(request.args.get("capability_id", "") or "").strip()
-    scope = str(request.args.get("scope", "") or "").strip().lower()
-    actor_id = str(request.args.get("actor_id", "") or "").strip() or ctx.get("actor_id", "")
-    include_system = _parse_boolish(request.args.get("include_system", "true"), default=True)
-    resolve = _parse_boolish(request.args.get("resolve", "true"), default=True)
-    templates = _list_agent_templates(
-        capability_id=capability_id,
-        scope=scope,
-        actor_id=actor_id,
-        include_system=include_system,
-        resolve=resolve,
-    )
-    return jsonify({
-        "ok": True,
-        "templates": templates,
-        "count": len(templates),
-        "filters": {
-            "capability_id": capability_id,
-            "scope": scope or None,
-            "actor_id": actor_id or None,
-            "include_system": include_system,
-            "resolve": resolve,
-        },
-    })
-
-
-@app.route("/api/agent/templates", methods=["POST"])
-def api_agent_templates_upsert():
-    if _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-    payload = request.json or {}
-    ctx = _parse_request_context()
-    default_scope = str(payload.get("scope", "") or "").strip().lower()
-    if not default_scope:
-        default_scope = "agent" if ctx.get("actor_type") == "agent" else "project"
-    try:
-        tmpl = _normalize_agent_template_payload(
-            payload,
-            scope_default=default_scope,
-            actor_id_default=ctx.get("actor_id", ""),
-        )
-    except Exception as exc:
-        return jsonify({"error": f"模板保存失败: {exc}"}), 400
-
-    scope = str(tmpl.get("scope", "")).lower()
-    if scope == "system":
-        return jsonify({"error": "system scope 模板是只读内置模板，不能写入"}), 400
-
-    store = _read_agent_template_store()
-    candidate_store = deepcopy(store)
-    if scope == "project":
-        bucket = candidate_store.setdefault("project", {})
-        if not isinstance(bucket, dict):
-            bucket = {}
-            candidate_store["project"] = bucket
-        bucket[tmpl["template_id"]] = tmpl
-    else:
-        actor_id = str(tmpl.get("actor_id", "") or "").strip()
-        if not actor_id:
-            return jsonify({"error": "agent scope 需要 actor_id"}), 400
-        agent_store = candidate_store.setdefault("agent", {})
-        if not isinstance(agent_store, dict):
-            agent_store = {}
-            candidate_store["agent"] = agent_store
-        actor_bucket = agent_store.setdefault(actor_id, {})
-        if not isinstance(actor_bucket, dict):
-            actor_bucket = {}
-            agent_store[actor_id] = actor_bucket
-        actor_bucket[tmpl["template_id"]] = tmpl
-
-    base_error = _validate_agent_template_base_reference(tmpl, store=candidate_store)
-    if base_error:
-        return jsonify({"error": f"模板保存失败: {base_error}"}), 400
-
-    saved = _save_agent_template_store(candidate_store)
-    _ = saved  # keep for future diagnostics
-    templates = _list_agent_templates(
-        capability_id=str(tmpl.get("capability_id", "") or ""),
-        scope=scope,
-        actor_id=str(tmpl.get("actor_id", "") or ""),
-        include_system=(scope == "system"),
-        resolve=True,
-    )
-    return jsonify({
-        "ok": True,
-        "template": tmpl,
-        "templates": templates,
-    })
-
-
-@app.route("/api/agent/templates/<template_id>", methods=["DELETE"])
-def api_agent_templates_delete(template_id: str):
-    if _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-    ctx = _parse_request_context()
-    payload = request.get_json(silent=True) if request.method == "DELETE" else {}
-    if not isinstance(payload, dict):
-        payload = {}
-
-    tid = _normalize_agent_template_id(template_id)
-    if not tid:
-        return jsonify({"error": "template_id 无效"}), 400
-    scope = str(request.args.get("scope", payload.get("scope", "")) or "").strip().lower()
-    if scope not in {"project", "agent", "system"}:
-        return jsonify({"error": "scope 不能为空，且仅支持 project/agent/system"}), 400
-    if scope == "system":
-        return jsonify({"error": "system scope 模板是只读内置模板，不能删除"}), 400
-
-    store = _read_agent_template_store()
-    if scope == "project":
-        bucket = store.get("project", {})
-        if not isinstance(bucket, dict) or tid not in bucket:
-            return jsonify({"error": f"模板不存在: {tid}"}), 404
-        deleted = bucket.pop(tid, None)
-        store["project"] = bucket
-    else:
-        actor_id = str(request.args.get("actor_id", payload.get("actor_id", "")) or "").strip()
-        if not actor_id:
-            actor_id = str(ctx.get("actor_id", "") or "").strip()
-        if not actor_id:
-            return jsonify({"error": "agent scope 删除需要 actor_id"}), 400
-        agent_store = store.get("agent", {})
-        actor_bucket = agent_store.get(actor_id, {}) if isinstance(agent_store, dict) else {}
-        if not isinstance(actor_bucket, dict) or tid not in actor_bucket:
-            return jsonify({"error": f"模板不存在: {tid}"}), 404
-        deleted = actor_bucket.pop(tid, None)
-        if isinstance(agent_store, dict):
-            if actor_bucket:
-                agent_store[actor_id] = actor_bucket
-            else:
-                agent_store.pop(actor_id, None)
-            store["agent"] = agent_store
-
-    _save_agent_template_store(store)
-    return jsonify({"ok": True, "deleted": deleted})
-
-
-@app.route("/api/workflows/catalog", methods=["GET"])
-def api_workflows_catalog():
-    ctx = _parse_request_context()
-    catalog = _build_custom_workflow_catalog()
-    return jsonify(
-        {
-            "ok": True,
-            "catalog": catalog,
-            "count": len(catalog),
-            "request_context": ctx,
-        }
-    )
-
-
-@app.route("/api/workflows", methods=["GET"])
-def api_workflows_list():
-    ctx = _parse_request_context()
-    workflow_id = _normalize_agent_template_id(request.args.get("workflow_id", ""))
-    include_steps = _parse_boolish(request.args.get("include_steps", "true"), default=True)
-    with _custom_workflow_lock:
-        store = _read_custom_workflow_store()
-    items = list(store.values())
-    items.sort(key=lambda x: str(x.get("updated_at", "") or ""), reverse=True)
-    if workflow_id:
-        items = [x for x in items if str(x.get("workflow_id", "") or "") == workflow_id]
-    if not include_steps:
-        for item in items:
-            item.pop("steps", None)
-    return jsonify(
-        {
-            "ok": True,
-            "workflows": items,
-            "count": len(items),
-            "persisted": _project_dir is not None,
-            "request_context": ctx,
-        }
-    )
-
-
-@app.route("/api/workflows", methods=["POST"])
-def api_workflows_upsert():
-    payload = request.json or {}
-    ctx = _parse_request_context()
-    try:
-        workflow_id = _normalize_agent_template_id(payload.get("workflow_id", ""))
-        with _custom_workflow_lock:
-            store = _read_custom_workflow_store()
-            existing = store.get(workflow_id) if workflow_id else None
-            workflow = _normalize_custom_workflow_payload(payload, existing=existing)
-            old_id = workflow_id if workflow_id and workflow_id in store else ""
-            store[workflow["workflow_id"]] = workflow
-            if old_id and old_id != workflow["workflow_id"]:
-                store.pop(old_id, None)
-            saved = _save_custom_workflow_store(store)
-    except Exception as exc:
-        return jsonify({"error": f"workflow 保存失败: {exc}"}), 400
-    return jsonify(
-        {
-            "ok": True,
-            "workflow": workflow,
-            "count": len(saved),
-            "persisted": _project_dir is not None,
-            "request_context": ctx,
-        }
-    )
-
-
-@app.route("/api/workflows/plan", methods=["POST"])
-def api_workflows_plan():
-    payload = request.json or {}
-    ctx = _parse_request_context()
-    dry_run = _coerce_bool(payload.get("dry_run", True), default=True)
-    try:
-        workflow = _resolve_custom_workflow_from_payload(payload)
-        plan = _build_custom_workflow_plan(workflow=workflow, payload=payload, dry_run=dry_run)
-    except Exception as exc:
-        return jsonify({"error": f"workflow 规划失败: {exc}"}), 400
-    return jsonify(
-        {
-            "ok": True,
-            "workflow": {
-                "workflow_id": plan.get("workflow_id"),
-                "name": plan.get("name"),
-                "description": plan.get("description"),
-            },
-            "plan": plan,
-            "plan_summary": {
-                "workflow_id": plan.get("workflow_id"),
-                "total_steps": plan.get("total_steps", 0),
-                "dry_run": dry_run,
-                "start_step_id": (plan.get("graph", {}) or {}).get("start_step_id", ""),
-                "edge_count": (plan.get("graph", {}) or {}).get("edge_count", 0),
-                "has_cycle": bool((plan.get("graph", {}) or {}).get("has_cycle", False)),
-                "enabled_steps": sum(
-                    1
-                    for step in (plan.get("steps", []) if isinstance(plan.get("steps"), list) else [])
-                    if _coerce_bool(step.get("enabled", True), default=True)
-                ),
-            },
-            "request_context": ctx,
-        }
-    )
-
-
-@app.route("/api/workflows/run", methods=["POST"])
-def api_workflows_run():
-    payload = request.json or {}
-    ctx = _parse_request_context()
-    try:
-        workflow = _resolve_custom_workflow_from_payload(payload)
-        ret = _start_custom_workflow_run(
-            workflow=workflow,
-            payload=payload,
-            request_context=ctx,
-            source="api/workflows/run",
-        )
-    except Exception as exc:
-        return jsonify({"error": f"workflow 执行失败: {exc}"}), 400
-    ret["request_context"] = ctx
-    return jsonify(ret)
-
-
-@app.route("/api/workflows/runs", methods=["GET"])
-def api_workflows_runs():
-    ctx = _parse_request_context()
-    workflow_id = _normalize_agent_template_id(request.args.get("workflow_id", ""))
-    include_steps = _parse_boolish(request.args.get("include_steps", "false"), default=False)
-    try:
-        limit = int(request.args.get("limit", "50") or "50")
-    except Exception:
-        limit = 50
-    try:
-        offset = int(request.args.get("offset", "0") or "0")
-    except Exception:
-        offset = 0
-    limit = max(1, min(limit, 200))
-    offset = max(offset, 0)
-
-    with _custom_workflow_lock:
-        runs = _read_custom_workflow_runs()
-    if workflow_id:
-        runs = [x for x in runs if str(x.get("workflow_id", "") or "") == workflow_id]
-    ordered = list(reversed(runs))
-    page = ordered[offset : offset + limit]
-    has_more = (offset + limit) < len(ordered)
-    if not include_steps:
-        for item in page:
-            item.pop("steps", None)
-            item.pop("workflow", None)
-            item.pop("plan", None)
-    return jsonify(
-        {
-            "ok": True,
-            "items": page,
-            "total_count": len(ordered),
-            "offset": offset,
-            "limit": limit,
-            "has_more": has_more,
-            "request_context": ctx,
-        }
-    )
-
-
-@app.route("/api/workflows/runs/<run_id>", methods=["GET"])
-def api_workflows_run_detail(run_id: str):
-    ctx = _parse_request_context()
-    record = _find_custom_workflow_run(run_id)
-    if not isinstance(record, dict):
-        return jsonify({"error": f"run 不存在: {run_id}"}), 404
-    return jsonify({"ok": True, "run": record, "request_context": ctx})
-
-
-@app.route("/api/workflows/runs/<run_id>/rerun", methods=["POST"])
-def api_workflows_run_rerun(run_id: str):
-    payload = request.json or {}
-    ctx = _parse_request_context()
-    base = _find_custom_workflow_run(run_id)
-    if not isinstance(base, dict):
-        return jsonify({"error": f"run 不存在: {run_id}"}), 404
-
-    workflow_raw = base.get("workflow", {})
-    if not isinstance(workflow_raw, dict):
-        workflow_raw = {}
-    if not workflow_raw:
-        workflow_id = _normalize_agent_template_id(base.get("workflow_id", ""))
-        with _custom_workflow_lock:
-            workflow_raw = _read_custom_workflow_store().get(workflow_id, {})
-    if not isinstance(workflow_raw, dict) or not workflow_raw:
-        return jsonify({"error": "历史 run 缺少可复用 workflow 定义"}), 400
-
-    rerun_failed_only = _coerce_bool(payload.get("rerun_failed_only", False), default=False)
-    failed_step_ids = [
-        _normalize_agent_template_id(step.get("step_id", ""))
-        for step in (base.get("steps", []) if isinstance(base.get("steps"), list) else [])
-        if str(step.get("status", "") or "").strip().lower() == "error"
-    ]
-    failed_step_ids = [sid for sid in failed_step_ids if sid]
-    try:
-        workflow = _normalize_custom_workflow_payload(workflow_raw, existing=workflow_raw)
-    except Exception as exc:
-        return jsonify({"error": f"workflow 解析失败: {exc}"}), 400
-
-    if rerun_failed_only:
-        try:
-            workflow = _build_failed_only_workflow_subset(workflow=workflow, base_run=base)
-        except Exception as exc:
-            return jsonify({"error": str(exc)}), 400
-
-    run_payload = deepcopy(payload)
-    run_payload["workflow"] = workflow
-    included_step_ids = [
-        _normalize_agent_template_id(step.get("step_id", ""))
-        for step in (workflow.get("steps", []) if isinstance(workflow.get("steps"), list) else [])
-    ]
-    included_step_ids = [sid for sid in included_step_ids if sid]
-    run_payload["rerun_context"] = {
-        "mode": "failed_with_dependencies" if rerun_failed_only else "full",
-        "source_run_id": run_id,
-        "failed_step_ids": failed_step_ids,
-        "included_step_ids": included_step_ids,
-        "start_step_id": _normalize_agent_template_id(workflow.get("start_step_id", "")),
-    }
-    if "input" not in run_payload:
-        plan_raw = base.get("plan", {})
-        if isinstance(plan_raw, dict) and isinstance(plan_raw.get("input"), dict):
-            run_payload["input"] = deepcopy(plan_raw.get("input", {}))
-    try:
-        ret = _start_custom_workflow_run(
-            workflow=workflow,
-            payload=run_payload,
-            request_context=ctx,
-            source=f"api/workflows/runs/{run_id}/rerun",
-        )
-    except Exception as exc:
-        return jsonify({"error": f"workflow 重跑失败: {exc}"}), 400
-    ret["source_run_id"] = run_id
-    ret["rerun_context"] = deepcopy(run_payload.get("rerun_context", {}))
-    ret["request_context"] = ctx
-    return jsonify(ret)
-
-
-@app.route("/api/workflows/<workflow_id>", methods=["DELETE"])
-def api_workflows_delete(workflow_id: str):
-    ctx = _parse_request_context()
-    workflow_key = _normalize_agent_template_id(workflow_id)
-    if not workflow_key:
-        return jsonify({"error": "workflow_id 无效"}), 400
-    with _custom_workflow_lock:
-        store = _read_custom_workflow_store()
-        deleted = store.pop(workflow_key, None)
-        if deleted is None:
-            return jsonify({"error": f"workflow 不存在: {workflow_key}"}), 404
-        _save_custom_workflow_store(store)
-    return jsonify({"ok": True, "deleted": deleted, "request_context": ctx})
-
-
-@app.route("/api/capabilities/topic_library", methods=["GET"])
-def api_topic_library_list():
-    payload = _request_json_any_method()
-    input_mode = _parse_capability_input_mode(
-        request.args.get("input_mode", payload.get("input_mode", "project")),
-        default="project",
-    )
-    if input_mode == "project" and _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-    from modules.capabilities.topic_library import list_topics, search_topics
-
-    query = str(request.args.get("q", payload.get("q", "")) or "").strip()
-    category = str(request.args.get("category", payload.get("category", "")) or "").strip() or None
-    tags_raw = str(request.args.get("tags", payload.get("tags", "")) or "").strip()
-    tags = [x.strip() for x in tags_raw.replace("，", ",").split(",") if x.strip()] if tags_raw else None
-    include_disabled = _parse_boolish(
-        request.args.get("include_disabled", payload.get("include_disabled", "false")),
-        default=False,
-    )
-    try:
-        limit = int(request.args.get("limit", payload.get("limit", "60")) or "60")
-    except Exception:
-        limit = 60
-    limit = max(1, min(limit, 300))
-
-    if input_mode == "project":
-        db_path = _project_data_path("topic_library.db")
-        assert db_path is not None
-        if query or category or tags:
-            items = search_topics(str(db_path), query=query, category=category, tags=tags, limit=limit)
-            if not include_disabled:
-                items = [x for x in items if x.get("enabled", True)]
-        else:
-            items = list_topics(str(db_path), enabled_only=not include_disabled, limit=limit)
-        return jsonify({"ok": True, "input_mode": input_mode, "topics": items, "db_path": str(db_path)})
-
-    topics_raw = payload.get("topics", [])
-    topic_items = [x for x in topics_raw if isinstance(x, dict)]
-    query_l = query.lower()
-    matched: List[Dict[str, Any]] = []
-    for item in topic_items:
-        enabled = bool(item.get("enabled", True))
-        if not include_disabled and not enabled:
-            continue
-        if category and str(item.get("category", "") or "").strip().lower() != category.lower():
-            continue
-        item_tags = item.get("tags", [])
-        item_tags_norm = []
-        if isinstance(item_tags, list):
-            item_tags_norm = [str(x).strip().lower() for x in item_tags if str(x).strip()]
-        if tags:
-            wanted = [x.lower() for x in tags]
-            if not all(tag in item_tags_norm for tag in wanted):
-                continue
-        if query_l:
-            hay = " ".join(
-                [
-                    str(item.get("slug", "") or ""),
-                    str(item.get("title", "") or ""),
-                    str(item.get("category", "") or ""),
-                    " ".join(item_tags_norm),
-                ]
-            ).lower()
-            if query_l not in hay:
-                continue
-        matched.append(item)
-        if len(matched) >= limit:
-            break
-    return jsonify({"ok": True, "input_mode": input_mode, "topics": matched, "db_path": None})
-
-
-@app.route("/api/capabilities/topic_library", methods=["POST"])
-def api_topic_library_upsert():
-    payload = request.json or {}
-    input_mode = _parse_capability_input_mode(payload.get("input_mode", "project"), default="project")
-    if input_mode == "project" and _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-    title = str(payload.get("title", "") or "").strip()
-    if not title:
-        return jsonify({"error": "title 不能为空"}), 400
-
-    from modules.capabilities.topic_library import TopicTemplate, upsert_topic
-
-    slug = str(payload.get("slug", "") or "").strip() or _slugify(title)
-    topic = TopicTemplate(
-        slug=slug,
-        title=title,
-        category=str(payload.get("category", "travel") or "travel"),
-        audience=str(payload.get("audience", "general") or "general"),
-        hook_style=str(payload.get("hook_style", "story") or "story"),
-        outline_template=str(payload.get("outline_template", "") or ""),
-        tags=payload.get("tags", []) if isinstance(payload.get("tags"), list) else [],
-        enabled=bool(payload.get("enabled", True)),
-    )
-    topic_dict = {
-        "slug": topic.slug,
-        "title": topic.title,
-        "category": topic.category,
-        "audience": topic.audience,
-        "hook_style": topic.hook_style,
-        "outline_template": topic.outline_template,
-        "tags": list(topic.tags),
-        "enabled": bool(topic.enabled),
-    }
-    if input_mode == "project":
-        db_path = _project_data_path("topic_library.db")
-        assert db_path is not None
-        upsert_topic(str(db_path), topic)
-        return jsonify({"ok": True, "input_mode": input_mode, "slug": slug, "topic": topic_dict, "db_path": str(db_path)})
-
-    topics_raw = payload.get("topics", [])
-    topic_items = [dict(x) for x in topics_raw if isinstance(x, dict)]
-    replaced = False
-    for idx, item in enumerate(topic_items):
-        if str(item.get("slug", "") or "").strip() == slug:
-            topic_items[idx] = topic_dict
-            replaced = True
-            break
-    if not replaced:
-        topic_items.append(topic_dict)
-    return jsonify({"ok": True, "input_mode": input_mode, "slug": slug, "topic": topic_dict, "topics": topic_items, "db_path": None})
-
-
-@app.route("/api/capabilities/topic_library/bootstrap", methods=["POST"])
-def api_topic_library_bootstrap():
-    materials = _read_project_json("materials.json", fallback={})
-    payload = request.json or {}
-    input_mode = _parse_capability_input_mode(payload.get("input_mode", "project"), default="project")
-    if input_mode == "project" and _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-    if isinstance(payload.get("materials"), dict):
-        materials = payload.get("materials")
-    if not isinstance(materials, dict) or not materials:
-        if input_mode == "project":
-            return jsonify({"error": "data/materials.json 不存在或为空"}), 400
-        return jsonify({"error": "inline 模式缺少 materials"}), 400
-
-    from modules.capabilities.topic_library import TopicTemplate, upsert_topic
-
-    db_path = _project_data_path("topic_library.db") if input_mode == "project" else None
-    created = 0
-    seen = set()
-    generated: List[Dict[str, Any]] = []
-    for _, vdata in materials.items():
-        sem = vdata.get("semantic", {}) if isinstance(vdata.get("semantic"), dict) else {}
-        setting = str(sem.get("setting", "") or "").strip() or "旅行场景"
-        activity = str(sem.get("activity", "") or "").strip() or "探索"
-        mood = str(sem.get("mood", "") or "").strip() or "真实"
-        title = f"{setting}·{activity}高光"
-        slug = _slugify(f"{setting}-{activity}")
-        if slug in seen:
-            continue
-        seen.add(slug)
-        outline = f"开场给出{setting}强画面，中段呈现{activity}过程，结尾落在{mood}情绪变化。"
-        topic = TopicTemplate(
-            slug=slug,
-            title=title,
-            category="travel",
-            audience="short_video",
-            hook_style="story",
-            outline_template=outline,
-            tags=[setting, activity, mood],
-            enabled=True,
-        )
-        if db_path is not None:
-            upsert_topic(str(db_path), topic)
-        generated.append(
-            {
-                "slug": topic.slug,
-                "title": topic.title,
-                "category": topic.category,
-                "audience": topic.audience,
-                "hook_style": topic.hook_style,
-                "outline_template": topic.outline_template,
-                "tags": list(topic.tags),
-                "enabled": bool(topic.enabled),
-            }
-        )
-        created += 1
-        if created >= 30:
-            break
-
-    return jsonify(
-        {
-            "ok": True,
-            "input_mode": input_mode,
-            "created": created,
-            "topics": generated,
-            "db_path": str(db_path) if db_path is not None else None,
-        }
-    )
-
-
-@app.route("/api/capabilities/topic_copy/draft", methods=["POST"])
-def api_topic_copy_draft():
-    payload = request.json or {}
-    input_mode = _parse_capability_input_mode(payload.get("input_mode", "project"), default="project")
-    if input_mode == "project" and _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-    slug = str(payload.get("slug", "") or "").strip()
-    target_duration_s = int(payload.get("target_duration_s", 60) or 60)
-
-    from modules.capabilities.topic_library import TopicTemplate, get_topic, list_topics
-    from modules.capabilities.topic_copy import build_copy_payload
-
-    topic_dict = payload.get("topic") if isinstance(payload.get("topic"), dict) else None
-    if input_mode == "project":
-        db_path = _project_data_path("topic_library.db")
-        assert db_path is not None
-        if not topic_dict:
-            topic_dict = get_topic(str(db_path), slug) if slug else None
-        if not topic_dict:
-            defaults = list_topics(str(db_path), enabled_only=True, limit=1)
-            if defaults:
-                topic_dict = defaults[0]
-    else:
-        topic_pool = payload.get("topics", [])
-        if not topic_dict and isinstance(topic_pool, list):
-            if slug:
-                topic_dict = next(
-                    (x for x in topic_pool if isinstance(x, dict) and str(x.get("slug", "") or "").strip() == slug),
-                    None,
-                )
-            if not topic_dict:
-                topic_dict = next((x for x in topic_pool if isinstance(x, dict)), None)
-    if not topic_dict:
-        return jsonify({"error": "未找到 topic，请先创建或传正确 slug"}), 404
-
-    topic = TopicTemplate(
-        slug=topic_dict.get("slug", slug),
-        title=topic_dict.get("title", "Untitled"),
-        category=topic_dict.get("category", "travel"),
-        audience=topic_dict.get("audience", "general"),
-        hook_style=topic_dict.get("hook_style", "story"),
-        outline_template=topic_dict.get("outline_template", ""),
-        tags=topic_dict.get("tags", []),
-        enabled=bool(topic_dict.get("enabled", True)),
-    )
-    semantics_raw = payload.get("material_semantics", payload.get("semantics"))
-    if isinstance(semantics_raw, list):
-        semantics = [x for x in semantics_raw if isinstance(x, dict)]
-    else:
-        materials = _coerce_materials_input(payload, input_mode=input_mode)
-        semantics = _extract_material_semantics(materials if isinstance(materials, dict) else {})
-    draft = build_copy_payload(topic, semantics, target_duration_s=target_duration_s)
-    out_path = _project_data_path("topic_copy_draft.json") if input_mode == "project" else None
-    if out_path is not None and bool(payload.get("store_result", True)):
-        out_path.write_text(json.dumps(draft, ensure_ascii=False, indent=2), encoding="utf-8")
-    return jsonify({"ok": True, "input_mode": input_mode, "draft": draft, "output": str(out_path) if out_path else None})
-
-
-def _extract_text_rough_subtitle_spans(script: Dict) -> List[Dict]:
-    out: List[Dict] = []
-    subtitles = script.get("subtitles", []) if isinstance(script, dict) else []
-    idx = 0
-    for sub in subtitles:
-        if not isinstance(sub, dict):
-            continue
-        text = str(sub.get("cn_text") or sub.get("text") or "").strip()
-        if not text:
-            continue
-        try:
-            st = float(sub.get("start_time"))
-            et = float(sub.get("end_time"))
-        except Exception:
-            continue
-        if et <= st:
-            continue
-        idx += 1
-        out.append(
-            {
-                "index": idx,
-                "start": round(st, 3),
-                "end": round(et, 3),
-                "duration_s": round(et - st, 3),
-                "text": text,
-            }
-        )
-    return out
-
-
-@app.route("/api/capabilities/text_rough_cut/source", methods=["GET"])
-def api_text_rough_cut_source():
-    payload = _request_json_any_method()
-    input_mode = _parse_capability_input_mode(
-        request.args.get("input_mode", payload.get("input_mode", "project")),
-        default="project",
-    )
-    if input_mode == "project" and _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-
-    script = _coerce_script_input(payload, input_mode=input_mode)
-    if not script and input_mode == "inline":
-        return jsonify({"error": "inline 模式缺少 script/subtitles"}), 400
-    spans = _extract_text_rough_subtitle_spans(script)
-    out_path = _project_data_path("text_rough_source.json") if input_mode == "project" else None
-    if out_path is not None and _project_dir is not None:
-        out_path.write_text(json.dumps({"spans": spans}, ensure_ascii=False, indent=2), encoding="utf-8")
-    return jsonify(
-        {
-            "ok": True,
-            "input_mode": input_mode,
-            "spans": spans,
-            "total": len(spans),
-            "output": str(out_path) if out_path else None,
-        }
-    )
-
-
-@app.route("/api/capabilities/text_rough_cut/plan", methods=["POST"])
-def api_text_rough_cut_plan():
-    payload = request.json or {}
-    input_mode = _parse_capability_input_mode(payload.get("input_mode", "project"), default="project")
-    if input_mode == "project" and _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-    removed = payload.get("removed_phrases", None)
-    target_duration_raw = payload.get("target_duration_s", 15)
-    merge_gap_raw = payload.get("merge_gap_s", 0.15)
-    keep_indexes_raw = payload.get("keep_span_indexes", None)
-    drop_indexes_raw = payload.get("drop_span_indexes", None)
-    apply_removed_phrases = bool(payload.get("apply_removed_phrases", True))
-
-    from modules.capabilities.text_rough_cut import (
-        TranscriptSpan,
-        build_text_rough_cut_plan,
-        coerce_span_indexes,
-    )
-
-    span_items: List[Dict[str, Any]] = []
-    span_items_raw = payload.get("spans", [])
-    if isinstance(span_items_raw, list) and span_items_raw:
-        for idx, item in enumerate(span_items_raw, start=1):
-            if not isinstance(item, dict):
-                continue
-            text = str(item.get("text") or item.get("cn_text") or "").strip()
-            if not text:
-                continue
-            try:
-                start = float(item.get("start", item.get("start_time", 0.0)))
-                end = float(item.get("end", item.get("end_time", 0.0)))
-            except Exception:
-                continue
-            if end <= start:
-                continue
-            span_items.append({"index": idx, "start": round(start, 3), "end": round(end, 3), "text": text})
-    if not span_items:
-        script = _coerce_script_input(payload, input_mode=input_mode)
-        span_items = _extract_text_rough_subtitle_spans(script)
-    if not span_items and input_mode == "inline":
-        return jsonify({"error": "缺少可用于粗剪的字幕分段（spans/script/subtitles）"}), 400
-
-    spans = [
-        TranscriptSpan(
-            start=float(item.get("start", 0.0)),
-            end=float(item.get("end", 0.0)),
-            text=str(item.get("text", "") or ""),
-            confidence=1.0,
-        )
-        for item in span_items
-    ]
-    if isinstance(removed, str):
-        removed = [x.strip() for x in removed.replace("，", ",").split(",") if x.strip()]
-    elif not isinstance(removed, list):
-        removed = None
-
-    if target_duration_raw in {None, ""}:
-        target_duration_s = None
-    else:
-        try:
-            target_duration_s = float(target_duration_raw)
-        except Exception:
-            target_duration_s = 15.0
-    try:
-        merge_gap_s = float(merge_gap_raw)
-    except Exception:
-        merge_gap_s = 0.15
-    keep_indexes = coerce_span_indexes(keep_indexes_raw, max_index=len(spans))
-    drop_indexes = coerce_span_indexes(drop_indexes_raw, max_index=len(spans))
-
-    plan = build_text_rough_cut_plan(
-        spans=spans,
-        removed_phrases=removed,
-        target_duration_s=target_duration_s,
-        merge_gap_s=merge_gap_s,
-        keep_span_indexes=keep_indexes,
-        drop_span_indexes=drop_indexes,
-        apply_removed_phrases=apply_removed_phrases,
-    )
-    out_path = _project_data_path("text_rough_plan.json") if input_mode == "project" else None
-    if out_path is not None and bool(payload.get("store_result", True)):
-        out_path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
-    return jsonify({"ok": True, "input_mode": input_mode, "plan": plan, "output": str(out_path) if out_path else None})
-
-
-@app.route("/api/capabilities/short_clip/plan", methods=["POST"])
-def api_short_clip_plan():
-    payload = request.json or {}
-    input_mode = _parse_capability_input_mode(payload.get("input_mode", "project"), default="project")
-    if input_mode == "project" and _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-    target_duration_s = float(payload.get("target_duration_s", 30) or 30)
-    max_clips = int(payload.get("max_clips", 8) or 8)
-
-    from modules.capabilities.short_clip import HighlightCandidate, highlights_to_timeline, pick_highlights
-
-    candidates: List[HighlightCandidate] = []
-    candidate_items = payload.get("candidates", [])
-    if isinstance(candidate_items, list) and candidate_items:
-        for item in candidate_items:
-            if not isinstance(item, dict):
-                continue
-            try:
-                start = float(item.get("start", item.get("start_time", 0.0)))
-                end = float(item.get("end", item.get("end_time", 0.0)))
-            except Exception:
-                continue
-            if end <= start:
-                continue
-            try:
-                score = float(item.get("score", item.get("highlight_score", 0.55)) or 0.55)
-            except Exception:
-                score = 0.55
-            candidates.append(
-                HighlightCandidate(
-                    start=start,
-                    end=end,
-                    score=score,
-                    reason=str(item.get("reason", item.get("scene_description", "")) or ""),
-                )
-            )
-    if not candidates:
-        script = _coerce_script_input(payload, input_mode=input_mode)
-        cursor = 0.0
-        for idx, clip in enumerate(script.get("clips", []), start=1):
-            if not isinstance(clip, dict):
-                continue
-            start = cursor
-            try:
-                src_start = float(clip.get("source_start", 0) or 0)
-            except Exception:
-                src_start = 0.0
-            src_end = clip.get("source_end")
-            if src_end is None:
-                try:
-                    src_end = src_start + float(clip.get("duration", 5) or 5)
-                except Exception:
-                    src_end = src_start + 5.0
-            try:
-                duration = max(float(src_end) - src_start, 0.1)
-            except Exception:
-                duration = 5.0
-            end = start + duration
-            cursor = end
-            try:
-                score = float(clip.get("highlight_score", 0.55) or 0.55)
-            except Exception:
-                score = 0.55
-            if idx == 1:
-                score += 0.12
-            if clip.get("has_face"):
-                score += 0.08
-            candidates.append(HighlightCandidate(start=start, end=end, score=score, reason=str(clip.get("scene_description", ""))))
-    if not candidates:
-        return jsonify({"error": "缺少候选片段（candidates/script/clips）"}), 400
-
-    picked = pick_highlights(candidates, target_duration_s=target_duration_s, max_clips=max_clips)
-    timeline = highlights_to_timeline(picked)
-    out_path = _project_data_path("short_clip_plan.json") if input_mode == "project" else None
-    if out_path is not None and bool(payload.get("store_result", True)):
-        out_path.write_text(json.dumps(timeline, ensure_ascii=False, indent=2), encoding="utf-8")
-    return jsonify({"ok": True, "input_mode": input_mode, "plan": timeline, "output": str(out_path) if out_path else None})
-
-
-@app.route("/api/capabilities/refinement/plan", methods=["POST"])
-def api_refinement_plan():
-    payload = request.json or {}
-    input_mode = _parse_capability_input_mode(payload.get("input_mode", "project"), default="project")
-    if input_mode == "project" and _project_dir is None:
-        # 保持既有兼容：project 模式下仅在有项目时落盘，不阻断规划结果返回
-        input_mode = "inline"
-    from modules.capabilities.refinement import build_refine_payload
-
-    plan = build_refine_payload(
-        style=str(payload.get("style", "travel_story") or "travel_story"),
-        editor=str(payload.get("editor", "internal_ffmpeg") or "internal_ffmpeg"),
-        quality=str(payload.get("quality", "high") or "high"),
-    )
-    if input_mode == "project" and _project_dir is not None and bool(payload.get("store_result", True)):
-        out_path = _project_data_path("refinement_plan.json")
-        if out_path is not None:
-            out_path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
-    return jsonify({"ok": True, "input_mode": input_mode, "plan": plan})
-
-
-@app.route("/api/capabilities/refinement/handoff", methods=["POST"])
-def api_refinement_handoff():
-    payload = request.json or {}
-    input_mode = _parse_capability_input_mode(payload.get("input_mode", "project"), default="project")
-    if input_mode == "project" and _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-    editor = str(payload.get("editor", "finalcut") or "finalcut").strip().lower()
-    title = str(payload.get("title", "VideoEditer Timeline") or "VideoEditer Timeline").strip()
-    fps = int(payload.get("fps", 30) or 30)
-
-    from modules.capabilities.nle_handoff import create_nle_handoff
-
-    script = _coerce_script_input(payload, input_mode=input_mode)
-    if not script or not script.get("clips"):
-        return jsonify({"error": "缺少脚本片段，请先生成 script_draft/script_matched"}), 400
-    materials = _coerce_materials_input(payload, input_mode=input_mode)
-    if not isinstance(materials, dict) or not materials:
-        return jsonify({"error": "缺少 materials.json"}), 400
-
-    output_dir_raw = str(payload.get("output_dir", "") or "").strip()
-    if output_dir_raw:
-        out_dir = _resolve_path_with_base(output_dir_raw, base_dir=_capability_base_dir(input_mode))
-    elif input_mode == "project" and _project_dir is not None:
-        out_dir = _project_dir / "data" / "nle_handoff" / editor
-    else:
-        out_dir = Path(tempfile.mkdtemp(prefix=f"videoeditor_nle_handoff_{editor}_"))
-    try:
-        ret = create_nle_handoff(
-            script=script,
-            materials=materials,
-            output_dir=str(out_dir),
-            editor=editor,
-            title=title,
-            fps=fps,
-        )
-    except Exception as exc:
-        return jsonify({"error": f"NLE 交接包生成失败: {exc}"}), 500
-    return jsonify({"ok": True, "input_mode": input_mode, "handoff": ret})
-
-
-@app.route("/api/capabilities/refinement/execute", methods=["POST"])
-def api_refinement_execute():
-    payload = request.json or {}
-    input_mode = _parse_capability_input_mode(payload.get("input_mode", "project"), default="project")
-    if input_mode == "project" and _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-    editor = str(payload.get("editor", "finalcut") or "finalcut").strip().lower()
-    title = str(payload.get("title", "VideoEditer Timeline") or "VideoEditer Timeline").strip()
-    fps = int(payload.get("fps", 30) or 30)
-    launch = bool(payload.get("launch", True))
-    app_name = str(payload.get("app_name", "") or "").strip()
-    timeout_seconds = float(payload.get("timeout_seconds", 20) or 20)
-
-    from modules.capabilities.nle_handoff import create_nle_handoff, launch_nle_handoff
-
-    script = _coerce_script_input(payload, input_mode=input_mode)
-    if not script or not script.get("clips"):
-        return jsonify({"error": "缺少脚本片段，请先生成 script_draft/script_matched"}), 400
-    materials = _coerce_materials_input(payload, input_mode=input_mode)
-    if not isinstance(materials, dict) or not materials:
-        return jsonify({"error": "缺少 materials.json"}), 400
-
-    output_dir_raw = str(payload.get("output_dir", "") or "").strip()
-    if output_dir_raw:
-        out_dir = _resolve_path_with_base(output_dir_raw, base_dir=_capability_base_dir(input_mode))
-    elif input_mode == "project" and _project_dir is not None:
-        out_dir = _project_dir / "data" / "nle_handoff" / editor
-    else:
-        out_dir = Path(tempfile.mkdtemp(prefix=f"videoeditor_nle_execute_{editor}_"))
-    try:
-        handoff = create_nle_handoff(
-            script=script,
-            materials=materials,
-            output_dir=str(out_dir),
-            editor=editor,
-            title=title,
-            fps=fps,
-        )
-    except Exception as exc:
-        return jsonify({"error": f"NLE 交接包生成失败: {exc}"}), 500
-
-    launch_result = None
-    if launch:
-        try:
-            launch_result = launch_nle_handoff(
-                handoff,
-                app_name=app_name,
-                timeout_seconds=timeout_seconds,
-            )
-        except Exception as exc:
-            return jsonify({"error": f"NLE 启动失败: {exc}", "handoff": handoff}), 500
-        if launch_result.get("status") != "done":
-            return jsonify({"error": "NLE 启动失败", "handoff": handoff, "launch": launch_result}), 500
-
-    output = {
-        "requested_at": datetime.now().isoformat(timespec="seconds"),
-        "handoff": handoff,
-        "launch": launch_result,
-    }
-    out_path = _project_data_path("refinement_execute_last.json") if input_mode == "project" else None
-    if out_path is not None and bool(payload.get("store_result", True)):
-        out_path.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
-    return jsonify(
-        {
-            "ok": True,
-            "input_mode": input_mode,
-            "handoff": handoff,
-            "launch": launch_result,
-            "output": str(out_path) if out_path else None,
-        }
-    )
-
-
-@app.route("/api/capabilities/refinement/collect_master", methods=["POST"])
-def api_refinement_collect_master():
-    payload = request.json or {}
-    input_mode = _parse_capability_input_mode(payload.get("input_mode", "project"), default="project")
-    if input_mode == "project" and _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-    base_dir = _capability_base_dir(input_mode)
-    editor = str(payload.get("editor", "finalcut") or "finalcut").strip().lower()
-    source_video_raw = str(payload.get("source_video", "") or "").strip()
-    output_name = str(payload.get("output_name", "final.mp4") or "final.mp4").strip() or "final.mp4"
-    copy_mode = str(payload.get("copy_mode", "copy") or "copy").strip().lower()
-    if copy_mode not in {"copy", "move"}:
-        copy_mode = "copy"
-
-    from modules.capabilities.nle_handoff import collect_nle_master_video, find_latest_video_candidate
-
-    source_video = None
-    if source_video_raw:
-        source_video = _resolve_path_with_base(source_video_raw, base_dir=base_dir)
-    else:
-        search_dirs = _parse_str_list(payload.get("search_dirs"))
-        if not search_dirs:
-            if input_mode == "project" and _project_dir is not None:
-                search_dirs = [
-                    str(_project_dir / "data" / "nle_handoff" / editor),
-                    str(_project_dir / "data" / "nle_handoff"),
-                    str(_project_dir / "output"),
-                ]
-            else:
-                search_dirs = [
-                    str(base_dir / "data" / "nle_handoff" / editor),
-                    str(base_dir / "data" / "nle_handoff"),
-                    str(base_dir / "output"),
-                ]
-        resolved_dirs = []
-        for item in search_dirs:
-            p = _resolve_path_with_base(item, base_dir=base_dir)
-            resolved_dirs.append(str(p))
-        guessed = find_latest_video_candidate(resolved_dirs)
-        if guessed:
-            source_video = Path(guessed)
-        else:
-            return jsonify({"error": "未找到可导回的视频，请手动选择 source_video"}), 404
-
-    output_dir_raw = str(payload.get("output_dir", "") or "").strip()
-    if output_dir_raw:
-        output_dir = _resolve_path_with_base(output_dir_raw, base_dir=base_dir)
-    elif input_mode == "project" and _project_dir is not None:
-        output_dir = _project_dir / "output"
-    else:
-        output_dir = (base_dir / "output").resolve()
-
-    try:
-        result = collect_nle_master_video(
-            source_video=str(source_video),
-            output_dir=str(output_dir),
-            output_name=output_name,
-            copy_mode=copy_mode,
-        )
-    except Exception as exc:
-        return jsonify({"error": f"导回成片失败: {exc}"}), 400
-
-    record = {
-        "editor": editor,
-        "requested_at": datetime.now().isoformat(timespec="seconds"),
-        "source_video": result.get("source_video"),
-        "output_video": result.get("output_video"),
-        "mode": result.get("mode"),
-        "size": result.get("size"),
-    }
-    if input_mode == "project" and _ws is not None:
-        nle_history = _ws.data.get("nle_master_history", [])
-        if not isinstance(nle_history, list):
-            nle_history = []
-        nle_history.append(record)
-        _ws.data["nle_master_history"] = nle_history[-50:]
-        _ws.save()
-
-    out_path = _project_data_path("refinement_collect_last.json") if input_mode == "project" else None
-    if out_path is not None and bool(payload.get("store_result", True)):
-        out_path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
-    return jsonify(
-        {
-            "ok": True,
-            "input_mode": input_mode,
-            "collect": result,
-            "record": record,
-            "output": str(out_path) if out_path else None,
-        }
-    )
-
-
 def _read_content_publish_sessions() -> Dict[str, Dict[str, Any]]:
     raw = _read_project_json("content_publish_sessions.json", fallback={})
     if not isinstance(raw, dict):
@@ -9972,1249 +7382,37 @@ def _resolve_content_publish_content(
     return out
 
 
-def _build_subtitle_translator(payload: Dict[str, Any], warnings: List[str]):
-    use_llm = bool(payload.get("use_llm", False))
-    if not use_llm:
-        return None, {"enabled": False, "provider": "", "model": "", "fallback": True}
-
-    ai = _load_ai_settings()
-    provider = str(payload.get("llm_provider") or ai.get("provider") or "").strip().lower()
-    model = str(payload.get("llm_model") or ai.get("ai_model") or "").strip()
-    base_url = str(payload.get("llm_base_url") or ai.get("ai_base_url") or "").strip()
-    api_key = str(payload.get("llm_api_key") or "").strip()
-    if not api_key:
-        if provider == "anthropic":
-            api_key = str(ai.get("anthropic_api_key") or "").strip()
-        else:
-            api_key = str(ai.get("openai_api_key") or "").strip()
-    if not provider:
-        provider = "openai" if api_key else ""
-    if not api_key:
-        warnings.append("字幕翻译 use_llm=true 但未配置 API Key，已降级为规则翻译。")
-        return None, {"enabled": True, "provider": provider, "model": model, "fallback": True}
-
-    client = AIClient(
-        provider=provider or None,
-        api_key=api_key or None,
-        base_url=base_url or None,
-        model=model or None,
-        temperature=0.2,
-        max_tokens=240,
-    )
-
-    warn_once = {"emitted": False}
-
-    def _translator(text: str, target_lang: str) -> str:
-        target = "English" if str(target_lang).lower().startswith("en") else "中文"
-        prompt = (
-            f"请将以下字幕翻译为 {target}。只输出翻译结果，不要解释，不要加引号。\\n"
-            f"字幕：{text}"
-        )
-        try:
-            result = client.chat(
-                messages=[{"role": "user", "content": prompt}],
-                system="你是字幕翻译助手，优先口语化、自然、简短。",
-            )
-            return str(result or "").strip()
-        except Exception as exc:
-            if not warn_once["emitted"]:
-                warnings.append(f"字幕翻译 LLM 调用失败，已降级规则翻译: {exc}")
-                warn_once["emitted"] = True
-            from modules.capabilities.subtitle_calibration import _fallback_translate  # lazy import
-
-            return _fallback_translate(text, "en" if str(target_lang).lower().startswith("en") else "zh")
-
-    return _translator, {
-        "enabled": True,
-        "provider": str(client.provider or ""),
-        "model": str(client.model or ""),
-        "fallback": False,
-    }
-
-
-@app.route("/api/capabilities/subtitle_calibration/plan", methods=["POST"])
-def api_subtitle_calibration_plan():
-    payload = request.json or {}
-    input_mode = _parse_capability_input_mode(payload.get("input_mode", "project"), default="project")
-    subtitles = payload.get("subtitles", [])
-    if not isinstance(subtitles, list):
-        subtitles = []
-    if input_mode == "project" and not subtitles:
-        subtitles = _extract_subtitles_from_script(_read_script_json())
-    if not subtitles:
-        return jsonify({"error": "缺少 subtitles，input_mode=project 时可自动读取脚本字幕"}), 400
-
-    mode = str(payload.get("mode", "text_only") or "text_only").strip().lower()
-    if mode not in {"text_only", "timeline_align"}:
-        mode = "text_only"
-    translation = str(payload.get("translation", "off") or "off").strip().lower()
-    if translation not in {"off", "zh2en", "en2zh", "bilingual"}:
-        translation = "off"
-
-    from modules.capabilities.subtitle_calibration import calibrate_subtitles
-
-    preview = calibrate_subtitles(
-        subtitles=subtitles,
-        mode=mode,
-        translation="off",
-        source_audio=str(payload.get("source_audio", "") or "").strip(),
-        translator=None,
-    )
-    plan = {
-        "mode": mode,
-        "translation": translation,
-        "total_subtitles": int(preview.get("quality_report", {}).get("total_subtitles", 0) or 0),
-        "timeline_change_estimate": int(preview.get("quality_report", {}).get("timeline_changed_count", 0) or 0),
-        "overlap_before": int(preview.get("quality_report", {}).get("overlap_before", 0) or 0),
-        "overlap_after": int(preview.get("quality_report", {}).get("overlap_after", 0) or 0),
-    }
-    return jsonify({"ok": True, "input_mode": input_mode, "plan": plan, "preview": preview})
-
-
-@app.route("/api/capabilities/subtitle_calibration/run", methods=["POST"])
-def api_subtitle_calibration_run():
-    payload = request.json or {}
-    input_mode = _parse_capability_input_mode(payload.get("input_mode", "project"), default="project")
-    subtitles = payload.get("subtitles", [])
-    if not isinstance(subtitles, list):
-        subtitles = []
-    if input_mode == "project" and not subtitles:
-        subtitles = _extract_subtitles_from_script(_read_script_json())
-    if not subtitles:
-        return jsonify({"error": "缺少 subtitles，input_mode=project 时可自动读取脚本字幕"}), 400
-
-    mode = str(payload.get("mode", "text_only") or "text_only").strip().lower()
-    if mode not in {"text_only", "timeline_align"}:
-        mode = "text_only"
-    translation = str(payload.get("translation", "off") or "off").strip().lower()
-    if translation not in {"off", "zh2en", "en2zh", "bilingual"}:
-        translation = "off"
-    source_audio = str(payload.get("source_audio", "") or "").strip()
-
-    from modules.capabilities.subtitle_calibration import calibrate_subtitles
-
-    warnings: List[str] = []
-    translator, llm_meta = _build_subtitle_translator(payload, warnings)
-    result = calibrate_subtitles(
-        subtitles=subtitles,
-        mode=mode,
-        translation=translation,
-        source_audio=source_audio,
-        translator=translator,
-    )
-    if _project_dir is not None and bool(payload.get("store_result", True)):
-        out_path = _project_data_path("subtitle_calibration_last.json")
-        if out_path is not None:
-            out_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
-    return jsonify(
-        {
-            "ok": True,
-            "input_mode": input_mode,
-            "llm": llm_meta,
-            "result": result,
-            "warnings": warnings,
-        }
-    )
-
-
-@app.route("/api/capabilities/image_semantic/analyze", methods=["POST"])
-def api_image_semantic_analyze():
-    payload = request.json or {}
-    input_mode = _parse_capability_input_mode(payload.get("input_mode", "inline"), default="inline")
-    image_paths_raw = payload.get("image_paths", payload.get("images", payload.get("paths", [])))
-    if isinstance(image_paths_raw, str):
-        image_paths = [x.strip() for x in image_paths_raw.replace("，", ",").split(",") if x.strip()]
-    elif isinstance(image_paths_raw, list):
-        image_paths = [str(x).strip() for x in image_paths_raw if str(x).strip()]
-    else:
-        image_paths = []
-    if input_mode == "project" and not image_paths:
-        latest = _library.search_assets(query="", limit=20, offset=0, retrieval_mode="hybrid", media_type="image")
-        image_paths = [str(x.get("path") or "").strip() for x in latest if isinstance(x, dict) and str(x.get("path") or "").strip()]
-
-    from modules.capabilities.image_semantic import analyze_images
-
-    result = analyze_images(
-        image_paths,
-        library=_library,
-        max_images=int(payload.get("max_images", 200) or 200),
-        retrieval_mode=str(payload.get("retrieval_mode", "hybrid") or "hybrid"),
-        auto_ingest=bool(payload.get("auto_ingest", True)),
-    )
-    if _project_dir is not None and bool(payload.get("store_result", True)):
-        out = _project_data_path("image_semantic_analyze_last.json")
-        if out is not None:
-            out.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
-    return jsonify({"ok": True, "input_mode": input_mode, "result": result})
-
-
-@app.route("/api/capabilities/image_semantic/search", methods=["POST"])
-def api_image_semantic_search():
-    payload = request.json or {}
-    query = str(payload.get("query", "") or "").strip()
-    from modules.capabilities.image_semantic import search_images
-
-    result = search_images(
-        query,
-        library=_library,
-        limit=int(payload.get("limit", 30) or 30),
-        offset=int(payload.get("offset", 0) or 0),
-        retrieval_mode=str(payload.get("retrieval_mode", "hybrid") or "hybrid"),
-    )
-    if _project_dir is not None and bool(payload.get("store_result", True)):
-        out = _project_data_path("image_semantic_search_last.json")
-        if out is not None:
-            out.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
-    return jsonify({"ok": True, "result": result})
-
-
-@app.route("/api/capabilities/article_expand/generate", methods=["POST"])
-def api_article_expand_generate():
-    payload = request.json or {}
-    input_mode = _parse_capability_input_mode(payload.get("input_mode", "inline"), default="inline")
-    source_text = str(payload.get("source_text", payload.get("text", "")) or "").strip()
-    key_points = payload.get("key_points", payload.get("points", []))
-    if input_mode == "project" and not source_text:
-        script_blocks = _script_to_text_blocks(_read_script_json())
-        source_text = str(script_blocks.get("script_text", "") or "").strip()
-        if not key_points:
-            key_points = script_blocks.get("voiceover_text", "")
-
-    warnings: List[str] = []
-    use_llm = bool(payload.get("use_llm", False))
-    text_generator = None
-    llm_meta = {"enabled": False, "provider": "", "model": "", "fallback": True}
-    if use_llm:
-        ai = _load_ai_settings()
-        provider = str(payload.get("llm_provider") or ai.get("provider") or "").strip().lower()
-        model = str(payload.get("llm_model") or ai.get("ai_model") or "").strip()
-        base_url = str(payload.get("llm_base_url") or ai.get("ai_base_url") or "").strip()
-        api_key = str(payload.get("llm_api_key") or "").strip()
-        if not api_key:
-            if provider == "anthropic":
-                api_key = str(ai.get("anthropic_api_key") or "").strip()
-            else:
-                api_key = str(ai.get("openai_api_key") or "").strip()
-        if api_key:
-            client = AIClient(
-                provider=provider or None,
-                api_key=api_key,
-                base_url=base_url or None,
-                model=model or None,
-                temperature=0.4,
-                max_tokens=800,
-            )
-            llm_meta = {"enabled": True, "provider": str(client.provider or ""), "model": str(client.model or ""), "fallback": False}
-
-            warn_once = {"emitted": False}
-
-            def _gen(field: str, prompt: str) -> str:
-                try:
-                    return str(
-                        client.chat(
-                            messages=[{"role": "user", "content": prompt}],
-                            system=f"你是微信公众号文章编辑助手，当前字段={field}。",
-                        )
-                        or ""
-                    ).strip()
-                except Exception as exc:
-                    if not warn_once["emitted"]:
-                        warnings.append(f"article_expand LLM 调用失败，已降级规则生成: {exc}")
-                        warn_once["emitted"] = True
-                    return ""
-
-            text_generator = _gen
-        else:
-            warnings.append("article_expand use_llm=true 但未配置 API Key，已降级规则生成。")
-            llm_meta = {"enabled": True, "provider": provider, "model": model, "fallback": True}
-
-    from modules.capabilities.article_expand import generate_article_expansion
-
-    result = generate_article_expansion(
-        source_text=source_text,
-        key_points=key_points,
-        tone=str(payload.get("tone", "professional") or "professional"),
-        length_target=int(payload.get("length_target", 1200) or 1200),
-        title_count=int(payload.get("title_count", 5) or 5),
-        text_generator=text_generator,
-    )
-    if _project_dir is not None and bool(payload.get("store_result", True)):
-        out = _project_data_path("article_expand_last.json")
-        if out is not None:
-            out.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
-    return jsonify({"ok": True, "input_mode": input_mode, "llm": llm_meta, "result": result, "warnings": warnings})
-
-
-@app.route("/api/capabilities/content_publish/platforms", methods=["GET"])
-def api_content_publish_platforms():
-    from modules.capabilities.content_publish import list_publish_platforms
-
-    return jsonify({"ok": True, **list_publish_platforms()})
-
-
-@app.route("/api/capabilities/content_publish/session/bootstrap", methods=["POST"])
-def api_content_publish_session_bootstrap():
-    payload = request.json or {}
-    if _project_dir is None and _parse_capability_input_mode(payload.get("input_mode", "project"), default="project") == "project":
-        return jsonify({"error": "项目未加载"}), 400
-
-    from modules.capabilities.content_publish import bootstrap_publish_session
-
-    session = bootstrap_publish_session(
-        actor_id=str(payload.get("actor_id", "") or "").strip(),
-        session_id=str(payload.get("session_id", "") or "").strip(),
-        authenticated=bool(payload.get("authenticated", False)),
-        expires_in_minutes=int(payload.get("expires_in_minutes", 120) or 120),
-    )
-    sessions = _read_content_publish_sessions() if _project_dir is not None else {}
-    sessions[str(session.get("session_id"))] = session
-    if _project_dir is not None:
-        _save_content_publish_sessions(sessions)
-    return jsonify({"ok": True, "session": session})
-
-
-@app.route("/api/capabilities/content_publish/plan", methods=["POST"])
-def api_content_publish_plan():
-    payload = request.json or {}
-    input_mode = _parse_capability_input_mode(payload.get("input_mode", "project"), default="project")
-    if input_mode == "project" and _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-
-    from modules.capabilities.content_publish import build_publish_plan
-
-    platforms = _parse_platforms(payload.get("platforms", payload.get("platform_ids", [])))
-    content_payload = _resolve_content_publish_content(payload, input_mode=input_mode)
-    sessions = _read_content_publish_sessions() if _project_dir is not None else {}
-    session_id = str(payload.get("session_id", "") or "").strip()
-    session = sessions.get(session_id, {}) if session_id else {}
-    plan = build_publish_plan(
-        content=content_payload,
-        platform_ids=platforms,
-        platform_content_type=str(payload.get("platform_content_type", "video_post") or "video_post"),
-        dry_run=bool(payload.get("dry_run", True)),
-        session=session,
-        humanization=payload.get("humanization", {}) if isinstance(payload.get("humanization"), dict) else {},
-    )
-    plan_record = {
-        "plan_id": str(uuid.uuid4())[:10],
-        "created_at": datetime.now().isoformat(timespec="seconds"),
-        "input_mode": input_mode,
-        **plan,
-    }
-    if _project_dir is not None:
-        out = _project_data_path("content_publish_plan_last.json")
-        if out is not None:
-            out.write_text(json.dumps(plan_record, ensure_ascii=False, indent=2), encoding="utf-8")
-    return jsonify({"ok": True, "plan": plan_record})
-
-
-@app.route("/api/capabilities/content_publish/run", methods=["POST"])
-def api_content_publish_run():
-    payload = request.json or {}
-    input_mode = _parse_capability_input_mode(payload.get("input_mode", "project"), default="project")
-    if input_mode == "project" and _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-
-    from modules.capabilities.content_publish import run_publish_plan
-
-    plan = payload.get("plan", {}) if isinstance(payload.get("plan"), dict) else {}
-    if not plan:
-        plan = _read_project_json("content_publish_plan_last.json", fallback={}) if _project_dir is not None else {}
-    if not isinstance(plan, dict) or not plan:
-        return jsonify({"error": "缺少 plan，请先调用 /api/capabilities/content_publish/plan"}), 400
-
-    sessions = _read_content_publish_sessions() if _project_dir is not None else {}
-    session_id = str(payload.get("session_id", "") or "").strip()
-    if not session_id:
-        session_id = str(plan.get("session", {}).get("session_id", "") if isinstance(plan.get("session"), dict) else "")
-    session = sessions.get(session_id, {}) if session_id else {}
-
-    result = run_publish_plan(
-        plan=plan,
-        session=session,
-        dry_run=bool(payload.get("dry_run", plan.get("dry_run", False))),
-        rerun_failed_only=bool(payload.get("rerun_failed_only", False)),
-        random_seed=payload.get("random_seed", 7),
-    )
-
-    run_record = {
-        "run_id": str(uuid.uuid4())[:10],
-        "requested_at": datetime.now().isoformat(timespec="seconds"),
-        "input_mode": input_mode,
-        "plan_id": str(plan.get("plan_id", "") or ""),
-        "plan": plan,
-        "result": result,
-    }
-    history = _read_content_publish_history() if _project_dir is not None else []
-    history.append(run_record)
-    history = history[-300:]
-    if _project_dir is not None:
-        _save_content_publish_history(history)
-        out = _project_data_path("content_publish_run_last.json")
-        if out is not None:
-            out.write_text(json.dumps(run_record, ensure_ascii=False, indent=2), encoding="utf-8")
-    waiting_auth = str(result.get("status", "")).lower() == "waiting_auth"
-    return jsonify(
-        {
-            "ok": True,
-            "run": run_record,
-            "state": result.get("status"),
-            "auth_required": waiting_auth,
-            "auth_hint": "会话过期，请扫码续登后重试" if waiting_auth else "",
-        }
-    )
-
-
-@app.route("/api/capabilities/content_publish/rerun", methods=["POST"])
-def api_content_publish_rerun():
-    payload = request.json or {}
-    input_mode = _parse_capability_input_mode(payload.get("input_mode", "project"), default="project")
-    if input_mode == "project" and _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-
-    run_id = str(payload.get("run_id", "") or "").strip()
-    if not run_id:
-        return jsonify({"error": "run_id 不能为空"}), 400
-
-    history = _read_content_publish_history() if _project_dir is not None else []
-    base = next((x for x in reversed(history) if str(x.get("run_id", "") or "") == run_id), None)
-    if not isinstance(base, dict):
-        return jsonify({"error": f"未找到 run_id={run_id}"}), 404
-
-    from modules.capabilities.content_publish import run_publish_plan
-
-    plan = base.get("plan", {}) if isinstance(base.get("plan"), dict) else {}
-    if not plan:
-        return jsonify({"error": f"run_id={run_id} 缺少可复跑 plan"}), 400
-
-    sessions = _read_content_publish_sessions() if _project_dir is not None else {}
-    session_id = str(payload.get("session_id", "") or "").strip()
-    if not session_id:
-        session_id = str(plan.get("session", {}).get("session_id", "") if isinstance(plan.get("session"), dict) else "")
-    session = sessions.get(session_id, {}) if session_id else {}
-
-    result = run_publish_plan(
-        plan=plan,
-        session=session,
-        dry_run=bool(payload.get("dry_run", False)),
-        rerun_failed_only=bool(payload.get("rerun_failed_only", True)),
-        random_seed=payload.get("random_seed", 7),
-    )
-    run_record = {
-        "run_id": str(uuid.uuid4())[:10],
-        "requested_at": datetime.now().isoformat(timespec="seconds"),
-        "input_mode": input_mode,
-        "plan_id": str(plan.get("plan_id", "") or ""),
-        "plan": plan,
-        "result": result,
-        "rerun_from": run_id,
-    }
-    history.append(run_record)
-    history = history[-300:]
-    if _project_dir is not None:
-        _save_content_publish_history(history)
-        out = _project_data_path("content_publish_run_last.json")
-        if out is not None:
-            out.write_text(json.dumps(run_record, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    waiting_auth = str(result.get("status", "")).lower() == "waiting_auth"
-    return jsonify(
-        {
-            "ok": True,
-            "run": run_record,
-            "state": result.get("status"),
-            "auth_required": waiting_auth,
-            "auth_hint": "会话过期，请扫码续登后重试" if waiting_auth else "",
-            "rerun_from": run_id,
-        }
-    )
-
-
-@app.route("/api/capabilities/social_export/profiles", methods=["GET"])
-def api_social_export_profiles():
-    from modules.capabilities.social_export import list_export_profiles
-    payload = _request_json_any_method()
-    input_mode = _parse_capability_input_mode(
-        request.args.get("input_mode", payload.get("input_mode", "project")),
-        default="project",
-    )
-    templates = _coerce_social_export_overrides(payload, input_mode=input_mode)
-    profiles = list_export_profiles(profile_overrides=templates)
-    custom_ids = set(templates.keys())
-    for item in profiles:
-        pid = str(item.get("platform_id", "") or "")
-        item["is_custom"] = pid in custom_ids
-    return jsonify({"ok": True, "input_mode": input_mode, "profiles": profiles})
-
-
-@app.route("/api/capabilities/social_export/specs", methods=["GET"])
-def api_social_export_specs():
-    from modules.capabilities.social_export import list_export_specs
-    payload = _request_json_any_method()
-    input_mode = _parse_capability_input_mode(
-        request.args.get("input_mode", payload.get("input_mode", "project")),
-        default="project",
-    )
-    templates = _coerce_social_export_overrides(payload, input_mode=input_mode)
-    specs = list_export_specs(profile_overrides=templates)
-    return jsonify({"ok": True, "input_mode": input_mode, "specs": specs})
-
-
-@app.route("/api/capabilities/social_export/templates", methods=["GET"])
-def api_social_export_templates_list():
-    payload = _request_json_any_method()
-    input_mode = _parse_capability_input_mode(
-        request.args.get("input_mode", payload.get("input_mode", "project")),
-        default="project",
-    )
-    if input_mode == "project" and _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-    templates = _coerce_social_export_overrides(payload, input_mode=input_mode)
-    items = list(templates.values())
-    return jsonify({"ok": True, "input_mode": input_mode, "templates": items})
-
-
-@app.route("/api/capabilities/social_export/templates", methods=["POST"])
-def api_social_export_templates_upsert():
-    payload = request.json or {}
-    input_mode = _parse_capability_input_mode(payload.get("input_mode", "project"), default="project")
-    if input_mode == "project" and _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-    try:
-        tmpl = _normalize_export_template_payload(payload)
-    except Exception as exc:
-        return jsonify({"error": f"模板保存失败: {exc}"}), 400
-    templates = _coerce_social_export_overrides(payload, input_mode=input_mode)
-    templates[tmpl["platform_id"]] = tmpl
-    saved = _save_social_export_templates(templates) if input_mode == "project" else templates
-    return jsonify({"ok": True, "input_mode": input_mode, "template": tmpl, "templates": list(saved.values())})
-
-
-@app.route("/api/capabilities/social_export/templates/<template_id>", methods=["DELETE"])
-def api_social_export_templates_delete(template_id: str):
-    payload = request.json or {}
-    input_mode = _parse_capability_input_mode(
-        request.args.get("input_mode", payload.get("input_mode", "project")),
-        default="project",
-    )
-    if input_mode == "project" and _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-    pid = _normalize_export_template_id(template_id)
-    if not pid:
-        return jsonify({"error": "template_id 无效"}), 400
-    templates = _coerce_social_export_overrides(payload, input_mode=input_mode)
-    if pid not in templates:
-        return jsonify({"error": f"模板不存在: {pid}"}), 404
-    templates.pop(pid, None)
-    saved = _save_social_export_templates(templates) if input_mode == "project" else templates
-    return jsonify({"ok": True, "input_mode": input_mode, "deleted": pid, "templates": list(saved.values())})
-
-
-@app.route("/api/capabilities/social_export/history", methods=["GET"])
-def api_social_export_history():
-    payload = _request_json_any_method()
-    input_mode = _parse_capability_input_mode(
-        request.args.get("input_mode", payload.get("input_mode", "project")),
-        default="project",
-    )
-    if input_mode == "project" and _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-    try:
-        limit = int(request.args.get("limit", payload.get("limit", "30")) or "30")
-    except Exception:
-        limit = 30
-    limit = max(1, min(limit, 200))
-
-    history_raw = payload.get("history", [])
-    if input_mode == "project":
-        history = _get_social_export_history()
-    else:
-        history = [x for x in history_raw if isinstance(x, dict)] if isinstance(history_raw, list) else []
-    items = list(reversed(history[-limit:])) if history else []
-    return jsonify({"ok": True, "input_mode": input_mode, "history": items})
-
-
-@app.route("/api/capabilities/social_export/validate_source", methods=["POST"])
-def api_social_export_validate_source():
-    payload = request.json or {}
-    input_mode = _parse_capability_input_mode(payload.get("input_mode", "project"), default="project")
-    if input_mode == "project" and _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-    base_dir = _capability_base_dir(input_mode)
-    from modules.capabilities.social_export import validate_source_for_export
-
-    input_video_raw = str(payload.get("input_video", "") or "").strip()
-    if input_video_raw:
-        input_video = _resolve_path_with_base(input_video_raw, base_dir=base_dir)
-    else:
-        if input_mode == "project":
-            input_video = _default_master_video_path()
-            if input_video is None:
-                return jsonify({"error": "找不到可校验的母版视频"}), 404
-        else:
-            return jsonify({"error": "inline 模式需要 input_video"}), 400
-    if not input_video.exists():
-        return jsonify({"error": f"输入视频不存在: {input_video}"}), 404
-
-    platforms = _parse_platforms(payload.get("platforms"))
-    if not platforms:
-        platforms = ["douyin", "xiaohongshu", "tiktok"]
-    strict_duration_limit = bool(payload.get("strict_duration_limit", True))
-    ffprobe_bin = str(payload.get("ffprobe_bin", "ffprobe") or "ffprobe")
-    templates = _coerce_social_export_overrides(payload, input_mode=input_mode)
-    try:
-        report = validate_source_for_export(
-            input_video=str(input_video),
-            platform_ids=platforms,
-            strict_duration_limit=strict_duration_limit,
-            ffprobe_bin=ffprobe_bin,
-            profile_overrides=templates,
-        )
-    except Exception as exc:
-        return jsonify({"error": f"源视频校验失败: {exc}"}), 400
-
-    out_path = _project_data_path("social_export_validation_last.json") if input_mode == "project" else None
-    if out_path is not None and bool(payload.get("store_result", True)):
-        out_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-    return jsonify(
-        {
-            "ok": True,
-            "input_mode": input_mode,
-            "report": report,
-            "output": str(out_path) if out_path else None,
-        }
-    )
-
-
-@app.route("/api/capabilities/social_export/plan", methods=["POST"])
-def api_social_export_plan():
-    payload = request.json or {}
-    input_mode = _parse_capability_input_mode(payload.get("input_mode", "project"), default="project")
-    if input_mode == "project" and _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-    base_dir = _capability_base_dir(input_mode)
-    from modules.capabilities.social_export import build_export_plan
-
-    input_video_raw = str(payload.get("input_video", "") or "").strip()
-    if input_video_raw:
-        input_video = _resolve_path_with_base(input_video_raw, base_dir=base_dir)
-    else:
-        if input_mode == "project":
-            input_video = _default_master_video_path()
-            if input_video is None:
-                return jsonify({"error": "找不到可导出的母版视频"}), 404
-        else:
-            return jsonify({"error": "inline 模式需要 input_video"}), 400
-    if not input_video.exists():
-        return jsonify({"error": f"输入视频不存在: {input_video}"}), 404
-
-    quality = str(payload.get("quality", "high") or "high").strip().lower()
-    strict_duration_limit = bool(payload.get("strict_duration_limit", True))
-    ffprobe_bin = str(payload.get("ffprobe_bin", "ffprobe") or "ffprobe")
-    platforms = _parse_platforms(payload.get("platforms"))
-    if not platforms:
-        platforms = ["douyin", "xiaohongshu", "tiktok"]
-    output_dir_raw = str(payload.get("output_dir", "") or "").strip()
-    output_dir = (
-        (base_dir / "output" / "social_exports")
-        if not output_dir_raw
-        else _resolve_path_with_base(output_dir_raw, base_dir=base_dir)
-    )
-    templates = _coerce_social_export_overrides(payload, input_mode=input_mode)
-
-    try:
-        plan = build_export_plan(
-            input_video=str(input_video),
-            output_dir=str(output_dir),
-            platform_ids=platforms,
-            quality=quality,
-            ffmpeg_bin=str(payload.get("ffmpeg_bin", "ffmpeg") or "ffmpeg"),
-            ffprobe_bin=ffprobe_bin,
-            strict_duration_limit=strict_duration_limit,
-            profile_overrides=templates,
-        )
-    except Exception as exc:
-        return jsonify({"error": f"导出计划生成失败: {exc}"}), 400
-
-    plan_path = _project_data_path("social_export_plan.json") if input_mode == "project" else None
-    if plan_path is not None and bool(payload.get("store_result", True)):
-        plan_path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
-    return jsonify(
-        {
-            "ok": True,
-            "input_mode": input_mode,
-            "plan": plan,
-            "output": str(plan_path) if plan_path else None,
-        }
-    )
-
-
-@app.route("/api/capabilities/social_export/run", methods=["POST"])
-def api_social_export_run():
-    payload = request.json or {}
-    input_mode = _parse_capability_input_mode(payload.get("input_mode", "project"), default="project")
-    if input_mode == "project" and _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-    running = _running_heavy_jobs()
-    if running:
-        return jsonify({
-            "error": "已有重任务运行中，请等待完成后再执行导出",
-            "running_jobs": running,
-            "system": _system_load_snapshot(),
-        }), 409
-
-    base_dir = _capability_base_dir(input_mode)
-    timeout_seconds = float(payload.get("timeout_seconds", 3600) or 3600)
-    ffmpeg_bin = str(payload.get("ffmpeg_bin", "ffmpeg") or "ffmpeg")
-    ffprobe_bin = str(payload.get("ffprobe_bin", "ffprobe") or "ffprobe")
-    strict_duration_limit = bool(payload.get("strict_duration_limit", True))
-    quality = str(payload.get("quality", "high") or "high").strip().lower()
-    platforms = _parse_platforms(payload.get("platforms"))
-    output_dir_raw = str(payload.get("output_dir", "") or "").strip()
-    input_video_raw = str(payload.get("input_video", "") or "").strip()
-    templates = _coerce_social_export_overrides(payload, input_mode=input_mode)
-
-    job_id = str(uuid.uuid4())[:8]
-    runner = _build_social_export_runner(
-        input_video_raw=input_video_raw,
-        output_dir_raw=output_dir_raw,
-        platforms=platforms,
-        quality=quality,
-        ffmpeg_bin=ffmpeg_bin,
-        ffprobe_bin=ffprobe_bin,
-        strict_duration_limit=strict_duration_limit,
-        timeout_seconds=timeout_seconds,
-        job_id=job_id,
-        profile_overrides=templates,
-        input_mode=input_mode,
-        base_dir=base_dir,
-        persist_history=(input_mode == "project"),
-    )
-    _run_in_bg(job_id, runner, kind="social_export")
-    return jsonify({"ok": True, "input_mode": input_mode, "job_id": job_id})
-
-
-@app.route("/api/capabilities/social_export/rerun", methods=["POST"])
-def api_social_export_rerun():
-    payload = request.json or {}
-    input_mode = _parse_capability_input_mode(payload.get("input_mode", "project"), default="project")
-    if input_mode == "project" and _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-    running = _running_heavy_jobs()
-    if running:
-        return jsonify({
-            "error": "已有重任务运行中，请等待完成后再执行导出",
-            "running_jobs": running,
-            "system": _system_load_snapshot(),
-        }), 409
-
-    batch_id = str(payload.get("batch_id", "") or "").strip()
-    record = payload.get("batch") if isinstance(payload.get("batch"), dict) else None
-    if record is None and batch_id:
-        history = _get_social_export_history() if input_mode == "project" else []
-        record = next((x for x in reversed(history) if str(x.get("batch_id", "")) == batch_id), None)
-    if record is None:
-        if input_mode == "inline":
-            return jsonify({"error": "inline rerun 需要 batch（或切换 project 模式并提供 batch_id）"}), 400
-        if not batch_id:
-            return jsonify({"error": "batch_id 不能为空"}), 400
-        return jsonify({"error": f"未找到批次: {batch_id}"}), 404
-
-    base_dir = _capability_base_dir(input_mode)
-    input_video_raw = str(payload.get("input_video", record.get("input_video", "")) or "")
-    output_dir_raw = str(payload.get("output_dir", record.get("output_dir", "")) or "")
-    quality = str(payload.get("quality", record.get("quality", "high")) or "high").strip().lower()
-    strict_duration_limit = bool(payload.get("strict_duration_limit", record.get("strict_duration_limit", True)))
-    ffmpeg_bin = str(payload.get("ffmpeg_bin", "ffmpeg") or "ffmpeg")
-    ffprobe_bin = str(payload.get("ffprobe_bin", "ffprobe") or "ffprobe")
-    timeout_seconds = float(payload.get("timeout_seconds", 3600) or 3600)
-    platforms = _parse_platforms(payload.get("platforms", record.get("platforms", [])))
-    templates = _coerce_social_export_overrides(payload, input_mode=input_mode)
-
-    job_id = str(uuid.uuid4())[:8]
-    runner = _build_social_export_runner(
-        input_video_raw=input_video_raw,
-        output_dir_raw=output_dir_raw,
-        platforms=platforms,
-        quality=quality,
-        ffmpeg_bin=ffmpeg_bin,
-        ffprobe_bin=ffprobe_bin,
-        strict_duration_limit=strict_duration_limit,
-        timeout_seconds=timeout_seconds,
-        job_id=job_id,
-        profile_overrides=templates,
-        input_mode=input_mode,
-        base_dir=base_dir,
-        persist_history=(input_mode == "project"),
-    )
-    _run_in_bg(job_id, runner, kind="social_export")
-    return jsonify({"ok": True, "input_mode": input_mode, "job_id": job_id, "rerun_from": batch_id or record.get("batch_id", "")})
-
-
-@app.route("/api/capabilities/audio_voice/plan", methods=["POST"])
-def api_audio_voice_plan():
-    payload = request.json or {}
-    input_mode = _parse_capability_input_mode(payload.get("input_mode", "project"), default="project")
-    if input_mode == "project" and _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-    mood = str(payload.get("mood", "travel_story") or "travel_story")
-
-    from modules.capabilities.audio_voice import build_audio_capability_payload
-
-    script = _coerce_script_input(payload, input_mode=input_mode)
-    if input_mode == "inline" and not script:
-        return jsonify({"error": "inline 模式缺少 script/clips/subtitles"}), 400
-    plan = build_audio_capability_payload(script, mood=mood)
-    out_path = _project_data_path("audio_voice_plan.json") if input_mode == "project" else None
-    if out_path is not None and bool(payload.get("store_result", True)):
-        out_path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
-    return jsonify({"ok": True, "input_mode": input_mode, "plan": plan, "output": str(out_path) if out_path else None})
-
-
-@app.route("/api/capabilities/audio_voice/pick_bgm", methods=["POST"])
-def api_audio_voice_pick_bgm():
-    payload = request.json or {}
-    input_mode = _parse_capability_input_mode(payload.get("input_mode", "project"), default="project")
-    if input_mode == "project" and _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-    base_dir = _capability_base_dir(input_mode)
-    mood = str(payload.get("mood", "travel_story") or "travel_story")
-    provider = str(payload.get("bgm_provider", "local_library") or "local_library")
-    api_key = str(payload.get("bgm_api_key", "") or "").strip()
-    endpoint = str(payload.get("bgm_endpoint", "") or "").strip()
-    bgm_download = bool(payload.get("bgm_download", True))
-    bgm_strict_schema = bool(payload.get("bgm_strict_schema", False))
-    bgm_cache_enabled = bool(payload.get("bgm_cache_enabled", True))
-    bgm_force_refresh = bool(payload.get("bgm_force_refresh", False))
-    bgm_cache_max_age_days = float(payload.get("bgm_cache_max_age_days", 0) or 0)
-    bgm_cache_max_age_seconds = max(bgm_cache_max_age_days, 0.0) * 86400.0
-    ffprobe_bin = str(payload.get("ffprobe_bin", "ffprobe") or "ffprobe")
-    target_duration_s = payload.get("target_duration_s", None)
-    try:
-        target_duration_s = float(target_duration_s) if target_duration_s is not None else None
-    except Exception:
-        target_duration_s = None
-
-    custom_dir = str(payload.get("bgm_library_dir", "") or "").strip()
-    custom_dirs = _parse_str_list(payload.get("bgm_library_dirs", []))
-    if input_mode == "project":
-        library_dirs = _default_bgm_library_dirs(custom_dir=custom_dir, custom_dirs=custom_dirs)
-        output_dir = _default_bgm_output_dir(str(payload.get("bgm_output_dir", "") or "").strip())
-    else:
-        library_dirs = []
-        for raw in [custom_dir, *custom_dirs]:
-            text = str(raw or "").strip()
-            if not text:
-                continue
-            resolved = _resolve_path_with_base(text, base_dir=base_dir)
-            if resolved.exists() and resolved.is_dir():
-                library_dirs.append(resolved)
-        bgm_output_raw = str(payload.get("bgm_output_dir", "") or "").strip()
-        output_dir = (
-            _resolve_path_with_base(bgm_output_raw, base_dir=base_dir)
-            if bgm_output_raw
-            else (base_dir / "data" / "audio_voice" / "bgm")
-        )
-
-    from modules.capabilities.audio_voice import pick_bgm
-
-    try:
-        pick = pick_bgm(
-            provider=provider,
-            mood=mood,
-            target_duration_s=target_duration_s,
-            library_dirs=[str(x) for x in library_dirs],
-            ffprobe_bin=ffprobe_bin,
-            max_candidates=int(payload.get("max_candidates", 20) or 20),
-            api_key=api_key,
-            endpoint=endpoint,
-            timeout_seconds=float(payload.get("bgm_timeout_seconds", 45) or 45),
-            output_dir=str(output_dir) if output_dir is not None else "",
-            download_audio=bgm_download,
-            strict_schema=bgm_strict_schema,
-            cache_enabled=bgm_cache_enabled,
-            force_refresh=bgm_force_refresh,
-            cache_max_age_seconds=bgm_cache_max_age_seconds,
-        )
-    except Exception as exc:
-        return jsonify({"error": f"自动配乐失败: {exc}"}), 400
-
-    summary = {
-        "requested_at": datetime.now().isoformat(timespec="seconds"),
-        "mood": mood,
-        "pick": pick,
-    }
-    out_path = _project_data_path("audio_voice_bgm_last.json") if input_mode == "project" else None
-    if out_path is not None and bool(payload.get("store_result", True)):
-        out_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
-    return jsonify({"ok": True, "input_mode": input_mode, "pick": pick, "output": str(out_path) if out_path else None})
-
-
-@app.route("/api/capabilities/audio_voice/synthesize", methods=["POST"])
-def api_audio_voice_synthesize():
-    payload = request.json or {}
-    input_mode = _parse_capability_input_mode(payload.get("input_mode", "project"), default="project")
-    if input_mode == "project" and _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-    base_dir = _capability_base_dir(input_mode)
-    mood = str(payload.get("mood", "travel_story") or "travel_story")
-    provider = str(payload.get("provider", "elevenlabs") or "elevenlabs")
-    voice_id = str(payload.get("voice_id", "") or "").strip()
-    api_key = str(payload.get("api_key", "") or "").strip()
-    model_id = str(payload.get("model_id", "eleven_multilingual_v2") or "eleven_multilingual_v2")
-    output_format = str(payload.get("output_format", "mp3_44100_128") or "mp3_44100_128")
-    dry_run = bool(payload.get("dry_run", False))
-    timeout_seconds = float(payload.get("timeout_seconds", 90) or 90)
-
-    from modules.capabilities.audio_voice import build_audio_capability_payload, synthesize_voiceover_segments
-
-    script = _coerce_script_input(payload, input_mode=input_mode)
-    plan = build_audio_capability_payload(script, mood=mood)
-    segments = payload.get("segments", plan.get("voiceover_segments", []))
-    if not isinstance(segments, list) or not segments:
-        return jsonify({"error": "缺少可合成的字幕分段，请先完成脚本/字幕"}), 400
-
-    output_dir_raw = str(payload.get("output_dir", "") or "").strip()
-    output_dir = (
-        (base_dir / "data" / "audio_voice" / "voiceover")
-        if not output_dir_raw
-        else _resolve_path_with_base(output_dir_raw, base_dir=base_dir)
-    )
-
-    try:
-        result = synthesize_voiceover_segments(
-            segments,
-            output_dir=str(output_dir),
-            provider=provider,
-            voice_id=voice_id,
-            api_key=api_key,
-            model_id=model_id,
-            output_format=output_format,
-            timeout_seconds=timeout_seconds,
-            dry_run=dry_run,
-        )
-    except Exception as exc:
-        return jsonify({"error": f"配音合成失败: {exc}"}), 400
-
-    summary = {
-        "requested_at": datetime.now().isoformat(timespec="seconds"),
-        "provider": provider,
-        "voice_id": voice_id,
-        "model_id": model_id,
-        "dry_run": dry_run,
-        "plan": plan,
-        "synthesis": result,
-    }
-    out_path = _project_data_path("audio_voice_synthesize_last.json") if input_mode == "project" else None
-    if out_path is not None and bool(payload.get("store_result", True)):
-        out_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
-    return jsonify({
-        "ok": True,
-        "input_mode": input_mode,
-        "plan": plan,
-        "synthesis": result,
-        "output": str(out_path) if out_path else None,
-    })
-
-
-@app.route("/api/capabilities/audio_voice/build_track", methods=["POST"])
-def api_audio_voice_build_track():
-    payload = request.json or {}
-    input_mode = _parse_capability_input_mode(payload.get("input_mode", "project"), default="project")
-    if input_mode == "project" and _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-    base_dir = _capability_base_dir(input_mode)
-    ffmpeg_bin = str(payload.get("ffmpeg_bin", "ffmpeg") or "ffmpeg")
-    timeout_seconds = float(payload.get("timeout_seconds", 600) or 600)
-    dry_run = bool(payload.get("dry_run", False))
-
-    segments = payload.get("segments")
-    if not isinstance(segments, list) or not segments:
-        if input_mode == "project":
-            last = _read_project_json("audio_voice_synthesize_last.json", fallback={})
-            synthesis = last.get("synthesis", {}) if isinstance(last, dict) else {}
-            segments = synthesis.get("segments", []) if isinstance(synthesis, dict) else []
-    if not isinstance(segments, list) or not segments:
-        return jsonify({"error": "缺少可用的配音分段，请先执行 /api/capabilities/audio_voice/synthesize"}), 400
-
-    output_audio_raw = str(payload.get("output_audio", "") or "").strip()
-    output_audio = (
-        (base_dir / "data" / "audio_voice" / "narration_timeline.m4a")
-        if not output_audio_raw
-        else _resolve_path_with_base(output_audio_raw, base_dir=base_dir)
-    )
-
-    from modules.capabilities.audio_voice import build_voiceover_timeline
-
-    try:
-        result = build_voiceover_timeline(
-            segments,
-            output_audio=str(output_audio),
-            ffmpeg_bin=ffmpeg_bin,
-            timeout_seconds=timeout_seconds,
-            dry_run=dry_run,
-        )
-    except Exception as exc:
-        return jsonify({"error": f"旁白轨生成失败: {exc}"}), 400
-
-    summary = {
-        "requested_at": datetime.now().isoformat(timespec="seconds"),
-        "dry_run": dry_run,
-        "timeline": result,
-    }
-    out_path = _project_data_path("audio_voice_timeline_last.json") if input_mode == "project" else None
-    if out_path is not None and bool(payload.get("store_result", True)):
-        out_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
-    return jsonify({"ok": True, "input_mode": input_mode, "timeline": result, "output": str(out_path) if out_path else None})
-
-
-@app.route("/api/capabilities/audio_voice/mix_master", methods=["POST"])
-def api_audio_voice_mix_master():
-    payload = request.json or {}
-    input_mode = _parse_capability_input_mode(payload.get("input_mode", "project"), default="project")
-    if input_mode == "project" and _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-    base_dir = _capability_base_dir(input_mode)
-    ffmpeg_bin = str(payload.get("ffmpeg_bin", "ffmpeg") or "ffmpeg")
-    ffprobe_bin = str(payload.get("ffprobe_bin", "ffprobe") or "ffprobe")
-    timeout_seconds = float(payload.get("timeout_seconds", 900) or 900)
-    dry_run = bool(payload.get("dry_run", False))
-    replace_master = bool(payload.get("replace_master", input_mode == "project"))
-
-    input_video_raw = str(payload.get("input_video", "") or "").strip()
-    if input_video_raw:
-        input_video = _resolve_path_with_base(input_video_raw, base_dir=base_dir)
-    else:
-        if input_mode == "project":
-            input_video = _default_master_video_path()
-            if input_video is None:
-                return jsonify({"error": "找不到可混音的输入视频"}), 404
-        else:
-            return jsonify({"error": "inline 模式需要 input_video"}), 400
-    if not input_video.exists():
-        return jsonify({"error": f"输入视频不存在: {input_video}"}), 404
-
-    narration_audio_raw = str(payload.get("narration_audio", "") or "").strip()
-    if narration_audio_raw:
-        narration_audio = _resolve_path_with_base(narration_audio_raw, base_dir=base_dir)
-    else:
-        if input_mode == "project":
-            timeline_last = _read_project_json("audio_voice_timeline_last.json", fallback={})
-            timeline = timeline_last.get("timeline", {}) if isinstance(timeline_last, dict) else {}
-            maybe_path = str(timeline.get("output_audio", "") or "").strip()
-        else:
-            timeline = payload.get("timeline", {}) if isinstance(payload.get("timeline"), dict) else {}
-            maybe_path = str(timeline.get("output_audio", "") or "").strip()
-        if maybe_path:
-            narration_audio = _resolve_path_with_base(maybe_path, base_dir=base_dir)
-        else:
-            narration_audio = base_dir / "data" / "audio_voice" / "narration_timeline.m4a"
-    if not narration_audio.exists() and not dry_run:
-        return jsonify({"error": f"旁白轨不存在: {narration_audio}"}), 404
-
-    mood = str(payload.get("mood", "travel_story") or "travel_story")
-    bgm_provider = str(payload.get("bgm_provider", "local_library") or "local_library")
-    bgm_api_key = str(payload.get("bgm_api_key", "") or "").strip()
-    bgm_endpoint = str(payload.get("bgm_endpoint", "") or "").strip()
-    bgm_download = bool(payload.get("bgm_download", True))
-    bgm_strict_schema = bool(payload.get("bgm_strict_schema", False))
-    bgm_cache_enabled = bool(payload.get("bgm_cache_enabled", True))
-    bgm_force_refresh = bool(payload.get("bgm_force_refresh", False))
-    bgm_cache_max_age_days = float(payload.get("bgm_cache_max_age_days", 0) or 0)
-    bgm_cache_max_age_seconds = max(bgm_cache_max_age_days, 0.0) * 86400.0
-    bgm_audio_raw = str(payload.get("bgm_audio", "") or "").strip()
-    bgm_pick = None
-    bgm_audio = ""
-    if bgm_audio_raw:
-        if _is_remote_media_url(bgm_audio_raw):
-            bgm_audio = bgm_audio_raw
-        else:
-            bgm_path = _resolve_path_with_base(bgm_audio_raw, base_dir=base_dir)
-            bgm_audio = str(bgm_path)
-    elif bool(payload.get("auto_pick_bgm", False)):
-        from modules.capabilities.audio_voice import pick_bgm
-        plan_guess = _read_project_json("audio_voice_plan.json", fallback={}) if input_mode == "project" else {}
-        duration_guess = None
-        if isinstance(plan_guess, dict):
-            try:
-                duration_guess = float(
-                    plan_guess.get("music_plan", {}).get("duration_s")
-                )
-            except Exception:
-                duration_guess = None
-        custom_dir = str(payload.get("bgm_library_dir", "") or "").strip()
-        custom_dirs = _parse_str_list(payload.get("bgm_library_dirs", []))
-        if input_mode == "project":
-            library_dirs = _default_bgm_library_dirs(custom_dir=custom_dir, custom_dirs=custom_dirs)
-            output_dir = _default_bgm_output_dir(str(payload.get("bgm_output_dir", "") or "").strip())
-        else:
-            library_dirs = []
-            for raw in [custom_dir, *custom_dirs]:
-                text = str(raw or "").strip()
-                if not text:
-                    continue
-                resolved = _resolve_path_with_base(text, base_dir=base_dir)
-                if resolved.exists() and resolved.is_dir():
-                    library_dirs.append(resolved)
-            bgm_output_raw = str(payload.get("bgm_output_dir", "") or "").strip()
-            output_dir = (
-                _resolve_path_with_base(bgm_output_raw, base_dir=base_dir)
-                if bgm_output_raw
-                else (base_dir / "data" / "audio_voice" / "bgm")
-            )
-        try:
-            bgm_pick = pick_bgm(
-                provider=bgm_provider,
-                mood=mood,
-                target_duration_s=duration_guess,
-                library_dirs=[str(x) for x in library_dirs],
-                ffprobe_bin=ffprobe_bin,
-                max_candidates=int(payload.get("bgm_max_candidates", 20) or 20),
-                api_key=bgm_api_key,
-                endpoint=bgm_endpoint,
-                timeout_seconds=float(payload.get("bgm_timeout_seconds", 45) or 45),
-                output_dir=str(output_dir) if output_dir is not None else "",
-                download_audio=bgm_download,
-                strict_schema=bgm_strict_schema,
-                cache_enabled=bgm_cache_enabled,
-                force_refresh=bgm_force_refresh,
-                cache_max_age_seconds=bgm_cache_max_age_seconds,
-            )
-        except Exception as exc:
-            return jsonify({"error": f"自动配乐失败: {exc}"}), 400
-        maybe_track = str(bgm_pick.get("selected_track", "") or "").strip() if isinstance(bgm_pick, dict) else ""
-        if maybe_track:
-            bgm_audio = maybe_track
-        elif isinstance(bgm_pick, dict):
-            maybe_url = str(bgm_pick.get("selected_url", "") or "").strip()
-            if maybe_url:
-                bgm_audio = maybe_url
-
-    output_video_raw = str(payload.get("output_video", "") or "").strip()
-    if replace_master:
-        output_video = base_dir / "output" / "final.mp4"
-    elif output_video_raw:
-        output_video = _resolve_path_with_base(output_video_raw, base_dir=base_dir)
-    else:
-        output_video = base_dir / "output" / "final_voice.mp4"
-
-    mix_target = output_video
-    used_temp = False
-    if output_video.resolve() == input_video.resolve():
-        used_temp = True
-        mix_target = output_video.with_suffix(".mixing_tmp.mp4")
-
-    from modules.capabilities.audio_voice import mix_voiceover_to_video
-
-    try:
-        result = mix_voiceover_to_video(
-            input_video=str(input_video),
-            output_video=str(mix_target),
-            narration_audio=str(narration_audio),
-            bgm_audio=bgm_audio,
-            ffmpeg_bin=ffmpeg_bin,
-            ffprobe_bin=ffprobe_bin,
-            origin_volume=float(payload.get("origin_volume", 0.8) or 0.8),
-            narration_volume=float(payload.get("narration_volume", 1.0) or 1.0),
-            bgm_volume=float(payload.get("bgm_volume", 0.25) or 0.25),
-            bgm_loop=bool(payload.get("bgm_loop", True)),
-            bgm_fade_out_s=float(payload.get("bgm_fade_out_s", 2.0) or 0.0),
-            enable_ducking=bool(payload.get("enable_ducking", True)),
-            ducking_threshold=float(payload.get("ducking_threshold", 0.03) or 0.03),
-            ducking_ratio=float(payload.get("ducking_ratio", 8.0) or 8.0),
-            ducking_attack_ms=float(payload.get("ducking_attack_ms", 15.0) or 15.0),
-            ducking_release_ms=float(payload.get("ducking_release_ms", 250.0) or 250.0),
-            audio_bitrate=str(payload.get("audio_bitrate", "192k") or "192k"),
-            timeout_seconds=timeout_seconds,
-            dry_run=dry_run,
-        )
-    except Exception as exc:
-        return jsonify({"error": f"成片混音失败: {exc}"}), 400
-
-    if used_temp and not dry_run and result.get("status") == "done":
-        mix_target.replace(output_video)
-        result["output_video"] = str(output_video.resolve())
-
-    summary = {
-        "requested_at": datetime.now().isoformat(timespec="seconds"),
-        "dry_run": dry_run,
-        "replace_master": replace_master,
-        "bgm_pick": bgm_pick,
-        "mix": result,
-    }
-    out_path = _project_data_path("audio_voice_mix_last.json") if input_mode == "project" else None
-    if out_path is not None and bool(payload.get("store_result", True)):
-        out_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
-    return jsonify(
-        {
-            "ok": True,
-            "input_mode": input_mode,
-            "mix": result,
-            "bgm_pick": bgm_pick,
-            "output": str(out_path) if out_path else None,
-        }
-    )
-
-
-@app.route("/api/capabilities/audio_voice/run", methods=["POST"])
-def api_audio_voice_run():
-    payload = request.json or {}
-    input_mode = _parse_capability_input_mode(payload.get("input_mode", "project"), default="project")
-    if input_mode == "project" and _project_dir is None:
-        return jsonify({"error": "项目未加载"}), 400
-    running = _running_heavy_jobs()
-    if running:
-        return jsonify({
-            "error": "已有重任务运行中，请等待完成后再执行音频流水线",
-            "running_jobs": running,
-            "system": _system_load_snapshot(),
-        }), 409
-    job_id = str(uuid.uuid4())[:8]
-    runner = _build_audio_voice_runner(
-        payload=payload,
-        job_id=job_id,
-        input_mode=input_mode,
-        base_dir=_capability_base_dir(input_mode),
-    )
-    _run_in_bg(job_id, runner, kind="audio_voice")
-    return jsonify({"ok": True, "input_mode": input_mode, "job_id": job_id})
-
-
-# ── UI 静态文件 ───────────────────────────────────────────────────────
-
-@app.route("/")
-def serve_index():
-    ui_dir = APP_UI_DIR
-    resp = send_file(str(ui_dir / "index.html"))
-    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-    resp.headers["Pragma"] = "no-cache"
-    resp.headers["Expires"] = "0"
-    return resp
-
-
-@app.route("/<path:filename>")
-def serve_static(filename):
-    ui_dir = APP_UI_DIR
-    target = (ui_dir / filename).resolve()
-    if not str(target).startswith(str(ui_dir.resolve())):
-        abort(403)
-    if not target.exists():
-        abort(404)
-    resp = send_file(str(target))
-    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-    resp.headers["Pragma"] = "no-cache"
-    resp.headers["Expires"] = "0"
-    return resp
+def _resolve_content_publish_connectors(payload: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    connectors = payload.get("connectors", {})
+    if isinstance(connectors, dict) and connectors:
+        return _normalize_publish_connectors(connectors)
+    saved = _load_publish_settings()
+    return saved.get("connectors", {}) if isinstance(saved.get("connectors"), dict) else {}
 
 
 # ── 工厂函数（供 app.py 调用）─────────────────────────────────────────
 
 def create_app(project_dir: Optional[str] = None):
     """创建并配置 Flask app，可选预加载项目。"""
+    try:
+        _restore_jobs_from_store()
+    except Exception:
+        pass
     if project_dir:
         p = Path(project_dir)
         if (p / "workflow.json").exists():
             _load_state(p)
+    else:
+        try:
+            ui = _load_ui_settings()
+            if bool(ui.get("auto_open_last_project", True)):
+                last = str(ui.get("last_project_dir", "") or "").strip()
+                if last:
+                    p = Path(last).expanduser().resolve()
+                    if (p / "workflow.json").exists():
+                        _load_state(p)
+        except Exception:
+            pass
     return app
 
 

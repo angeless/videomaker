@@ -1,6 +1,6 @@
 # Capability API（模块化能力接口）
 
-更新时间：2026-02-25
+更新时间：2026-03-01
 服务：`modules/app_api/server.py`
 
 ## 1. 概览
@@ -131,6 +131,10 @@
   入参：`editor`, `source_video`, `output_name`, `copy_mode`
   行为：把外部 NLE 导出的成片导回项目 `output/`（默认目标 `output/final.mp4`），供后续社媒导出直接复用。
   输出：`data/refinement_collect_last.json`
+
+- `GET /api/capabilities/refinement/connectors`
+  入参（可选）：`editor`
+  行为：返回 NLE 连接器检测结果（含 Resolve/FCP/Premiere/剪映是否可用、是否可自动唤起、建议修复提示）。
 
 说明：
 
@@ -307,6 +311,9 @@
 - 会话过期自动返回 `waiting_auth`（扫码续登提示）
 - 默认启用“模拟人类行为”节流策略
 - Blog 默认输出 `Markdown+Frontmatter` 与 `HTML`
+- 连接器支持：
+  - `webhook`（通用发布网关）
+  - `youtube_api`（YouTube 直连上传，需 `token/access_token`，可选 `media_file/privacy_status/category_id/notify_subscribers`）
 
 ### 2.9 Agent 入口（已实现）
 

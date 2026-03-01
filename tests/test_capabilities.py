@@ -335,16 +335,16 @@ def test_article_expand_generate_basics():
 
 def test_content_publish_plan_and_run_with_session():
     session = bootstrap_publish_session(authenticated=True, expires_in_minutes=30)
-    platforms = list_publish_platforms()["groups"]["domestic"]
+    platforms = ["blog"]
     plan = build_publish_plan(
         content={"title": "发布标题", "description": "发布描述", "keywords": ["旅行"]},
-        platform_ids=platforms[:2],
+        platform_ids=platforms,
         dry_run=False,
         session=session,
     )
     result = run_publish_plan(plan=plan, session=session, dry_run=False)
     assert result["status"] == "posted"
-    assert result["summary"]["posted"] == 2
+    assert result["summary"]["posted"] == 1
 
 
 def test_audio_voice_payload_contains_plan():

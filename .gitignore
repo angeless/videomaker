@@ -40,6 +40,8 @@ Thumbs.db
 # Results and outputs
 results/
 *.log
+app_state.db
+.tmp_publish_blog/
 video_analysis_*.json
 materials_index.json
 draft.json

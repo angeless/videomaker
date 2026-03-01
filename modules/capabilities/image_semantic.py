@@ -181,9 +181,10 @@ def analyze_images(
                 warnings.append(f"图片入库失败 {path}: {exc}")
 
     try:
+        search_limit = min(max(max_n, len(paths), 200), 8000)
         search_hits = library.search_assets(
             query="",
-            limit=max(max_n * max(len(paths), 1), 200),
+            limit=search_limit,
             offset=0,
             retrieval_mode=retrieval_mode,
             media_type="image",
