@@ -94,6 +94,7 @@ import tempfile
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
+import shutil
 import subprocess
 import traceback
 import time
@@ -117,6 +118,7 @@ app.config["JSON_AS_ASCII"] = False
 _project_dir: Optional[Path] = None
 _ws: Optional[WorkflowState] = None
 _jobs: Dict[str, dict] = {}      # job_id → {status, log, progress}
+_jobs_lock = threading.Lock()    # 保护 _jobs 状态转换（init/done/error/cancel）
 _window = None                    # pywebview window（由 app.py 注入）
 _library = GlobalMediaLibrary()
 app.register_blueprint(
@@ -437,16 +439,17 @@ def _state_dict() -> dict:
 
 def _run_in_bg(job_id: str, fn, *args, kind: str = "generic", job_meta: Optional[Dict[str, Any]] = None, **kwargs):
     """在后台线程运行 fn，捕获 stdout 并更新 _jobs[job_id]。"""
-    _jobs[job_id] = {
-        "status": "running",
-        "log": [],
-        "progress": 0,
-        "kind": kind,
-        "meta": deepcopy(job_meta) if isinstance(job_meta, dict) else {},
-        "started_at": datetime.now().isoformat(timespec="seconds"),
-        "result": None,
-        "cancel_requested": False,
-    }
+    with _jobs_lock:
+        _jobs[job_id] = {
+            "status": "running",
+            "log": [],
+            "progress": 0,
+            "kind": kind,
+            "meta": deepcopy(job_meta) if isinstance(job_meta, dict) else {},
+            "started_at": datetime.now().isoformat(timespec="seconds"),
+            "result": None,
+            "cancel_requested": False,
+        }
 
     class Tee:
         def __init__(self, real):
@@ -463,25 +466,28 @@ def _run_in_bg(job_id: str, fn, *args, kind: str = "generic", job_meta: Optional
         sys.stdout = Tee(old_stdout)
         try:
             ret = fn(*args, **kwargs)
-            _jobs[job_id]["result"] = ret
-            _jobs[job_id]["status"] = "done"
-            _jobs[job_id]["progress"] = 100
+            with _jobs_lock:
+                _jobs[job_id]["result"] = ret
+                _jobs[job_id]["status"] = "done"
+                _jobs[job_id]["progress"] = 100
         except Exception as e:
             err_text = str(e)
             cancelled = isinstance(e, JobCancelledError) or (CANCEL_TOKEN in err_text)
-            if cancelled:
-                _jobs[job_id]["status"] = "cancelled"
-                _jobs[job_id]["error"] = "任务已取消"
-                if isinstance(e, JobCancelledError):
-                    _jobs[job_id]["result"] = e.result
-                _jobs[job_id]["log"].append("[系统] 任务已取消")
-            else:
-                _jobs[job_id]["status"] = "error"
-                _jobs[job_id]["error"] = err_text
-                _jobs[job_id]["log"].append(traceback.format_exc())
+            with _jobs_lock:
+                if cancelled:
+                    _jobs[job_id]["status"] = "cancelled"
+                    _jobs[job_id]["error"] = "任务已取消"
+                    if isinstance(e, JobCancelledError):
+                        _jobs[job_id]["result"] = e.result
+                    _jobs[job_id]["log"].append("[系统] 任务已取消")
+                else:
+                    _jobs[job_id]["status"] = "error"
+                    _jobs[job_id]["error"] = err_text
+                    _jobs[job_id]["log"].append(traceback.format_exc())
         finally:
             sys.stdout = old_stdout
-            _jobs[job_id]["finished_at"] = datetime.now().isoformat(timespec="seconds")
+            with _jobs_lock:
+                _jobs[job_id]["finished_at"] = datetime.now().isoformat(timespec="seconds")
             if str(kind or "") in {"agent_task", "agent_skill"}:
                 try:
                     _record_agent_task_history_from_job(job_id)
@@ -562,6 +568,10 @@ def _read_settings() -> Dict:
 def _write_settings(data: Dict):
     p = _settings_path()
     p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    try:
+        p.chmod(0o600)
+    except OSError:
+        pass
 
 
 def _mask_secret(value: str) -> str:
@@ -3606,11 +3616,15 @@ def _choose_path_via_osascript(mode: str) -> Dict:
     else:
         script = 'POSIX path of (choose file with prompt "Select a file")'
 
-    proc = subprocess.run(
-        ["osascript", "-e", script],
-        capture_output=True,
-        text=True,
-    )
+    try:
+        proc = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+    except subprocess.TimeoutExpired:
+        return {"path": None, "cancelled": False, "error": "文件对话框超时（>120s）"}
     if proc.returncode != 0:
         err = (proc.stderr or "").strip()
         if "-128" in err or "User canceled" in err:
@@ -3678,6 +3692,63 @@ def api_system_load():
     })
 
 
+@app.route("/api/system/preflight")
+def api_system_preflight():
+    """轻量级环境自检：FFmpeg / ffprobe / Python 版本 / AI Key 状态。"""
+    import sys as _sys
+    checks = []
+
+    # FFmpeg
+    ffmpeg_path = shutil.which("ffmpeg")
+    checks.append({
+        "id": "ffmpeg",
+        "name": "FFmpeg",
+        "ok": ffmpeg_path is not None,
+        "detail": ffmpeg_path or "未安装",
+        "hint": "macOS: brew install ffmpeg ；Windows: https://ffmpeg.org/download.html" if not ffmpeg_path else "",
+    })
+
+    # ffprobe
+    ffprobe_path = shutil.which("ffprobe")
+    checks.append({
+        "id": "ffprobe",
+        "name": "ffprobe",
+        "ok": ffprobe_path is not None,
+        "detail": ffprobe_path or "未安装（通常随 FFmpeg 一起安装）",
+        "hint": "安装 FFmpeg 后自动包含 ffprobe" if not ffprobe_path else "",
+    })
+
+    # Python version
+    py_ver = f"{_sys.version_info.major}.{_sys.version_info.minor}.{_sys.version_info.micro}"
+    py_ok = _sys.version_info >= (3, 9)
+    checks.append({
+        "id": "python",
+        "name": "Python",
+        "ok": py_ok,
+        "detail": py_ver,
+        "hint": "需要 Python 3.9+" if not py_ok else "",
+    })
+
+    # AI Key
+    ai = _load_ai_settings()
+    has_key = bool(ai.get("api_key", "").strip())
+    checks.append({
+        "id": "ai_key",
+        "name": "AI 密钥",
+        "ok": has_key,
+        "detail": "已配置" if has_key else "未配置",
+        "hint": "在「设置 → AI 配置」中填写 API Key" if not has_key else "",
+    })
+
+    passed = sum(1 for c in checks if c["ok"])
+    return jsonify({
+        "ok": True,
+        "passed": passed,
+        "total": len(checks),
+        "checks": checks,
+    })
+
+
 @app.route("/api/settings/ai", methods=["GET"])
 def api_get_ai_settings():
     ai = _load_ai_settings()
@@ -3690,6 +3761,68 @@ def api_save_ai_settings():
     ai = _save_ai_settings(data)
     _apply_ai_env(ai)
     return jsonify({"ok": True, **_public_ai_settings(ai)})
+
+
+@app.route("/api/settings/ai/test", methods=["POST"])
+def api_test_ai_connection():
+    """用保存的 AI 配置发送一条轻量请求，验证 Key 是否有效。"""
+    ai = _load_ai_settings()
+    provider = str(ai.get("provider", "") or "").strip().lower()
+    base_url = str(ai.get("ai_base_url", "") or "").strip()
+    model = str(ai.get("ai_model", "") or "").strip()
+
+    # Determine which key to use
+    if provider in ("anthropic",):
+        api_key = str(ai.get("anthropic_api_key", "") or "").strip()
+        if not api_key:
+            return jsonify({"ok": False, "error": "Anthropic API Key 未配置"}), 400
+        test_url = "https://api.anthropic.com/v1/messages"
+        headers = {
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+        }
+        body = json.dumps({
+            "model": model or "claude-sonnet-4-20250514",
+            "max_tokens": 5,
+            "messages": [{"role": "user", "content": "hi"}],
+        }).encode("utf-8")
+    else:
+        # OpenAI-compatible (default)
+        api_key = str(ai.get("openai_api_key", "") or "").strip()
+        if not api_key:
+            return jsonify({"ok": False, "error": "OpenAI API Key 未配置"}), 400
+        test_url = (base_url.rstrip("/") + "/chat/completions") if base_url else "https://api.openai.com/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        body = json.dumps({
+            "model": model or "gpt-4o-mini",
+            "max_tokens": 5,
+            "messages": [{"role": "user", "content": "hi"}],
+        }).encode("utf-8")
+
+    import urllib.request, urllib.error
+    req = urllib.request.Request(test_url, data=body, method="POST", headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            status = resp.status
+        return jsonify({"ok": True, "status": status, "message": "连接成功，API Key 有效"})
+    except urllib.error.HTTPError as exc:
+        code = exc.code
+        detail = ""
+        try:
+            detail = (exc.read() or b"").decode("utf-8", errors="ignore")[:200]
+        except Exception:
+            pass
+        if code == 401:
+            return jsonify({"ok": False, "error": "API Key 无效（HTTP 401 Unauthorized）", "detail": detail}), 400
+        if code == 403:
+            return jsonify({"ok": False, "error": "API Key 权限不足（HTTP 403 Forbidden）", "detail": detail}), 400
+        return jsonify({"ok": False, "error": f"HTTP {code}", "detail": detail}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"连接失败: {exc}"}), 400
 
 
 @app.route("/api/init", methods=["POST"])
@@ -4522,40 +4655,43 @@ def api_run_step():
 
 @app.route("/api/job/<job_id>")
 def api_job(job_id: str):
-    job = _jobs.get(job_id)
-    if job is None:
-        return jsonify({"error": "job 不存在"}), 404
-    return jsonify({
-        "status": job["status"],
-        "kind": job.get("kind", "generic"),
-        "log": job["log"][-50:],   # 最近 50 行
-        "progress": job.get("progress", 0),
-        "cancel_requested": bool(job.get("cancel_requested", False)),
-        "error": job.get("error"),
-        "result": job.get("result"),
-        "started_at": job.get("started_at"),
-        "finished_at": job.get("finished_at"),
-        "system": _system_load_snapshot(),
-        "state": _state_dict(),
-    })
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if job is None:
+            return jsonify({"error": "job 不存在"}), 404
+        snapshot = {
+            "status": job["status"],
+            "kind": job.get("kind", "generic"),
+            "log": list(job["log"][-50:]),   # 最近 50 行（复制避免竞态）
+            "progress": job.get("progress", 0),
+            "cancel_requested": bool(job.get("cancel_requested", False)),
+            "error": job.get("error"),
+            "result": job.get("result"),
+            "started_at": job.get("started_at"),
+            "finished_at": job.get("finished_at"),
+        }
+    snapshot["system"] = _system_load_snapshot()
+    snapshot["state"] = _state_dict()
+    return jsonify(snapshot)
 
 
 @app.route("/api/job/<job_id>/cancel", methods=["POST"])
 def api_job_cancel(job_id: str):
-    job = _jobs.get(job_id)
-    if job is None:
-        return jsonify({"error": "job 不存在"}), 404
-    if job.get("status") != "running":
-        return jsonify({
-            "error": "任务不在运行中，无法取消",
-            "status": job.get("status"),
-        }), 409
-    job["cancel_requested"] = True
-    job["cancel_requested_at"] = datetime.now().isoformat(timespec="seconds")
-    job["log"].append("[系统] 收到取消请求，正在安全停止…")
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if job is None:
+            return jsonify({"error": "job 不存在"}), 404
+        if job.get("status") != "running":
+            return jsonify({
+                "error": "任务不在运行中，无法取消",
+                "status": job.get("status"),
+            }), 409
+        job["cancel_requested"] = True
+        job["cancel_requested_at"] = datetime.now().isoformat(timespec="seconds")
+        job["log"].append("[系统] 收到取消请求，正在安全停止…")
     return jsonify({
         "ok": True,
-        "status": job.get("status"),
+        "status": "running",
         "cancel_requested": True,
     })
 
@@ -4604,9 +4740,15 @@ def api_files(rel: str):
     if _project_dir is None:
         abort(404)
     target = (_project_dir / rel).resolve()
+    project_root = _project_dir.resolve()
     # 安全检查：不允许跳出项目目录
-    if not str(target).startswith(str(_project_dir.resolve())):
+    if not str(target).startswith(str(project_root) + os.sep) and target != project_root:
         abort(403)
+    # 拒绝符号链接指向项目外的文件（防止路径穿越）
+    if target.is_symlink():
+        real = target.resolve()
+        if not str(real).startswith(str(project_root) + os.sep) and real != project_root:
+            abort(403)
     if not target.exists():
         abort(404)
     return send_file(str(target))
@@ -11195,9 +11337,14 @@ def serve_index():
 @app.route("/<path:filename>")
 def serve_static(filename):
     ui_dir = APP_UI_DIR
+    ui_root = ui_dir.resolve()
     target = (ui_dir / filename).resolve()
-    if not str(target).startswith(str(ui_dir.resolve())):
+    if not str(target).startswith(str(ui_root) + os.sep) and target != ui_root:
         abort(403)
+    if target.is_symlink():
+        real = target.resolve()
+        if not str(real).startswith(str(ui_root) + os.sep) and real != ui_root:
+            abort(403)
     if not target.exists():
         abort(404)
     resp = send_file(str(target))

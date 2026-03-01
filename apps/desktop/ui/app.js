@@ -97,7 +97,11 @@ document.addEventListener("alpine:init", () => {
     },
     aiLoading: false,
     aiSaving:  false,
+    aiTesting: false,
+    aiTestResult: null,
     aiMessage: "",
+    preflightChecks: [],
+    preflightLoading: false,
 
     // ── 制作模块 Step 1：素材选择（最多 50）────────────────────
     selectedAssets:       [],
@@ -144,6 +148,7 @@ document.addEventListener("alpine:init", () => {
       rough_merge_gap_s: 0.15,
       rough_remove_phrases: "嗯,啊,然后,就是,那个",
       skin_smooth_strength: 0.4,
+      pore_reduction: 0.6,
       bgm_path: "", bgm_volume: 0.35, narration_path: "",
       subtitle_font: "PingFangSC-Regular", subtitle_size: 56,
     },
@@ -1078,6 +1083,22 @@ document.addEventListener("alpine:init", () => {
       await this.loadLibraryStats();
     },
 
+    async testAiConnection() {
+      this.aiTesting = true;
+      this.aiTestResult = null;
+      this.aiMessage = "";
+      const data = await this.api("POST", "/api/settings/ai/test", {});
+      this.aiTesting = false;
+      this.aiTestResult = data;
+    },
+
+    async runPreflight() {
+      this.preflightLoading = true;
+      const data = await this.api("GET", "/api/system/preflight");
+      this.preflightLoading = false;
+      this.preflightChecks = (data && data.checks) ? data.checks : [];
+    },
+
     async createProject() {
       if (!this.initVideosDir) { this.initError = "请选择素材目录"; return; }
       this.initLoading = true;
@@ -1875,6 +1896,7 @@ document.addEventListener("alpine:init", () => {
       if (step === 1) await this.loadMaterials();
       if (step === 2) this.parseTopic();
       if (step === 3) await this.loadScript();
+      if (step === 4) { await this.loadScript(); await this.loadMaterials(); }
       if (step === 5) await this.loadFrames();
       if (step === 6) {
         this.roughUrl = `/api/files/preview/rough_cut.mp4?t=${Date.now()}`;
@@ -4989,7 +5011,20 @@ document.addEventListener("alpine:init", () => {
     // ── Step 4：素材匹配 ────────────────────────────────────────
 
     async approveMatching() {
+      // 保存修改后的 scriptClips 到后端
+      const payload = { clips: this.scriptClips, subtitles: this.scriptSubs };
+      await this.api("POST", "/api/script", payload);
       await this.approve(4, { notes: "用户确认匹配结果" });
+    },
+
+    reassignClipMaterial(clipIndex, newVideoId) {
+      if (clipIndex < 0 || clipIndex >= this.scriptClips.length) return;
+      const clip = this.scriptClips[clipIndex];
+      const mat = this.materialsList.find(m => m.uid === newVideoId || m.id === newVideoId);
+      clip.video_id = newVideoId;
+      if (mat) {
+        clip.video_path = mat.path || mat.filename || newVideoId;
+      }
     },
 
     get matchedClips() {
@@ -5017,6 +5052,7 @@ document.addEventListener("alpine:init", () => {
       if (typeof c.enable_color_grading === "boolean") this.renderOpts.enable_color_grading = c.enable_color_grading;
       if (typeof c.enable_skill_enhance === "boolean") this.renderOpts.enable_skill_enhance = c.enable_skill_enhance;
       if (typeof c.skin_smooth_strength === "number") this.renderOpts.skin_smooth_strength = c.skin_smooth_strength;
+      if (typeof c.pore_reduction === "number") this.renderOpts.pore_reduction = c.pore_reduction;
       if (c.aesthetic_preset) this.renderOpts.aesthetic_preset = c.aesthetic_preset;
       if (c.transition_style) this.renderOpts.transition_style = c.transition_style;
       if (typeof c.transition_duration === "number") this.renderOpts.transition_duration = c.transition_duration;

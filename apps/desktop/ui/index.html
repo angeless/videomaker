@@ -430,8 +430,43 @@
           <span x-show="!aiSaving">保存 AI 配置</span>
           <span x-show="aiSaving">保存中…</span>
         </button>
+        <button class="btn btn-ghost" @click="testAiConnection()" :disabled="aiTesting">
+          <span x-show="!aiTesting">测试连接</span>
+          <span x-show="aiTesting">测试中…</span>
+        </button>
         <button class="btn btn-ghost" @click="loadAiSettings()" :disabled="aiLoading">刷新状态</button>
         <span style="font-size:12px;color:var(--muted)" x-show="aiMessage" x-text="aiMessage"></span>
+      </div>
+      <!-- 连接测试结果 -->
+      <div x-show="aiTestResult" style="margin-top:8px;padding:8px 12px;border-radius:6px;font-size:13px"
+           :style="aiTestResult && aiTestResult.ok ? 'background:#e8f5e9;color:#2e7d32' : 'background:#fbe9e7;color:#c62828'"
+           x-text="aiTestResult ? (aiTestResult.ok ? aiTestResult.message : aiTestResult.error) : ''">
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
+        <span>环境自检</span>
+        <button class="btn btn-ghost" style="font-size:12px;padding:4px 8px"
+                @click="runPreflight()" :disabled="preflightLoading">
+          <span x-show="!preflightLoading">刷新</span>
+          <span x-show="preflightLoading">检测中…</span>
+        </button>
+      </div>
+      <div x-show="preflightChecks.length > 0" style="display:flex;flex-direction:column;gap:6px">
+        <template x-for="chk in preflightChecks" :key="chk.id">
+          <div style="display:flex;align-items:center;gap:8px;font-size:13px">
+            <span x-text="chk.ok ? '✅' : '❌'" style="font-size:15px"></span>
+            <span style="font-weight:500;min-width:80px" x-text="chk.name"></span>
+            <span style="color:var(--muted)" x-text="chk.detail"></span>
+            <span x-show="chk.hint && !chk.ok"
+                  style="font-size:11px;color:#e67e22;margin-left:auto"
+                  x-text="chk.hint"></span>
+          </div>
+        </template>
+      </div>
+      <div x-show="preflightChecks.length === 0" style="font-size:12px;color:var(--muted)">
+        点击「刷新」检测运行环境
       </div>
     </div>
 
@@ -2893,7 +2928,7 @@
         </div>
 
         <div class="card">
-          <div class="card-title">匹配结果</div>
+          <div class="card-title">匹配结果（可直接更换素材）</div>
           <table class="match-table">
             <thead>
               <tr>
@@ -2909,8 +2944,17 @@
                   <td style="color:var(--muted)" x-text="i+1"></td>
                   <td x-text="clip.scene_description || clip.video_id || '—'"></td>
                   <td>
-                    <span class="badge badge-info"
-                          x-text="clip.video_id || clip.video_path || '未分配'"></span>
+                    <select class="input" style="font-size:12px;padding:4px 6px;min-width:140px"
+                            :value="clip.video_id || ''"
+                            @change="reassignClipMaterial(i, $event.target.value)">
+                      <option value="" disabled>选择素材…</option>
+                      <template x-for="mat in materialsList" :key="mat.uid">
+                        <option :value="mat.uid"
+                                :selected="mat.uid === clip.video_id"
+                                x-text="mat.filename + (mat.duration ? ` (${formatDur(mat.duration)})` : '')">
+                        </option>
+                      </template>
+                    </select>
                   </td>
                   <td style="color:var(--accent)"
                       x-text="formatDur((clip.source_end||0)-(clip.source_start||0))"></td>
@@ -2918,12 +2962,6 @@
               </template>
             </tbody>
           </table>
-        </div>
-
-        <div class="card" style="background:rgba(52,211,153,0.05);border-color:rgba(52,211,153,0.2)">
-          <div style="font-size:13px;color:var(--muted)">
-            如需替换素材，请直接编辑项目目录中的 <code>data/script_matched.json</code>，然后点击确认继续。
-          </div>
         </div>
 
         <div class="action-bar">
@@ -3022,8 +3060,18 @@
               <input class="input" type="number" x-model.number="renderOpts.subtitle_size" />
             </div>
             <div class="form-field">
-              <div class="input-label">美颜强度 (0-1)</div>
-              <input class="input" type="number" step="0.05" x-model.number="renderOpts.skin_smooth_strength" />
+              <div class="input-label">磨皮强度 (0-1)</div>
+              <input class="input" type="range" min="0" max="1" step="0.05"
+                     x-model.number="renderOpts.skin_smooth_strength" />
+              <div style="font-size:11px;color:var(--muted);text-align:right"
+                   x-text="renderOpts.skin_smooth_strength.toFixed(2)"></div>
+            </div>
+            <div class="form-field">
+              <div class="input-label">毛孔弱化 (0-1)</div>
+              <input class="input" type="range" min="0" max="1" step="0.05"
+                     x-model.number="renderOpts.pore_reduction" />
+              <div style="font-size:11px;color:var(--muted);text-align:right"
+                   x-text="renderOpts.pore_reduction.toFixed(2)"></div>
             </div>
             <div class="form-field">
               <div class="input-label">转场样式</div>
@@ -3167,9 +3215,20 @@
 
         <!-- 全局进度 -->
         <div class="card" x-show="jobStatus==='running'">
-          <div class="card-title">执行日志</div>
+          <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
+            <span>执行日志</span>
+            <button class="btn btn-ghost" style="color:#e74c3c;font-size:0.85em"
+                    @click="cancelWorkflowJob()">
+              ⏹ 取消渲染
+            </button>
+          </div>
           <div class="log-box" id="log-box" x-text="jobLog.join('\n')"
                x-effect="scrollLog()"></div>
+        </div>
+        <!-- 已取消提示 -->
+        <div class="card" x-show="jobStatus==='cancelled'" style="border-left:3px solid #e67e22">
+          <div class="card-title">⚠ 渲染已取消</div>
+          <p style="margin:0.5em 0;color:#888">渲染任务已安全停止。你可以调整参数后重新开始。</p>
         </div>
 
         <!-- 完成后播放器 -->
@@ -3193,6 +3252,21 @@
         </div>
       </div>
 
+      </div>
+
+      <!-- ── 步骤导航：上一步 / 下一步 ────────────────────────── -->
+      <div x-show="productionView==='workflow' && projectDir"
+           style="display:flex;justify-content:space-between;align-items:center;padding:12px 0 4px;border-top:1px solid var(--border)">
+        <button class="btn btn-ghost" x-show="activePanel > 1"
+                @click="navToStep(activePanel - 1)">
+          ← 上一步
+        </button>
+        <span x-show="activePanel <= 1"></span>
+        <button class="btn btn-ghost" x-show="activePanel < 7"
+                @click="navToStep(activePanel + 1)"
+                :disabled="activePanel >= currentStep && stepInfo(activePanel).status !== 'done'">
+          下一步 →
+        </button>
       </div>
 
     </div><!-- /content -->

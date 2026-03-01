@@ -177,17 +177,20 @@ class FingerprintScanner:
         print(f"\n💾 总计可节省空间: {total_saved_gb:.2f}GB")
 
 def main():
-    """主函数"""
+    """主函数（仅限终端环境，非交互环境直接返回）"""
+    if not sys.stdin.isatty():
+        print("⚠️  非交互式环境，跳过 fingerprint_scanner 交互菜单")
+        return
     print("🎬 视频指纹扫描器")
     print("=" * 60)
-    
+
     # 当前目录
     current_dir = Path(__file__).parent
     print(f"当前目录: {current_dir}")
-    
+
     # 创建扫描器
     scanner = FingerprintScanner("video_fingerprints.db")
-    
+
     # 扫描选项
     print("\n📋 扫描选项:")
     print("1. 扫描当前目录 (测试)")

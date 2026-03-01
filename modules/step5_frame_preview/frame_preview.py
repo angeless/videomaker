@@ -55,7 +55,11 @@ def generate_frame_previews(
         desc = re.sub(r"[^\w\u4e00-\u9fff]", "_", clip.get("scene_description", "clip"))[:20]
         out_jpg = frames_dir / f"{idx:02d}_{desc}.jpg"
         cmd = [ffmpeg, "-y", "-ss", str(mid), "-i", vid_path, "-vframes", "1", "-q:v", "2", str(out_jpg)]
-        result = subprocess.run(cmd, capture_output=True)
+        try:
+            result = subprocess.run(cmd, capture_output=True, timeout=60)
+        except subprocess.TimeoutExpired:
+            print(f"  ✗ 片段 {idx}: 帧提取超时")
+            continue
         if result.returncode == 0:
             extracted += 1
             print(f"  ✓ 片段 {idx}: {out_jpg.name}")
