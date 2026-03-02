@@ -235,6 +235,40 @@ macOS `open` 命令的 `Popen` 改为 `subprocess.run(timeout=5, check=False)`�
 
 回归验证：**150/150 测试通过，0 warnings**。
 
+## v0.3.11 参数解析统一 + subprocess 超时补全 + 裸 except 修复（2026-03-02）
+
+### 路由参数解析统一
+
+将 7 个路由文件中 24 处重复的 `try/except int()/float() + max(min(...))` 解析模式替换为共享工具 `parse_int_param()` / `parse_float_param()`，消除代码重复。
+
+| 文件 | 替换数 |
+|------|--------|
+| `routes/capability_editing_routes.py` | 7 处（limit/target_duration_s/max_clips/fps×2/timeout_seconds） |
+| `routes/capability_social_export_routes.py` | 3 处（limit/timeout_seconds×2） |
+| `routes/idempotency_routes.py` | 2 处（limit/offset） |
+| `routes/agent_task_run_routes.py` | 2 处（max_parallel×2） |
+| `routes/agent_task_query_routes.py` | 2 处（limit/offset） |
+| `routes/agent_observability_routes.py` | 4 处（limit×2/top_n×2） |
+| `routes/workflow_routes.py` | 2 处（limit/offset） |
+
+### subprocess 超时补全
+
+| 文件 | 修复内容 | 超时值 |
+|------|---------|--------|
+| `modules/app_api/server.py` | `osascript` 文件/目录对话框 | 120s |
+| `modules/step5_frame_preview/frame_preview.py` | FFmpeg 帧提取 | 30s |
+
+### 裸 except 修复（第四批）
+
+| 文件 | 修复 |
+|------|------|
+| `legacy_lab/manage_videos/improved_fingerprint.py` L131 | `except:` → `except Exception:` |
+| `legacy_lab/manage_videos/fingerprint_system.py` L154 | `except:` → `except Exception:` |
+| `legacy_lab/manage_videos/tests/test_search_function.py` L170 | `except:` → `except Exception:` |
+| `legacy_lab/manage_videos/learn/learn_ai_analysis_part2.py` L128,L184 | `except:` → `except Exception:` (×2) |
+
+回归验证：**150/150 测试通过，0 warnings**。
+
 ## 下一步计划
 
 参见 `docs/next_dev_plan.md` 中的 Phase 1-4 计划。当前优先项：

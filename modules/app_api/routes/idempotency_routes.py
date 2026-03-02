@@ -8,6 +8,8 @@ from typing import Any, Callable, Dict
 
 from flask import Blueprint, jsonify, request
 
+from modules.app_api.param_utils import parse_int_param
+
 
 def create_idempotency_blueprint(
     *,
@@ -44,16 +46,8 @@ def create_idempotency_blueprint(
             request.args.get("ttl_seconds", capability_idempotency_ttl_getter()),
             default=capability_idempotency_ttl_getter(),
         )
-        try:
-            limit = int(request.args.get("limit", "200") or "200")
-        except Exception:
-            limit = 200
-        limit = max(1, min(limit, 1000))
-        try:
-            offset = int(request.args.get("offset", "0") or "0")
-        except Exception:
-            offset = 0
-        offset = max(0, offset)
+        limit = parse_int_param(request.args.get("limit", "200"), default=200, min_val=1, max_val=1000)
+        offset = parse_int_param(request.args.get("offset", "0"), default=0, min_val=0)
 
         payload = collect_records(
             source=source,

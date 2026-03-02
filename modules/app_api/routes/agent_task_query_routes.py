@@ -12,6 +12,8 @@ import json
 
 from flask import Blueprint, jsonify, request
 
+from modules.app_api.param_utils import parse_int_param
+
 
 def create_agent_task_query_blueprint(
     *,
@@ -262,17 +264,8 @@ def create_agent_task_query_blueprint(
         if replay_supported_raw is not None and str(replay_supported_raw).strip() != "":
             replay_supported = parse_boolish(replay_supported_raw, default=False)
 
-        try:
-            limit = int(request.args.get("limit", 100) or 100)
-        except Exception:
-            limit = 100
-        limit = max(1, min(limit, 1000))
-
-        try:
-            offset = int(request.args.get("offset", 0) or 0)
-        except Exception:
-            offset = 0
-        offset = max(offset, 0)
+        limit = parse_int_param(request.args.get("limit", 100), default=100, min_val=1, max_val=1000)
+        offset = parse_int_param(request.args.get("offset", 0), default=0, min_val=0)
 
         history = read_agent_task_history()
         filtered = filter_agent_task_history(

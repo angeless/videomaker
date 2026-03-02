@@ -70,6 +70,13 @@
 - 回归验证：150/150 测试通过，0 warnings。
 - 详见 `docs/changelog-v0.3.1.md`。
 
+### v0.3.11 参数解析统一 + subprocess 超时补全 + 裸 except 修复（2026-03-02）
+- **路由参数解析统一**：7 个路由文件 24 处重复的 try/except+clamp 模式替换为 `parse_int_param()`/`parse_float_param()`。
+- **subprocess 超时补全**：`server.py`（osascript 120s）+ `frame_preview.py`（FFmpeg 30s）。
+- **裸 except 修复第四批**：legacy_lab 5 处 `except:` → `except Exception:`。
+- 回归验证：150/150 测试通过，0 warnings。
+- 详见 `docs/changelog-v0.3.1.md`。
+
 ## Phase 1（高优先，1-2 周）
 
 1. 真实发布引擎（替换模拟）

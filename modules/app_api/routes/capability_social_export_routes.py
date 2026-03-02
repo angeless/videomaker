@@ -9,6 +9,8 @@ import uuid
 
 from flask import Blueprint, jsonify, request
 
+from modules.app_api.param_utils import parse_float_param, parse_int_param
+
 
 def create_social_export_capability_blueprint(
     *,
@@ -117,11 +119,7 @@ def create_social_export_capability_blueprint(
         )
         if input_mode == "project" and project_dir_getter() is None:
             return jsonify({"error": "项目未加载"}), 400
-        try:
-            limit = int(request.args.get("limit", payload.get("limit", "30")) or "30")
-        except Exception:
-            limit = 30
-        limit = max(1, min(limit, 200))
+        limit = parse_int_param(request.args.get("limit", payload.get("limit", "30")), default=30, min_val=1, max_val=200)
 
         history_raw = payload.get("history", [])
         if input_mode == "project":
@@ -254,11 +252,7 @@ def create_social_export_capability_blueprint(
             return jsonify({"error": "项目未加载"}), 400
 
         base_dir = capability_base_dir(input_mode)
-        try:
-            timeout_seconds = float(payload.get("timeout_seconds", 3600) or 3600)
-        except (TypeError, ValueError):
-            timeout_seconds = 3600.0
-        timeout_seconds = max(10.0, min(timeout_seconds, 7200.0))
+        timeout_seconds = parse_float_param(payload.get("timeout_seconds", 3600), default=3600.0, min_val=10.0, max_val=7200.0)
         ffmpeg_bin = str(payload.get("ffmpeg_bin", "ffmpeg") or "ffmpeg")
         ffprobe_bin = str(payload.get("ffprobe_bin", "ffprobe") or "ffprobe")
         strict_duration_limit = bool(payload.get("strict_duration_limit", True))
@@ -317,11 +311,7 @@ def create_social_export_capability_blueprint(
         strict_duration_limit = bool(payload.get("strict_duration_limit", record.get("strict_duration_limit", True)))
         ffmpeg_bin = str(payload.get("ffmpeg_bin", "ffmpeg") or "ffmpeg")
         ffprobe_bin = str(payload.get("ffprobe_bin", "ffprobe") or "ffprobe")
-        try:
-            timeout_seconds = float(payload.get("timeout_seconds", 3600) or 3600)
-        except (TypeError, ValueError):
-            timeout_seconds = 3600.0
-        timeout_seconds = max(10.0, min(timeout_seconds, 7200.0))
+        timeout_seconds = parse_float_param(payload.get("timeout_seconds", 3600), default=3600.0, min_val=10.0, max_val=7200.0)
         platforms = parse_platforms(payload.get("platforms", record.get("platforms", [])))
         templates = coerce_social_export_overrides(payload, input_mode=input_mode)
 

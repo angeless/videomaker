@@ -151,7 +151,7 @@ class VideoFingerprintSystem:
                 # 生成特征字符串
                 features = f"{width}x{height}:{codec}:{framerate}:{duration}:{size}:{bitrate}"
                 return hashlib.sha256(features.encode()).hexdigest()
-        except:
+        except Exception:
             pass
         
         # 回退方案

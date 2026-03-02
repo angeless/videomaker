@@ -128,7 +128,7 @@ class ImprovedFingerprintSystem:
                 # 稳定的技术特征（忽略可能变化的时间戳）
                 features = f"{width}x{height}:{codec}:{duration}:{size}"
                 return hashlib.sha256(features.encode()).hexdigest()
-        except:
+        except Exception:
             pass
         
         # 回退：使用文件大小（稳定）

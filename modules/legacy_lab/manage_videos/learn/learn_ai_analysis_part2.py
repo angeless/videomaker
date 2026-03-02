@@ -125,7 +125,7 @@ class SimpleVideoAnalyzer:
                 "format": format_info.get("format_name", "未知"),
                 "bitrate": format_info.get("bit_rate", "未知")
             }
-        except:
+        except Exception:
             return {"error": "技术分析失败"}
     
     def analyze_content_simple(self, video_path):
@@ -181,7 +181,7 @@ class SimpleVideoAnalyzer:
                 "method": "size_mtime",
                 "note": "建议使用感知哈希（ImageHash）"
             }
-        except:
+        except Exception:
             return {"error": "指纹生成失败"}
 
 def main():

@@ -11,6 +11,8 @@ import uuid
 
 from flask import Blueprint, jsonify, request
 
+from modules.app_api.param_utils import parse_int_param
+
 
 def create_agent_task_run_blueprint(
     *,
@@ -46,11 +48,7 @@ def create_agent_task_run_blueprint(
             if strategy not in {"sequential", "parallel", "conditional"}:
                 return jsonify({"error": "strategy 仅支持 sequential/parallel/conditional"}), 400
             explicit_max_parallel = "max_parallel" in payload
-            try:
-                requested_max_parallel = int(payload.get("max_parallel", 4) or 4)
-            except Exception:
-                requested_max_parallel = 4
-            requested_max_parallel = max(1, min(requested_max_parallel, 8))
+            requested_max_parallel = parse_int_param(payload.get("max_parallel", 4), default=4, min_val=1, max_val=8)
             requested_budget = normalize_skill_budget_limit(payload.get("budget_limit", {}))
             try:
                 steps = normalize_agent_skill_steps(
@@ -162,11 +160,7 @@ def create_agent_task_run_blueprint(
             if strategy not in {"sequential", "parallel", "conditional"}:
                 return jsonify({"error": "strategy 仅支持 sequential/parallel/conditional"}), 400
             explicit_max_parallel = ("max_parallel" in payload) or ("max_parallel" in plan_skill_flow)
-            try:
-                requested_max_parallel = int(payload.get("max_parallel", plan_skill_flow.get("max_parallel", 4)) or 4)
-            except Exception:
-                requested_max_parallel = 4
-            requested_max_parallel = max(1, min(requested_max_parallel, 8))
+            requested_max_parallel = parse_int_param(payload.get("max_parallel", plan_skill_flow.get("max_parallel", 4)), default=4, min_val=1, max_val=8)
             requested_budget = normalize_skill_budget_limit(payload.get("budget_limit", plan_skill_flow.get("budget_limit", {})))
             try:
                 steps = normalize_agent_skill_steps(

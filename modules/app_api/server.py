@@ -4709,6 +4709,7 @@ def _choose_path_via_osascript(mode: str) -> Dict:
         ["osascript", "-e", script],
         capture_output=True,
         text=True,
+        timeout=120,
     )
     if proc.returncode != 0:
         err = (proc.stderr or "").strip()

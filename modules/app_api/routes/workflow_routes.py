@@ -8,6 +8,8 @@ from typing import Any, Callable, Dict
 
 from flask import Blueprint, jsonify, request
 
+from modules.app_api.param_utils import parse_int_param
+
 
 def create_workflow_blueprint(
     *,
@@ -145,16 +147,8 @@ def create_workflow_blueprint(
         ctx = parse_request_context()
         workflow_id = normalize_agent_template_id(request.args.get("workflow_id", ""))
         include_steps = parse_boolish(request.args.get("include_steps", "false"), default=False)
-        try:
-            limit = int(request.args.get("limit", "50") or "50")
-        except Exception:
-            limit = 50
-        try:
-            offset = int(request.args.get("offset", "0") or "0")
-        except Exception:
-            offset = 0
-        limit = max(1, min(limit, 200))
-        offset = max(offset, 0)
+        limit = parse_int_param(request.args.get("limit", "50"), default=50, min_val=1, max_val=200)
+        offset = parse_int_param(request.args.get("offset", "0"), default=0, min_val=0)
 
         with custom_workflow_lock_getter():
             runs = read_custom_workflow_runs()

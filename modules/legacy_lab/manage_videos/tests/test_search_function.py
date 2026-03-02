@@ -167,7 +167,7 @@ class SearchTester:
         try:
             with open("mock_content_db.json", "r", encoding="utf-8") as f:
                 mock_data = json.load(f)
-        except:
+        except Exception:
             return []
         
         results = []

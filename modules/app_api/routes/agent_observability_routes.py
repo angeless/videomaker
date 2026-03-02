@@ -11,6 +11,8 @@ import json
 
 from flask import Blueprint, jsonify, request
 
+from modules.app_api.param_utils import parse_int_param
+
 
 def create_agent_observability_blueprint(
     *,
@@ -42,16 +44,8 @@ def create_agent_observability_blueprint(
         if replay_supported_raw is not None and str(replay_supported_raw).strip() != "":
             replay_supported = parse_boolish(replay_supported_raw, default=False)
         include_items = parse_boolish(request.args.get("include_items", "false"), default=False)
-        try:
-            limit = int(request.args.get("limit", 200) or 200)
-        except Exception:
-            limit = 200
-        limit = max(1, min(limit, 2000))
-        try:
-            top_n = int(request.args.get("top_n", 5) or 5)
-        except Exception:
-            top_n = 5
-        top_n = max(1, min(top_n, 20))
+        limit = parse_int_param(request.args.get("limit", 200), default=200, min_val=1, max_val=2000)
+        top_n = parse_int_param(request.args.get("top_n", 5), default=5, min_val=1, max_val=20)
 
         history = read_agent_task_history()
         filtered = filter_agent_task_history(
@@ -114,16 +108,8 @@ def create_agent_observability_blueprint(
         fmt = str(payload.get("format", "json") or "json").strip().lower()
         if fmt not in {"json", "csv"}:
             return jsonify({"error": "format 仅支持 json/csv"}), 400
-        try:
-            limit = int(payload.get("limit", 500) or 500)
-        except Exception:
-            limit = 500
-        limit = max(1, min(limit, 5000))
-        try:
-            top_n = int(payload.get("top_n", 5) or 5)
-        except Exception:
-            top_n = 5
-        top_n = max(1, min(top_n, 20))
+        limit = parse_int_param(payload.get("limit", 500), default=500, min_val=1, max_val=5000)
+        top_n = parse_int_param(payload.get("top_n", 5), default=5, min_val=1, max_val=20)
 
         history = read_agent_task_history()
         filtered = filter_agent_task_history(
