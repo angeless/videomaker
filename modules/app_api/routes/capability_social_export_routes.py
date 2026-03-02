@@ -4,12 +4,11 @@
 from __future__ import annotations
 
 from typing import Any, Callable, Dict
-import json
 import uuid
 
 from flask import Blueprint, jsonify, request
 
-from modules.app_api.param_utils import parse_float_param, parse_int_param
+from modules.app_api.param_utils import parse_float_param, parse_int_param, write_json_result
 
 
 def create_social_export_capability_blueprint(
@@ -170,7 +169,7 @@ def create_social_export_capability_blueprint(
 
         out_path = project_data_path("social_export_validation_last.json") if input_mode == "project" else None
         if out_path is not None and bool(payload.get("store_result", True)):
-            out_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+            write_json_result(out_path, report)
         return jsonify(
             {
                 "ok": True,
@@ -234,7 +233,7 @@ def create_social_export_capability_blueprint(
 
         plan_path = project_data_path("social_export_plan.json") if input_mode == "project" else None
         if plan_path is not None and bool(payload.get("store_result", True)):
-            plan_path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
+            write_json_result(plan_path, plan)
         return jsonify(
             {
                 "ok": True,

@@ -7,11 +7,10 @@ from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 import csv
 import io
-import json
 
 from flask import Blueprint, jsonify, request
 
-from modules.app_api.param_utils import parse_int_param
+from modules.app_api.param_utils import parse_int_param, parse_str_param, write_json_result
 
 
 def create_agent_observability_blueprint(
@@ -30,15 +29,15 @@ def create_agent_observability_blueprint(
     def api_agent_observability():
         if project_dir_getter() is None:
             return jsonify({"error": "项目未加载"}), 400
-        actor_id = str(request.args.get("actor_id", "") or "").strip()
+        actor_id = parse_str_param(request.args.get("actor_id", ""))
         statuses = parse_agent_history_filter_tokens(request.args.get("status", ""))
         task_modes = parse_agent_history_filter_tokens(request.args.get("task_mode", ""))
         kinds = parse_agent_history_filter_tokens(request.args.get("kind", ""))
-        capability_id = str(request.args.get("capability_id", "") or "").strip().lower()
-        skill_id = str(request.args.get("skill_id", "") or "").strip().lower()
-        trace_id = str(request.args.get("trace_id", "") or "").strip()
-        since = str(request.args.get("since", "") or "").strip()
-        until = str(request.args.get("until", "") or "").strip()
+        capability_id = parse_str_param(request.args.get("capability_id", "")).lower()
+        skill_id = parse_str_param(request.args.get("skill_id", "")).lower()
+        trace_id = parse_str_param(request.args.get("trace_id", ""))
+        since = parse_str_param(request.args.get("since", ""))
+        until = parse_str_param(request.args.get("until", ""))
         replay_supported: Optional[bool] = None
         replay_supported_raw = request.args.get("replay_supported", None)
         if replay_supported_raw is not None and str(replay_supported_raw).strip() != "":
@@ -92,20 +91,20 @@ def create_agent_observability_blueprint(
         if project_dir_getter() is None:
             return jsonify({"error": "项目未加载"}), 400
         payload = request.json or {}
-        actor_id = str(payload.get("actor_id", "") or "").strip()
+        actor_id = parse_str_param(payload.get("actor_id", ""))
         statuses = parse_agent_history_filter_tokens(payload.get("status", ""))
         task_modes = parse_agent_history_filter_tokens(payload.get("task_mode", ""))
         kinds = parse_agent_history_filter_tokens(payload.get("kind", ""))
-        capability_id = str(payload.get("capability_id", "") or "").strip().lower()
-        skill_id = str(payload.get("skill_id", "") or "").strip().lower()
-        trace_id = str(payload.get("trace_id", "") or "").strip()
-        since = str(payload.get("since", "") or "").strip()
-        until = str(payload.get("until", "") or "").strip()
+        capability_id = parse_str_param(payload.get("capability_id", "")).lower()
+        skill_id = parse_str_param(payload.get("skill_id", "")).lower()
+        trace_id = parse_str_param(payload.get("trace_id", ""))
+        since = parse_str_param(payload.get("since", ""))
+        until = parse_str_param(payload.get("until", ""))
         replay_supported: Optional[bool] = None
         replay_supported_raw = payload.get("replay_supported", None)
         if replay_supported_raw is not None and str(replay_supported_raw).strip() != "":
             replay_supported = parse_boolish(replay_supported_raw, default=False)
-        fmt = str(payload.get("format", "json") or "json").strip().lower()
+        fmt = parse_str_param(payload.get("format", "json"), default="json").lower()
         if fmt not in {"json", "csv"}:
             return jsonify({"error": "format 仅支持 json/csv"}), 400
         limit = parse_int_param(payload.get("limit", 500), default=500, min_val=1, max_val=5000)
@@ -156,7 +155,7 @@ def create_agent_observability_blueprint(
                 "summary": summary,
                 "items": list(reversed(picked)),
             }
-            out_path.write_text(json.dumps(body, ensure_ascii=False, indent=2), encoding="utf-8")
+            write_json_result(out_path, body)
         else:
             fieldnames = [
                 "job_id",

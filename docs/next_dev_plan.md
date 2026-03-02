@@ -101,6 +101,14 @@
 - 回归验证：157/157 测试通过，0 warnings。
 - 详见 `docs/changelog-v0.3.1.md`。
 
+### v0.3.15 write_json_result 全路由收官 + parse_str_param 扩展（2026-03-02）
+- **write_json_result 收官**：5 个路由文件 13 处 JSON 写入归一，全路由迁移完成（累计 8 文件 25 处）。
+- **parse_str_param 第二批**：`agent_observability_routes.py` 13 处 + `agent_task_query_routes.py` 11 处，共 24 处归一。
+- 附带清理：4 个文件移除 `import json`（`legacy_project_routes.py` 因 `json.loads` 保留）。
+- 新增 6 个测试（含跨文件 json.dumps 零残留断言）。
+- 回归验证：163/163 测试通过，0 warnings。
+- 详见 `docs/changelog-v0.3.1.md`。
+
 ## Phase 1（高优先，1-2 周）
 
 1. 真实发布引擎（替换模拟）

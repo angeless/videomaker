@@ -12,6 +12,7 @@ import uuid
 
 from flask import Blueprint, abort, jsonify, request, send_file
 
+from modules.app_api.param_utils import write_json_result
 from modules.workflow_engine.workflow import WorkflowRunner, WorkflowState
 
 
@@ -70,10 +71,7 @@ def create_legacy_project_blueprint(
             ws = WorkflowState.create(project_path, "", config)
 
             materials_path = project_path / "data" / "materials.json"
-            materials_path.write_text(
-                json.dumps(materials, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
+            write_json_result(materials_path, materials)
 
             ws.data["steps"]["1"].update({
                 "status": "done",
@@ -384,7 +382,7 @@ def create_legacy_project_blueprint(
             return jsonify({"error": "无效 JSON"}), 400
         p = project_dir / "data" / "script_draft.json"
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        write_json_result(p, data)
         return jsonify({"ok": True})
 
     @bp.route("/api/materials")

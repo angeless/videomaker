@@ -1221,3 +1221,69 @@ def test_v0314_audio_voice_no_direct_json_import():
     assert "write_json_result" in src
     lines = [l.strip() for l in src.splitlines()]
     assert "import json" not in lines
+
+
+# ── v0.3.15 tests ─────────────────────────────────────────────────────
+
+
+def test_v0315_editing_routes_no_direct_json_import():
+    """editing_routes uses write_json_result, no direct json import."""
+    src = (ROOT / "modules" / "app_api" / "routes" / "capability_editing_routes.py").read_text()
+    assert "write_json_result" in src
+    lines = [l.strip() for l in src.splitlines()]
+    assert "import json" not in lines
+    # verify 7 write_json_result calls exist
+    assert src.count("write_json_result(") >= 7
+
+
+def test_v0315_social_export_routes_no_direct_json_import():
+    """social_export_routes uses write_json_result, no direct json import."""
+    src = (ROOT / "modules" / "app_api" / "routes" / "capability_social_export_routes.py").read_text()
+    assert "write_json_result" in src
+    lines = [l.strip() for l in src.splitlines()]
+    assert "import json" not in lines
+    assert src.count("write_json_result(") >= 2
+
+
+def test_v0315_observability_routes_no_direct_json_import():
+    """observability uses write_json_result + parse_str_param, no direct json."""
+    src = (ROOT / "modules" / "app_api" / "routes" / "agent_observability_routes.py").read_text()
+    assert "write_json_result" in src
+    assert "parse_str_param" in src
+    lines = [l.strip() for l in src.splitlines()]
+    assert "import json" not in lines
+
+
+def test_v0315_task_query_routes_no_direct_json_import():
+    """task_query uses write_json_result + parse_str_param, no direct json."""
+    src = (ROOT / "modules" / "app_api" / "routes" / "agent_task_query_routes.py").read_text()
+    assert "write_json_result" in src
+    assert "parse_str_param" in src
+    lines = [l.strip() for l in src.splitlines()]
+    assert "import json" not in lines
+
+
+def test_v0315_legacy_routes_write_json_result():
+    """legacy_project_routes uses write_json_result (json still needed for reads)."""
+    src = (ROOT / "modules" / "app_api" / "routes" / "legacy_project_routes.py").read_text()
+    assert "write_json_result" in src
+    assert src.count("write_json_result(") >= 2
+    # json import still needed for json.loads
+    assert "json.loads" in src
+
+
+def test_v0315_no_remaining_json_dumps_in_routes():
+    """All route files in the write_json_result migration have no stale json.dumps."""
+    migrated_files = [
+        "capability_editing_routes.py",
+        "capability_social_export_routes.py",
+        "capability_text_semantic_routes.py",
+        "capability_content_publish_routes.py",
+        "capability_audio_voice_routes.py",
+        "agent_observability_routes.py",
+        "agent_task_query_routes.py",
+    ]
+    routes_dir = ROOT / "modules" / "app_api" / "routes"
+    for fname in migrated_files:
+        src = (routes_dir / fname).read_text()
+        assert "json.dumps(" not in src, f"{fname} still contains json.dumps()"

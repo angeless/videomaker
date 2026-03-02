@@ -375,10 +375,60 @@ macOS `open` 命令的 `Popen` 改为 `subprocess.run(timeout=5, check=False)`�
 
 回归验证：**157/157 测试通过，0 warnings**。
 
+## v0.3.15（2026-03-02）— write_json_result 全路由收官 + parse_str_param 扩展
+
+### write_json_result 应用（收官批次）
+
+| 文件 | 替换数 | 说明 |
+|------|--------|------|
+| `capability_editing_routes.py` | 7 处 | topic_copy/text_rough/short_clip/refinement 全部出口 |
+| `capability_social_export_routes.py` | 2 处 | validate_source + plan |
+| `agent_observability_routes.py` | 1 处 | export JSON 分支 |
+| `agent_task_query_routes.py` | 1 处 | task export JSON 分支 |
+| `legacy_project_routes.py` | 2 处 | materials + script_draft 写入 |
+| 合计 | 13 处 | |
+
+### parse_str_param 应用（第二批）
+
+| 文件 | 替换数 | 典型参数 |
+|------|--------|---------|
+| `agent_observability_routes.py` | 13 处 | actor_id, capability_id, skill_id, trace_id, since, until, format |
+| `agent_task_query_routes.py` | 11 处 | actor_id, capability_id, skill_id, trace_id, since, until, sort, format, safe_job_id |
+| 合计 | 24 处 | |
+
+### 附带清理
+
+- `capability_editing_routes.py`、`capability_social_export_routes.py`、
+  `agent_observability_routes.py`、`agent_task_query_routes.py` 移除了不再需要的 `import json`
+- `legacy_project_routes.py` 保留 `import json`（仍用于 `json.loads` 读取）
+
+### write_json_result 迁移总览
+
+| 批次 | 版本 | 文件数 | 替换数 |
+|------|------|--------|--------|
+| 首批 | v0.3.14 | 3 | 12 |
+| 收官 | v0.3.15 | 5 | 13 |
+| **合计** | | **8** | **25** |
+
+所有路由文件中的 `json.dumps` + `write_text` 模式已全部迁移到 `write_json_result()`。
+7 个文件移除了 `import json`（仅 `legacy_project_routes.py` 因 `json.loads` 保留）。
+
+### 新增测试
+
+| 测试名 | 验证内容 |
+|--------|---------|
+| `test_v0315_editing_routes_no_direct_json_import` | write_json_result ≥7 + 无 json import |
+| `test_v0315_social_export_routes_no_direct_json_import` | write_json_result ≥2 + 无 json import |
+| `test_v0315_observability_routes_no_direct_json_import` | write_json_result + parse_str_param + 无 json |
+| `test_v0315_task_query_routes_no_direct_json_import` | write_json_result + parse_str_param + 无 json |
+| `test_v0315_legacy_routes_write_json_result` | write_json_result ≥2 + json.loads 仍存在 |
+| `test_v0315_no_remaining_json_dumps_in_routes` | 7 个已迁移文件零残留 json.dumps |
+
+回归验证：**163/163 测试通过，0 warnings**。
+
 ## 下一步计划
 
 参见 `docs/next_dev_plan.md` 中的 Phase 1-4 计划。当前优先项：
-1. `parse_str_param` 扩展到剩余路由文件（~98 处待替换）
-2. `write_json_result` 扩展到 editing/social_export/observability 路由（~13 处）
-3. 真实发布引擎（官方平台 connector）
-4. 安全基线增强（细粒度权限 + 审计日志）
+1. `parse_str_param` 继续扩展到 editing/social_export 等大文件（~70 处待替换）
+2. 真实发布引擎（官方平台 connector）
+3. 安全基线增强（细粒度权限 + 审计日志）

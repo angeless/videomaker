@@ -8,11 +8,10 @@ from datetime import datetime
 from typing import Any, Callable, Dict, List
 import csv
 import io
-import json
 
 from flask import Blueprint, jsonify, request
 
-from modules.app_api.param_utils import parse_int_param
+from modules.app_api.param_utils import parse_int_param, parse_str_param, write_json_result
 
 
 def create_agent_task_query_blueprint(
@@ -246,16 +245,16 @@ def create_agent_task_query_blueprint(
         if project_dir_getter() is None:
             return jsonify({"error": "项目未加载"}), 400
 
-        actor_id = str(request.args.get("actor_id", "") or "").strip()
+        actor_id = parse_str_param(request.args.get("actor_id", ""))
         statuses = parse_agent_history_filter_tokens(request.args.get("status", ""))
         task_modes = parse_agent_history_filter_tokens(request.args.get("task_mode", ""))
         kinds = parse_agent_history_filter_tokens(request.args.get("kind", ""))
-        capability_id = str(request.args.get("capability_id", "") or "").strip().lower()
-        skill_id = str(request.args.get("skill_id", "") or "").strip().lower()
-        trace_id = str(request.args.get("trace_id", "") or "").strip()
-        since = str(request.args.get("since", "") or "").strip()
-        until = str(request.args.get("until", "") or "").strip()
-        sort = str(request.args.get("sort", "desc") or "desc").strip().lower()
+        capability_id = parse_str_param(request.args.get("capability_id", "")).lower()
+        skill_id = parse_str_param(request.args.get("skill_id", "")).lower()
+        trace_id = parse_str_param(request.args.get("trace_id", ""))
+        since = parse_str_param(request.args.get("since", ""))
+        until = parse_str_param(request.args.get("until", ""))
+        sort = parse_str_param(request.args.get("sort", "desc"), default="desc").lower()
         if sort not in {"desc", "asc"}:
             sort = "desc"
 
@@ -313,7 +312,7 @@ def create_agent_task_query_blueprint(
         if project_dir_getter() is None:
             return jsonify({"error": "项目未加载"}), 400
         payload = request.json or {}
-        fmt = str(payload.get("format", "json") or "json").strip().lower()
+        fmt = parse_str_param(payload.get("format", "json"), default="json").lower()
         if fmt not in {"json", "csv"}:
             return jsonify({"error": "format 仅支持 json/csv"}), 400
         include_logs = coerce_bool(payload.get("include_logs", True), default=True)
@@ -327,7 +326,7 @@ def create_agent_task_query_blueprint(
         if not isinstance(snapshot, dict):
             return jsonify({"error": "agent task/skill 不存在"}), 404
 
-        safe_job_id = str(job_id or "").strip() or "unknown"
+        safe_job_id = parse_str_param(job_id, default="unknown")
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         out_path = project_data_path(f"agent_task_export_{safe_job_id}_{ts}.{fmt}")
         if out_path is None:
@@ -335,7 +334,7 @@ def create_agent_task_query_blueprint(
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
         if fmt == "json":
-            out_path.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
+            write_json_result(out_path, snapshot)
         else:
             summary = snapshot.get("summary", {}) if isinstance(snapshot.get("summary"), dict) else {}
             fieldnames = [

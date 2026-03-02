@@ -6,12 +6,11 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List
-import json
 import tempfile
 
 from flask import Blueprint, jsonify, request
 
-from modules.app_api.param_utils import parse_float_param, parse_int_param
+from modules.app_api.param_utils import parse_float_param, parse_int_param, write_json_result
 
 
 def _extract_text_rough_subtitle_spans(script: Dict) -> List[Dict]:
@@ -303,7 +302,7 @@ def create_editing_capability_blueprint(
         draft = build_copy_payload(topic, semantics, target_duration_s=target_duration_s)
         out_path = project_data_path("topic_copy_draft.json") if input_mode == "project" else None
         if out_path is not None and bool(payload.get("store_result", True)):
-            out_path.write_text(json.dumps(draft, ensure_ascii=False, indent=2), encoding="utf-8")
+            write_json_result(out_path, draft)
         return jsonify({"ok": True, "input_mode": input_mode, "draft": draft, "output": str(out_path) if out_path else None})
 
     @bp.route("/api/capabilities/text_rough_cut/source", methods=["GET"])
@@ -322,7 +321,7 @@ def create_editing_capability_blueprint(
         spans = _extract_text_rough_subtitle_spans(script)
         out_path = project_data_path("text_rough_source.json") if input_mode == "project" else None
         if out_path is not None and project_dir_getter() is not None:
-            out_path.write_text(json.dumps({"spans": spans}, ensure_ascii=False, indent=2), encoding="utf-8")
+            write_json_result(out_path, {"spans": spans})
         return jsonify(
             {
                 "ok": True,
@@ -414,7 +413,7 @@ def create_editing_capability_blueprint(
         )
         out_path = project_data_path("text_rough_plan.json") if input_mode == "project" else None
         if out_path is not None and bool(payload.get("store_result", True)):
-            out_path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
+            write_json_result(out_path, plan)
         return jsonify({"ok": True, "input_mode": input_mode, "plan": plan, "output": str(out_path) if out_path else None})
 
     @bp.route("/api/capabilities/short_clip/plan", methods=["POST"])
@@ -492,7 +491,7 @@ def create_editing_capability_blueprint(
         timeline = highlights_to_timeline(picked)
         out_path = project_data_path("short_clip_plan.json") if input_mode == "project" else None
         if out_path is not None and bool(payload.get("store_result", True)):
-            out_path.write_text(json.dumps(timeline, ensure_ascii=False, indent=2), encoding="utf-8")
+            write_json_result(out_path, timeline)
         return jsonify({"ok": True, "input_mode": input_mode, "plan": timeline, "output": str(out_path) if out_path else None})
 
     @bp.route("/api/capabilities/refinement/plan", methods=["POST"])
@@ -512,7 +511,7 @@ def create_editing_capability_blueprint(
         if input_mode == "project" and project_dir_getter() is not None and bool(payload.get("store_result", True)):
             out_path = project_data_path("refinement_plan.json")
             if out_path is not None:
-                out_path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
+                write_json_result(out_path, plan)
         return jsonify({"ok": True, "input_mode": input_mode, "plan": plan})
 
     @bp.route("/api/capabilities/refinement/connectors", methods=["GET"])
@@ -639,7 +638,7 @@ def create_editing_capability_blueprint(
         }
         out_path = project_data_path("refinement_execute_last.json") if input_mode == "project" else None
         if out_path is not None and bool(payload.get("store_result", True)):
-            out_path.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
+            write_json_result(out_path, output)
         return jsonify(
             {
                 "ok": True,
@@ -736,7 +735,7 @@ def create_editing_capability_blueprint(
 
         out_path = project_data_path("refinement_collect_last.json") if input_mode == "project" else None
         if out_path is not None and bool(payload.get("store_result", True)):
-            out_path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+            write_json_result(out_path, record)
         return jsonify(
             {
                 "ok": True,
