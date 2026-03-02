@@ -113,6 +113,21 @@ max_frames = max(total_frames * 2, int(fps * 600))
 
 回归验证：**144/144 测试通过**。
 
+## v0.3.5 JSON 错误响应标准化（2026-03-02）
+
+**问题**：Flask 默认对 404（未知路由）和 405（方法不允许）返回 HTML 页面，不符合 JSON API 规范，前端/Agent 客户端需额外处理。
+
+**修复**：在 `server.py` 新增：
+- `@app.errorhandler(404)` → `{"error": "路由不存在", "code": "not_found"}`
+- `@app.errorhandler(405)` → `{"error": "HTTP 方法不允许", "code": "method_not_allowed"}`
+- 通用 `HTTPException` 处理改为返回 JSON（`{"error": desc, "code": name}`），而非直接 `return exc`
+
+**新增测试**：
+- `test_v035_unknown_route_returns_json_404`：验证未知路由返回 JSON 404
+- `test_v035_wrong_method_returns_json_405`：验证 DELETE /api/status 返回 JSON 405
+
+回归验证：**146/146 测试通过**。
+
 ## 下一步计划
 
 参见 `docs/next_dev_plan.md` 中的 Phase 1-4 计划。当前优先项：

@@ -539,10 +539,20 @@ def handle_request_entity_too_large(_exc):
     )
 
 
+@app.errorhandler(404)
+def handle_not_found(_exc):
+    return jsonify({"error": "路由不存在", "code": "not_found"}), 404
+
+
+@app.errorhandler(405)
+def handle_method_not_allowed(_exc):
+    return jsonify({"error": "HTTP 方法不允许", "code": "method_not_allowed"}), 405
+
+
 @app.errorhandler(Exception)
 def handle_unexpected_error(exc):
     if isinstance(exc, HTTPException):
-        return exc
+        return jsonify({"error": str(exc.description), "code": exc.name}), exc.code
     traceback.print_exc()
     return (
         jsonify(

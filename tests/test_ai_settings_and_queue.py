@@ -854,3 +854,51 @@ def test_v033_workflows_catalog_endpoint(tmp_path):
     finally:
         server._library = old_library
         server._REQUIRE_LOCAL_API_TOKEN = old_require
+
+
+# ---------------------------------------------------------------------------
+# v0.3.5 — JSON error handlers for 404/405
+# ---------------------------------------------------------------------------
+
+
+def test_v035_unknown_route_returns_json_404(tmp_path):
+    """v0.3.5: Unknown route returns JSON 404 instead of HTML."""
+    old_library = server._library
+    old_require = server._REQUIRE_LOCAL_API_TOKEN
+    try:
+        lib = _FakeGlobalMediaLibrary()
+        lib.db_path = tmp_path / "test_404.db"
+        server._library = lib
+        server._REQUIRE_LOCAL_API_TOKEN = False
+        client = server.app.test_client()
+
+        resp = client.get("/api/this_route_does_not_exist")
+        assert resp.status_code == 404
+        payload = resp.get_json()
+        assert payload is not None, "Expected JSON response, got HTML"
+        assert payload["code"] == "not_found"
+    finally:
+        server._library = old_library
+        server._REQUIRE_LOCAL_API_TOKEN = old_require
+
+
+def test_v035_wrong_method_returns_json_405(tmp_path):
+    """v0.3.5: Wrong HTTP method returns JSON 405 instead of HTML."""
+    old_library = server._library
+    old_require = server._REQUIRE_LOCAL_API_TOKEN
+    try:
+        lib = _FakeGlobalMediaLibrary()
+        lib.db_path = tmp_path / "test_405.db"
+        server._library = lib
+        server._REQUIRE_LOCAL_API_TOKEN = False
+        client = server.app.test_client()
+
+        # /api/status only accepts GET; sending DELETE should be 405
+        resp = client.delete("/api/status")
+        assert resp.status_code == 405
+        payload = resp.get_json()
+        assert payload is not None, "Expected JSON response, got HTML"
+        assert payload["code"] == "method_not_allowed"
+    finally:
+        server._library = old_library
+        server._REQUIRE_LOCAL_API_TOKEN = old_require
