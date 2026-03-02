@@ -1373,3 +1373,67 @@ def test_v0316_parse_str_param_usage_count():
         src = py_file.read_text()
         total += src.count("parse_str_param(")
     assert total >= 90, f"Expected ≥90 parse_str_param() calls, got {total}"
+
+
+# ── v0.3.17 tests ────────────────────────────────────────────────
+
+
+def test_v0317_no_print_in_api_layer():
+    """server.py and route files must not use print() for logging."""
+    import ast
+    # server.py
+    server_src = (ROOT / "modules" / "app_api" / "server.py").read_text()
+    tree = ast.parse(server_src)
+    prints = [
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "print"
+    ]
+    assert len(prints) == 0, f"server.py still has {len(prints)} print() calls"
+    # route files
+    routes_dir = ROOT / "modules" / "app_api" / "routes"
+    for py_file in routes_dir.glob("*.py"):
+        src = py_file.read_text()
+        tree = ast.parse(src)
+        prints = [
+            node for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "print"
+        ]
+        assert len(prints) == 0, f"{py_file.name} still has {len(prints)} print() calls"
+
+
+def test_v0317_no_print_in_render_modules():
+    """Render pipeline modules must use logging, not print()."""
+    import ast
+    render_files = [
+        "modules/step7_final_render/beauty.py",
+        "modules/step7_final_render/pipeline.py",
+        "modules/step7_final_render/auto_render.py",
+    ]
+    for rel in render_files:
+        src = (ROOT / rel).read_text()
+        tree = ast.parse(src)
+        prints = [
+            node for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "print"
+        ]
+        fname = Path(rel).name
+        assert len(prints) == 0, f"{fname} still has {len(prints)} print() calls"
+
+
+def test_v0317_no_traceback_print_exc_in_api():
+    """API layer must use logger.exception(), not traceback.print_exc()."""
+    api_files = [
+        "modules/app_api/server.py",
+        "modules/app_api/services/job_runtime.py",
+    ]
+    for rel in api_files:
+        src = (ROOT / rel).read_text()
+        assert "traceback.print_exc()" not in src, (
+            f"{Path(rel).name} still uses traceback.print_exc()"
+        )

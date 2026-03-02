@@ -7,8 +7,11 @@
 依赖（可选）：pip install mediapipe opencv-python numpy
 """
 
+import logging
 from pathlib import Path
 from typing import Optional, List, Tuple
+
+logger = logging.getLogger(__name__)
 
 try:
     import cv2
@@ -220,12 +223,12 @@ class AdvancedBeautyFilter:
                     out.write(self.process_video_frame(frame))
                     processed += 1
                     if processed % 30 == 0:
-                        print(f"  磨皮进度: {processed}/{total}", end="\r")
+                        logger.info("磨皮进度: %d/%d", processed, total)
             finally:
                 out.release()
         finally:
             cap.release()
-        print(f"\n  磨皮完成: {output_path}")
+        logger.info("磨皮完成: %s", output_path)
         return output_path
 
 

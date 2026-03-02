@@ -7,6 +7,7 @@
 """
 
 import json
+import logging
 import re
 import select
 import subprocess
@@ -15,6 +16,8 @@ import shutil
 import time
 from pathlib import Path
 from typing import List, Dict, Optional
+
+logger = logging.getLogger(__name__)
 
 try:
     import cv2
@@ -100,7 +103,7 @@ class RenderPipeline:
         final = self._mix_audio(sub_out, output_path, bgm_path, narration_path)
 
         self._cleanup()
-        print(f"\n🎉 渲染完成: {final}")
+        logger.info("渲染完成: %s", final)
         return final
 
     # ------------------------------------------------------------------
@@ -152,7 +155,7 @@ class RenderPipeline:
         for i, clip in enumerate(clips):
             video_path = self._resolve_material_path(clip, materials)
             if not video_path:
-                print(f"  ⚠️  片段 {i+1} 找不到素材路径，跳过")
+                logger.warning("片段 %d 找不到素材路径，跳过", i + 1)
                 continue
 
             ss = clip.get("source_start", 0) or 0
@@ -182,7 +185,7 @@ class RenderPipeline:
                 except Exception:
                     seg_durations.append(1.0)
             else:
-                print(f"  ⚠️  片段 {i+1} 编码失败: {r.stderr[-200:].decode(errors='replace')}")
+                logger.warning("片段 %d 编码失败: %s", i + 1, r.stderr[-200:].decode(errors="replace"))
 
         if not segs:
             raise RuntimeError("没有有效片段，无法拼接")
@@ -249,7 +252,7 @@ class RenderPipeline:
             return output
         except Exception:
             # Bug E 修复：捕获所有异常（不只是 ImportError），fallback 到 smartblur
-            print("  磨皮处理失败，使用简易磨皮（FFmpeg smartblur）")
+            logger.warning("磨皮处理失败，使用简易磨皮（FFmpeg smartblur）")
             return self._apply_beauty_fallback(input_path, base)
 
     def _apply_beauty_fallback(self, input_path: str, base: str) -> str:
@@ -343,7 +346,7 @@ class RenderPipeline:
         d = max(0.05, min(float(transition_duration), 1.5, min_clip * 0.45))
 
         if len(segs) > 24:
-            print("  ⚠️  片段过多，转场自动降级为硬切拼接")
+            logger.warning("片段过多，转场自动降级为硬切拼接")
             concat_file = str(self._temp_dir / "concat_xfade_fallback.txt")
             with open(concat_file, "w", encoding="utf-8") as f:
                 for s in segs:
@@ -440,10 +443,10 @@ class RenderPipeline:
 
         # PIL/cv2 fallback
         if HAS_CV2 and HAS_PIL:
-            print("  libass 不可用，使用 PIL+cv2 字幕渲染")
+            logger.info("libass 不可用，使用 PIL+cv2 字幕渲染")
             return self._apply_subtitles_cv2(input_path, subtitles, output)
 
-        print("  ⚠️  字幕渲染跳过（libass / cv2 均不可用）")
+        logger.warning("字幕渲染跳过（libass / cv2 均不可用）")
         return input_path
 
     def _apply_subtitles_cv2(
@@ -543,7 +546,7 @@ class RenderPipeline:
         ]
         r = subprocess.run(cmd, capture_output=True, timeout=600)
         if r.returncode != 0:
-            print(f"  ⚠️  字幕 re-encode 失败，使用无字幕版本")
+            logger.warning("字幕 re-encode 失败，使用无字幕版本")
             return input_path
         return output
 
@@ -763,7 +766,7 @@ class RenderPipeline:
         timeout_seconds: Optional[float] = None,
     ):
         """运行 FFmpeg 命令（支持进度回调、取消、超时 watchdog）。"""
-        print(f"  [{stage_name}] 处理中...")
+        logger.info("[%s] 处理中...", stage_name)
 
         if timeout_seconds is None:
             timeout_seconds = float(self.config.get("timeout_stage_sec", 900))

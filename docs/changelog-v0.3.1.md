@@ -480,6 +480,45 @@ macOS `open` 命令的 `Popen` 改为 `subprocess.run(timeout=5, check=False)`�
 
 回归验证：**167/167 测试通过，0 warnings**。
 
+## v0.3.17（2026-03-02）— print→logging + 资源泄漏修复
+
+### print() → logging 全面迁移
+
+将 API 层与渲染管道中的所有 `print()` 调用替换为 `logging.info/warning/error`，
+确保生产环境日志可控、可过滤、可旋转。
+
+| 文件 | 替换数 | 日志级别 |
+|------|--------|---------|
+| `server.py` | 3 处 | info（社媒导出进度） |
+| `beauty.py` | 2 处 | info（磨皮进度/完成） |
+| `pipeline.py` | 9 处 | info（渲染完成/阶段进度）、warning（编码失败/字幕降级/转场降级） |
+| `auto_render.py` | 19 处 | info（渲染/合并/片段进度）、warning（降级/失败/跳过）、error（渲染失败） |
+| 合计 | **33 处** | |
+
+### traceback.print_exc() → logger.exception()
+
+| 文件 | 替换数 | 说明 |
+|------|--------|------|
+| `server.py` | 1 处 | 未捕获异常 error handler |
+| `services/job_runtime.py` | 4 处 | ManagedJobLog/ManagedJob 回调 + persist 异常 |
+| 合计 | **5 处** | |
+
+### cv2 资源泄漏修复
+
+| 文件 | 修复内容 |
+|------|---------|
+| `library/global_media_library.py` | `_extract_keyframe_data_urls()` — `isOpened()` 失败时补 `cap.release()`；帧提取循环包裹 `try/finally` 防中间异常泄漏 |
+
+### 新增测试（+3）
+
+| 测试名 | 验证内容 |
+|--------|---------|
+| `test_v0317_no_print_in_api_layer` | AST 检查 server.py + 所有路由文件零 print() |
+| `test_v0317_no_print_in_render_modules` | AST 检查 beauty/pipeline/auto_render 零 print() |
+| `test_v0317_no_traceback_print_exc_in_api` | server.py + job_runtime.py 零 traceback.print_exc() |
+
+回归验证：**173/173 测试通过，0 warnings**。
+
 ## 下一步计划
 
 参见 `docs/next_dev_plan.md` 中的 Phase 1-4 计划。当前优先项：

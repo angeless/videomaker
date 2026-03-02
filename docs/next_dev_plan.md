@@ -118,6 +118,14 @@
 - 回归验证：167/167 测试通过，0 warnings。
 - 详见 `docs/changelog-v0.3.1.md`。
 
+### v0.3.17 print→logging + 资源泄漏修复（2026-03-02）
+- **print→logging 全面迁移**：API 层 `server.py`(3) + 渲染管道 `beauty.py`(2)/`pipeline.py`(9)/`auto_render.py`(19) 共 33 处 `print()` 替换为 `logging.info/warning/error`。
+- **traceback.print_exc→logger.exception**：`server.py`(1) + `job_runtime.py`(4) 共 5 处。
+- **cv2 资源泄漏修复**：`global_media_library.py` 的 `_extract_keyframe_data_urls()` 早期退出补 `cap.release()` + 循环包裹 `try/finally`。
+- 新增 3 个 AST 静态检查测试。
+- 回归验证：173/173 测试通过，0 warnings。
+- 详见 `docs/changelog-v0.3.1.md`。
+
 ## Phase 1（高优先，1-2 周）
 
 1. 真实发布引擎（替换模拟）

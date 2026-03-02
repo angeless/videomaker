@@ -493,6 +493,7 @@ class GlobalMediaLibrary:
         ratios = ratios or [0.12, 0.42, 0.75]
         cap = cv2.VideoCapture(str(path))
         if not cap.isOpened():
+            cap.release()
             return []
         total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
         frame_indexes = []
@@ -514,17 +515,19 @@ class GlobalMediaLibrary:
             dedup_indexes.append(idx)
 
         out: List[str] = []
-        for frame_idx in dedup_indexes:
-            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
-            ok, frame = cap.read()
-            if not ok or frame is None:
-                continue
-            ok, encoded = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), jpeg_quality])
-            if not ok:
-                continue
-            b64 = base64.b64encode(encoded.tobytes()).decode("ascii")
-            out.append(f"data:image/jpeg;base64,{b64}")
-        cap.release()
+        try:
+            for frame_idx in dedup_indexes:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+                ok, frame = cap.read()
+                if not ok or frame is None:
+                    continue
+                ok, encoded = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), jpeg_quality])
+                if not ok:
+                    continue
+                b64 = base64.b64encode(encoded.tobytes()).decode("ascii")
+                out.append(f"data:image/jpeg;base64,{b64}")
+        finally:
+            cap.release()
         return out
 
     @staticmethod

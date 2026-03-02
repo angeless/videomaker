@@ -102,6 +102,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
 import subprocess
+import logging
 import traceback
 import time
 from datetime import datetime
@@ -141,6 +142,8 @@ from modules.app_api.routes.workflow_routes import create_workflow_blueprint
 from modules.workflow_engine.workflow import WorkflowState, WorkflowRunner
 from modules.library.global_media_library import GlobalMediaLibrary
 from modules.step2_topic_planning.ai_client import AIClient
+
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__, static_folder=None)
 app.config["JSON_AS_ASCII"] = False
@@ -553,7 +556,7 @@ def handle_method_not_allowed(_exc):
 def handle_unexpected_error(exc):
     if isinstance(exc, HTTPException):
         return jsonify({"error": str(exc.description), "code": exc.name}), exc.code
-    traceback.print_exc()
+    logger.exception("未捕获异常: %s", exc)
     return (
         jsonify(
             {
@@ -4051,9 +4054,9 @@ def _build_social_export_runner(
             strict_duration_limit=bool(strict_duration_limit),
             profile_overrides=profile_overrides,
         )
-        print(f"[社媒导出] 总任务 {len(plan.get('jobs', []))}，输出目录: {out_dir}")
+        logger.info("[社媒导出] 总任务 %d，输出目录: %s", len(plan.get("jobs", [])), out_dir)
         for i, job in enumerate(plan.get("jobs", []), start=1):
-            print(f"[社媒导出] {i}/{len(plan['jobs'])} {job.get('platform_id')} -> {job.get('output_video')}")
+            logger.info("[社媒导出] %d/%d %s -> %s", i, len(plan["jobs"]), job.get("platform_id"), job.get("output_video"))
         try:
             result = run_export_plan(plan, timeout_seconds=timeout_seconds)
         except Exception as exc:
@@ -4101,7 +4104,7 @@ def _build_social_export_runner(
         }
         if persist_history and input_mode == "project":
             _append_social_export_history(record)
-        print(f"[社媒导出] 完成，成功 {result.get('success', 0)}，失败 {result.get('failed', 0)}")
+        logger.info("[社媒导出] 完成，成功 %d，失败 %d", result.get("success", 0), result.get("failed", 0))
         return {"plan": plan, "result": result, "batch": record}
 
     return _do_export

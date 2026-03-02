@@ -6,6 +6,7 @@ FFmpeg 本地渲染：磨皮、调色、字幕压制、BGM 混合
 """
 
 import json
+import logging
 import subprocess
 import argparse
 from pathlib import Path
@@ -13,6 +14,8 @@ from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
 import tempfile
 import shutil
+
+logger = logging.getLogger(__name__)
 
 try:
     from render.beauty import AdvancedBeautyFilter
@@ -70,7 +73,7 @@ class FFmpegRenderer:
         )
         has_it = " subtitles " in result.stdout or "\tsubtitles " in result.stdout
         if not has_it:
-            print("  ℹ️  FFmpeg 未编译 libass，字幕将跳过（安装：brew install libass && brew reinstall ffmpeg）")
+            logger.info("FFmpeg 未编译 libass，字幕将跳过（安装：brew install libass && brew reinstall ffmpeg）")
         return has_it
         
     def _find_ffmpeg(self) -> str:
@@ -242,16 +245,16 @@ class FFmpegRenderer:
         cmd.append(str(output_path))
         
         # 执行渲染
-        print(f"🎬 渲染: {output_path.name}")
-        print(f"   滤镜: {video_filter[:80]}...")
+        logger.info("渲染: %s", output_path.name)
+        logger.info("滤镜: %s...", video_filter[:80])
         
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
 
         if result.returncode != 0:
-            print(f"❌ 渲染失败: {result.stderr}")
+            logger.error("渲染失败: %s", result.stderr)
             raise RuntimeError(f"FFmpeg 渲染失败: {result.stderr[:500]}")
         
-        print(f"✅ 完成: {output_path}")
+        logger.info("完成: %s", output_path)
         return str(output_path)
     
     def _build_audio_mix_cmd(
@@ -352,13 +355,13 @@ class FFmpegRenderer:
                 output_video
             ]
 
-            print(f"🎬 合并 {len(video_list)} 个视频片段...")
+            logger.info("合并 %d 个视频片段...", len(video_list))
             result = subprocess.run(cmd, capture_output=True, text=True)
             
             if result.returncode != 0:
                 raise RuntimeError(f"合并失败: {result.stderr}")
             
-            print(f"✅ 合并完成: {output_video}")
+            logger.info("合并完成: %s", output_video)
             return output_video
             
         finally:
@@ -394,12 +397,12 @@ class VideoPipeline:
         segment_files = []
         
         for i, clip in enumerate(script.get("clips", [])):
-            print(f"\n📽️  处理片段 {i+1}/{len(script['clips'])}")
+            logger.info("处理片段 %d/%d", i + 1, len(script["clips"]))
             
             # 查找素材
             video_path = self._find_video_path(clip, materials)
             if not video_path:
-                print(f"⚠️  跳过片段 {i+1}: 未找到素材")
+                logger.warning("跳过片段 %d: 未找到素材", i + 1)
                 continue
             
             # 准备字幕
@@ -447,9 +450,9 @@ class VideoPipeline:
                                  "-c:v", "copy", "-c:a", "copy",
                                  beauty_output]
                     subprocess.run(merge_cmd, capture_output=True, check=True, timeout=300)
-                    print(f"   磨皮: 频率分解（高级）")
+                    logger.info("磨皮: 频率分解（高级）")
                 except Exception as e:
-                    print(f"   磨皮: 降级到 smartblur ({e})")
+                    logger.warning("磨皮: 降级到 smartblur (%s)", e)
                     beauty_output = None
 
             render_input = beauty_output or video_path
@@ -488,24 +491,24 @@ class VideoPipeline:
 
         # PIL 字幕烧录（libass 不可用时的 fallback）
         if need_sub_post:
-            print("\n🖋  PIL 字幕烧录（libass 不可用，使用 Python 实现）")
+            logger.info("PIL 字幕烧录（libass 不可用，使用 Python 实现）")
             self._burn_subtitles_python(concat_output, subtitles, output_path)
 
         # BGM 混合（全视频，在字幕处理后统一叠加）
         bgm_path = (script.get("bgm") or {}).get("path")
         if bgm_path and Path(bgm_path).exists():
-            print("\n🎵 BGM 混合（完整视频）...")
+            logger.info("BGM 混合（完整视频）...")
             bgm_tmp = str(self.temp_dir / "final_bgm.mp4")
             self._mix_bgm(output_path, bgm_path, bgm_tmp)
             shutil.copy(bgm_tmp, output_path)
-            print("   BGM 混合完成")
+            logger.info("BGM 混合完成")
         elif bgm_path:
-            print(f"⚠️  BGM 文件不存在，跳过: {bgm_path}")
+            logger.warning("BGM 文件不存在，跳过: %s", bgm_path)
 
         # 清理临时文件
         self._cleanup()
 
-        print(f"\n🎉 渲染完成: {output_path}")
+        logger.info("渲染完成: %s", output_path)
         return output_path
 
     def _burn_subtitles_python(
@@ -526,7 +529,7 @@ class VideoPipeline:
             import numpy as _np
             from PIL import Image as _Image, ImageDraw, ImageFont as _Font
         except ImportError as e:
-            print(f"  ⚠️  PIL/cv2 不可用，跳过字幕: {e}")
+            logger.warning("PIL/cv2 不可用，跳过字幕: %s", e)
             shutil.copy(video_path, output_path)
             return output_path
 
@@ -613,7 +616,7 @@ class VideoPipeline:
             cap.release()
 
         # 合并原始音频轨道
-        print(f"   字幕烧录完成，合并音频...")
+        logger.info("字幕烧录完成，合并音频...")
         cmd = [
             self.renderer.ffmpeg_path, "-y",
             "-i", video_only,
@@ -625,7 +628,7 @@ class VideoPipeline:
         ]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
         if result.returncode != 0:
-            print(f"  ⚠️  音频合并失败，使用无声版: {result.stderr[:200]}")
+            logger.warning("音频合并失败，使用无声版: %s", result.stderr[:200])
             shutil.copy(video_only, output_path)
 
         return output_path
@@ -668,7 +671,7 @@ class VideoPipeline:
 
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
         if result.returncode != 0:
-            print(f"  ⚠️  BGM 混合失败，保留原音频: {result.stderr[:200]}")
+            logger.warning("BGM 混合失败，保留原音频: %s", result.stderr[:200])
             shutil.copy(video_path, output_path)
         return output_path
 
