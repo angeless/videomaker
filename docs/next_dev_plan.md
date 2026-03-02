@@ -57,6 +57,13 @@
 - 回归验证：146/146 测试通过，0 warnings。
 - 详见 `docs/changelog-v0.3.1.md`。
 
+### v0.3.9 进程管理 + 临时目录清理（2026-03-02）
+- **Popen→subprocess.run**：`workflow.py`(3处) + `legacy_project_routes.py`(2处) 消除僵尸进程风险。
+- **临时目录 try/finally**：`workflow.py:_run_render()` 渲染异常时保证清理。
+- **裸 except 修复第三批**：`jianying_draft.py`(1处)。
+- 回归验证：146/146 测试通过，0 warnings。
+- 详见 `docs/changelog-v0.3.1.md`。
+
 ## Phase 1（高优先，1-2 周）
 
 1. 真实发布引擎（替换模拟）

@@ -327,9 +327,9 @@ def create_legacy_project_blueprint(
         if path and Path(path).exists():
             p = Path(path)
             if p.is_file():
-                subprocess.Popen(["open", "-R", str(p)])
+                subprocess.run(["open", "-R", str(p)], timeout=5, check=False)
             else:
-                subprocess.Popen(["open", str(p)])
+                subprocess.run(["open", str(p)], timeout=5, check=False)
         return jsonify({"ok": True})
 
     @bp.route("/api/dialog/folder", methods=["POST"])

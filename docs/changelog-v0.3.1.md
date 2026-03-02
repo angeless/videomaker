@@ -197,6 +197,27 @@ max_frames = max(total_frames * 2, int(fps * 600))
 
 回归验证：**146/146 测试通过，0 warnings**。
 
+## v0.3.9 进程管理 + 临时目录清理（2026-03-02）
+
+### Popen 替换为 subprocess.run
+
+macOS `open` 命令的 `Popen` 改为 `subprocess.run(timeout=5, check=False)`，消除潜在的僵尸进程。
+
+| 文件 | 位置数 |
+|------|--------|
+| `workflow.py` | 3 处（帧预览/粗剪/最终视频） |
+| `legacy_project_routes.py` | 2 处（Finder 打开文件/目录） |
+
+### 临时目录清理保护
+
+`workflow.py:_run_render()` 的 `shutil.rmtree(tmp)` 包裹 `try/finally`，确保渲染异常时临时文件也被清理。
+
+### 裸 except 修复（第三批）
+
+`jianying_draft.py` L435: `except:` → `except (TypeError, ValueError):`
+
+回归验证：**146/146 测试通过，0 warnings**。
+
 ## 下一步计划
 
 参见 `docs/next_dev_plan.md` 中的 Phase 1-4 计划。当前优先项：

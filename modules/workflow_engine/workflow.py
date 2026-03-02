@@ -1141,7 +1141,7 @@ notes: ""
         extracted = int(result.get("extracted", 0))
 
         if sys.platform == "darwin" and frames_dir.exists():
-            subprocess.Popen(["open", str(frames_dir)])
+            subprocess.run(["open", str(frames_dir)], timeout=5, check=False)
 
         self.state.set_step_status(
             5, "done",
@@ -1184,7 +1184,7 @@ notes: ""
         )
 
         if sys.platform == "darwin":
-            subprocess.Popen(["open", str(rough_path)])
+            subprocess.run(["open", str(rough_path)], timeout=5, check=False)
 
         self._write_review_05()
         self.state.set_step_status(
@@ -1497,14 +1497,16 @@ timeout_audio_sec: {rc.get('timeout_audio_sec', 480)}
         final = str(out_dir / "final.mp4")
         pipeline = VideoPipeline(config)
         self._check_cancel()
-        pipeline.render_from_script(str(tmp_script), str(tmp_mat), final)
-        shutil.rmtree(tmp, ignore_errors=True)
+        try:
+            pipeline.render_from_script(str(tmp_script), str(tmp_mat), final)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
         self._finish_render(out_dir)
 
     def _finish_render(self, out_dir: Path):
         final = out_dir / "final.mp4"
         if sys.platform == "darwin" and final.exists():
-            subprocess.Popen(["open", str(final)])
+            subprocess.run(["open", str(final)], timeout=5, check=False)
 
         self.state.set_step_status(
             7, "done",
