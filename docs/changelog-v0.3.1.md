@@ -39,6 +39,25 @@ max_frames = max(total_frames * 2, int(fps * 600))
 - serene-shamir 分支的 v0.3.0 含有架构差异（回退了模块化路由拆分），不适合直接合并
 - 本次仅移植了 v0.3.1 中 main 尚未覆盖的改进（P0.4）
 
+## v0.3.2 安全测试补充（2026-03-01）
+
+新增 3 个安全边界测试，验证现有安全守卫的完备性：
+
+| 编号 | 测试 | 涉及文件 | 结论 |
+|------|------|---------|------|
+| S1 | 伪造/空 CSRF token 被拒绝（403） | `tests/test_ai_settings_and_queue.py` | **守卫完备** |
+| S2 | 不存在的 job_id 返回 404 | `tests/test_ai_settings_and_queue.py` | **守卫完备** |
+| S3 | POST 缺失/错误 API token 被拒绝（401） | `tests/test_ai_settings_and_queue.py` | **守卫完备** |
+
+**详细覆盖**：
+- S1：伪造 CSRF → 403 `csrf_required`；空 CSRF → 403 `csrf_required`；正确 CSRF → 200
+- S2：GET `/api/job/<不存在>` → 404；POST `/api/job/<不存在>/cancel` → 404
+- S3：POST 无 token → 401 `local_auth_required`；错误 token → 401；GET 无 token → 401；正确 token+CSRF → 200
+
+**结论**：`server.py` 的 `_guard_local_api_token()` 和 `job_routes.py` 的参数验证已正确覆盖所有边界情况，无需修补代码。
+
+回归验证：**139/139 测试通过**。
+
 ## 下一步计划
 
 参见 `docs/next_dev_plan.md` 中的 Phase 1-4 计划。当前优先项：

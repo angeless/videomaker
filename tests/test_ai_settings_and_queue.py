@@ -557,3 +557,157 @@ def test_job_store_uses_schema_migrations(tmp_path):
     finally:
         server._library = old_library
         server._reset_job_store_for_tests()
+
+
+# ---------------------------------------------------------------------------
+# S1-S3: Security guard edge-case tests (v0.3.2)
+# ---------------------------------------------------------------------------
+
+
+def test_security_s1_forged_csrf_token_rejected(tmp_path):
+    """S1: A POST with a wrong/forged CSRF token must be rejected with 403."""
+    old_library = server._library
+    old_require = server._REQUIRE_LOCAL_API_TOKEN
+    old_token = server._LOCAL_API_TOKEN
+    old_csrf = server._LOCAL_CSRF_TOKEN
+    old_require_csrf = server._REQUIRE_CSRF_PROTECTION
+    try:
+        lib = _FakeGlobalMediaLibrary()
+        lib.db_path = tmp_path / "test_s1_csrf.db"
+        server._library = lib
+        server._REQUIRE_LOCAL_API_TOKEN = True
+        server._LOCAL_API_TOKEN = "s1_token"
+        server._LOCAL_CSRF_TOKEN = "s1_real_csrf"
+        server._REQUIRE_CSRF_PROTECTION = True
+        client = server.app.test_client()
+
+        # Forged CSRF token — must be 403
+        forged = client.post(
+            "/api/settings/ui",
+            json={"font_scale": 1.0},
+            headers={
+                "X-VideoEditor-Token": "s1_token",
+                "X-VideoEditor-CSRF": "forged_csrf_value",
+                "Origin": "http://127.0.0.1:9527",
+            },
+        )
+        assert forged.status_code == 403
+        assert forged.get_json()["code"] == "csrf_required"
+
+        # Empty CSRF token — must also be 403
+        empty_csrf = client.post(
+            "/api/settings/ui",
+            json={"font_scale": 1.0},
+            headers={
+                "X-VideoEditor-Token": "s1_token",
+                "X-VideoEditor-CSRF": "",
+                "Origin": "http://127.0.0.1:9527",
+            },
+        )
+        assert empty_csrf.status_code == 403
+        assert empty_csrf.get_json()["code"] == "csrf_required"
+
+        # Correct CSRF token — must succeed
+        ok = client.post(
+            "/api/settings/ui",
+            json={"font_scale": 1.01},
+            headers={
+                "X-VideoEditor-Token": "s1_token",
+                "X-VideoEditor-CSRF": "s1_real_csrf",
+                "Origin": "http://127.0.0.1:9527",
+            },
+        )
+        assert ok.status_code == 200
+    finally:
+        server._library = old_library
+        server._REQUIRE_LOCAL_API_TOKEN = old_require
+        server._LOCAL_API_TOKEN = old_token
+        server._LOCAL_CSRF_TOKEN = old_csrf
+        server._REQUIRE_CSRF_PROTECTION = old_require_csrf
+
+
+def test_security_s2_nonexistent_job_id_returns_404(tmp_path):
+    """S2: GET/POST to /api/job/<invalid_id> must return 404."""
+    old_library = server._library
+    try:
+        lib = _FakeGlobalMediaLibrary()
+        lib.db_path = tmp_path / "test_s2_job.db"
+        server._library = lib
+        client = server.app.test_client()
+
+        # Non-existent job — GET must return 404
+        resp = client.get("/api/job/nonexistent_job_id_12345")
+        assert resp.status_code == 404
+        assert "不存在" in resp.get_json().get("error", "")
+
+        # Non-existent job — cancel must return 404
+        cancel = client.post("/api/job/nonexistent_job_id_12345/cancel")
+        assert cancel.status_code == 404
+        assert "不存在" in cancel.get_json().get("error", "")
+    finally:
+        server._library = old_library
+
+
+def test_security_s3_post_without_token_rejected(tmp_path):
+    """S3: POST without X-VideoEditor-Token must be rejected when token is required."""
+    old_library = server._library
+    old_require = server._REQUIRE_LOCAL_API_TOKEN
+    old_token = server._LOCAL_API_TOKEN
+    old_csrf = server._LOCAL_CSRF_TOKEN
+    old_require_csrf = server._REQUIRE_CSRF_PROTECTION
+    try:
+        lib = _FakeGlobalMediaLibrary()
+        lib.db_path = tmp_path / "test_s3_token.db"
+        server._library = lib
+        server._REQUIRE_LOCAL_API_TOKEN = True
+        server._LOCAL_API_TOKEN = "s3_real_token"
+        server._LOCAL_CSRF_TOKEN = "s3_csrf"
+        server._REQUIRE_CSRF_PROTECTION = True
+        client = server.app.test_client()
+
+        # POST with valid CSRF but NO API token — must be 401
+        no_token = client.post(
+            "/api/settings/ui",
+            json={"font_scale": 1.0},
+            headers={
+                "X-VideoEditor-CSRF": "s3_csrf",
+                "Origin": "http://127.0.0.1:9527",
+            },
+        )
+        assert no_token.status_code == 401
+        assert no_token.get_json()["code"] == "local_auth_required"
+
+        # POST with wrong API token — must be 401
+        wrong_token = client.post(
+            "/api/settings/ui",
+            json={"font_scale": 1.0},
+            headers={
+                "X-VideoEditor-Token": "wrong_token_value",
+                "X-VideoEditor-CSRF": "s3_csrf",
+                "Origin": "http://127.0.0.1:9527",
+            },
+        )
+        assert wrong_token.status_code == 401
+        assert wrong_token.get_json()["code"] == "local_auth_required"
+
+        # GET without API token — must be 401
+        no_token_get = client.get("/api/status")
+        assert no_token_get.status_code == 401
+
+        # POST with correct token + CSRF — must succeed
+        ok = client.post(
+            "/api/settings/ui",
+            json={"font_scale": 1.05},
+            headers={
+                "X-VideoEditor-Token": "s3_real_token",
+                "X-VideoEditor-CSRF": "s3_csrf",
+                "Origin": "http://127.0.0.1:9527",
+            },
+        )
+        assert ok.status_code == 200
+    finally:
+        server._library = old_library
+        server._REQUIRE_LOCAL_API_TOKEN = old_require
+        server._LOCAL_API_TOKEN = old_token
+        server._LOCAL_CSRF_TOKEN = old_csrf
+        server._REQUIRE_CSRF_PROTECTION = old_require_csrf
