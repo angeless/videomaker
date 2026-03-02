@@ -199,29 +199,32 @@ class AdvancedBeautyFilter:
             输出视频路径
         """
         cap = cv2.VideoCapture(input_path)
-        fps = cap.get(cv2.CAP_PROP_FPS) or 30
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        try:
+            fps = cap.get(cv2.CAP_PROP_FPS) or 30
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
 
-        # P0.4: 安全上限防止损坏视频导致无限循环
-        max_frames = max(total * 2, int(fps * 600)) if total > 0 else int(fps * 600)
-        processed = 0
-        while processed < max_frames:
-            ret, frame = cap.read()
-            if not ret:
-                break
-            out.write(self.process_video_frame(frame))
-            processed += 1
-            if processed % 30 == 0:
-                print(f"  磨皮进度: {processed}/{total}", end="\r")
-
-        cap.release()
-        out.release()
+            try:
+                # P0.4: 安全上限防止损坏视频导致无限循环
+                max_frames = max(total * 2, int(fps * 600)) if total > 0 else int(fps * 600)
+                processed = 0
+                while processed < max_frames:
+                    ret, frame = cap.read()
+                    if not ret:
+                        break
+                    out.write(self.process_video_frame(frame))
+                    processed += 1
+                    if processed % 30 == 0:
+                        print(f"  磨皮进度: {processed}/{total}", end="\r")
+            finally:
+                out.release()
+        finally:
+            cap.release()
         print(f"\n  磨皮完成: {output_path}")
         return output_path
 

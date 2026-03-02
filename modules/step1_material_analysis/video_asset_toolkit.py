@@ -68,7 +68,7 @@ class VideoAssetToolkit:
                 with open(config_path, 'r', encoding='utf-8') as f:
                     user_config = json.load(f)
                 default_config.update(user_config)
-            except:
+            except Exception:
                 print(f"警告: 无法读取配置文件 {config_path}, 使用默认配置")
                 
         return default_config
@@ -109,7 +109,7 @@ class VideoAssetToolkit:
             stat = video_path.stat()
             hash_input = f"{video_path.name}_{stat.st_size}_{stat.st_mtime}"
             return hashlib.md5(hash_input.encode()).hexdigest()[:12]
-        except:
+        except Exception:
             return hashlib.md5(video_path.name.encode()).hexdigest()[:12]
     
     def analyze_single_video(self, video_path):
@@ -240,7 +240,7 @@ class VideoAssetToolkit:
                     bitrate_score = 0.50
                 else:
                     bitrate_score = 0.30
-            except:
+            except (TypeError, ValueError):
                 bitrate_score = 0.50
                 
             overall_quality = (resolution_score + bitrate_score) / 2
@@ -295,6 +295,7 @@ class VideoAssetToolkit:
 
         cap = cv2.VideoCapture(str(video_path))
         if not cap.isOpened():
+            cap.release()
             self._visual_stats_cache[key] = default_stats
             return default_stats
 

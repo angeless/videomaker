@@ -44,6 +44,13 @@
 - 回归验证：146/146 测试通过，0 warnings。
 - 详见 `docs/changelog-v0.3.1.md`。
 
+### v0.3.7 资源泄漏防护 + 错误处理增强（2026-03-02）
+- **cv2 资源异常安全**：`beauty.py`/`pipeline.py`/`auto_render.py`/`video_asset_toolkit.py` 的 VideoCapture/Writer 全部加 `try/finally` 防护。
+- **裸 except 修复**：`video_asset_toolkit.py` 3 处 `except:` 改为具体异常类型。
+- **静默异常日志化**：`job_runtime.py` 3 处 `except: pass` 改为 `traceback.print_exc()`。
+- 回归验证：146/146 测试通过，0 warnings。
+- 详见 `docs/changelog-v0.3.1.md`。
+
 ## Phase 1（高优先，1-2 周）
 
 1. 真实发布引擎（替换模拟）

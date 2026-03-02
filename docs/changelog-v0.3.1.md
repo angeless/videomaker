@@ -143,6 +143,37 @@ max_frames = max(total_frames * 2, int(fps * 600))
 
 **验证**：`pytest -q -W all` → **146 passed, 0 warnings**（修复前有多个 ResourceWarning）。
 
+## v0.3.7 资源泄漏防护 + 错误处理增强（2026-03-02）
+
+### cv2.VideoCapture/VideoWriter 异常安全
+
+视频处理函数的 `cap.release()` / `writer.release()` 全部包裹 `try/finally`，防止中间异常导致文件描述符泄漏。
+
+| 文件 | 修复内容 |
+|------|---------|
+| `modules/step7_final_render/beauty.py` | `process_video()` 加 `try/finally` 嵌套释放 cap+out |
+| `modules/step7_final_render/pipeline.py` | `_apply_subtitles_cv2()` 加 `try/finally`，移除取消路径的冗余 release |
+| `modules/step7_final_render/auto_render.py` | `_burn_subtitles_python()` 加 `try/finally` 嵌套释放 cap+writer |
+| `modules/step1_material_analysis/video_asset_toolkit.py` | `isOpened()` 失败早期退出前补 `cap.release()` |
+
+### 裸 except 子句修复
+
+| 文件 | 行 | 修复 |
+|------|-----|------|
+| `video_asset_toolkit.py` L71 | `except:` → `except Exception:` | 配置解析失败 |
+| `video_asset_toolkit.py` L112 | `except:` → `except Exception:` | 哈希生成降级 |
+| `video_asset_toolkit.py` L243 | `except:` → `except (TypeError, ValueError):` | 码率解析 |
+
+### 静默异常改为日志输出
+
+| 文件 | 位置 | 修复 |
+|------|------|------|
+| `job_runtime.py` L24 | `ManagedJobLog._notify()` | `pass` → `traceback.print_exc()` |
+| `job_runtime.py` L91 | `ManagedJob._notify()` | `pass` → `traceback.print_exc()` |
+| `job_runtime.py` L143 | `_persist()` | `pass` → `traceback.print_exc()` |
+
+回归验证：**146/146 测试通过，0 warnings**。
+
 ## 下一步计划
 
 参见 `docs/next_dev_plan.md` 中的 Phase 1-4 计划。当前优先项：

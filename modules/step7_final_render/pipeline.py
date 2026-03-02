@@ -466,69 +466,70 @@ class RenderPipeline:
             font_en = _Font.load_default()
 
         cap = _cv2.VideoCapture(input_path)
-        fps = cap.get(_cv2.CAP_PROP_FPS) or 30.0
-        w = int(cap.get(_cv2.CAP_PROP_FRAME_WIDTH))
-        h = int(cap.get(_cv2.CAP_PROP_FRAME_HEIGHT))
-        total_frames = int(cap.get(_cv2.CAP_PROP_FRAME_COUNT) or 0)
+        try:
+            fps = cap.get(_cv2.CAP_PROP_FPS) or 30.0
+            w = int(cap.get(_cv2.CAP_PROP_FRAME_WIDTH))
+            h = int(cap.get(_cv2.CAP_PROP_FRAME_HEIGHT))
+            total_frames = int(cap.get(_cv2.CAP_PROP_FRAME_COUNT) or 0)
 
-        tmp_vid = str(self._temp_dir / "sub_nofont.mp4")
-        out_writer = _cv2.VideoWriter(
-            tmp_vid, _cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h)
-        )
-
-        # P0.4: 安全上限防止损坏视频导致无限循环
-        max_frames = max(total_frames * 2, int(fps * 600)) if total_frames > 0 else int(fps * 600)
-        frame_idx = 0
-        while frame_idx < max_frames:
-            if callable(self._should_cancel):
-                try:
-                    if bool(self._should_cancel()):
-                        cap.release()
-                        out_writer.release()
-                        raise RuntimeError("__CANCELLED__")
-                except RuntimeError:
-                    raise
-                except Exception:
-                    pass
-            ret, frame = cap.read()
-            if not ret:
-                break
-            t = frame_idx / fps
-            active = next(
-                ((s.get("cn_text", ""), s.get("en_text", ""))
-                 for s in subtitles
-                 if s.get("start_time", 0) <= t <= s.get("end_time", 0)),
-                None,
+            tmp_vid = str(self._temp_dir / "sub_nofont.mp4")
+            out_writer = _cv2.VideoWriter(
+                tmp_vid, _cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h)
             )
-            if active:
-                cn_text, en_text = active
-                pil = _Image.fromarray(_cv2.cvtColor(frame, _cv2.COLOR_BGR2RGB))
-                draw = _Draw.Draw(pil)
-                # Chinese line
-                bbox = draw.textbbox((0, 0), cn_text, font=font_cn)
-                cx = (w - (bbox[2] - bbox[0])) // 2
-                cy = h - 200
-                draw.text((cx + 2, cy + 2), cn_text, font=font_cn, fill=(0, 0, 0, 180))
-                draw.text((cx, cy), cn_text, font=font_cn, fill=(255, 255, 255))
-                # English line
-                if en_text:
-                    ebbox = draw.textbbox((0, 0), en_text, font=font_en)
-                    ex = (w - (ebbox[2] - ebbox[0])) // 2
-                    ey = cy + font_size_cn + 8
-                    draw.text((ex + 1, ey + 1), en_text, font=font_en, fill=(0, 0, 0, 150))
-                    draw.text((ex, ey), en_text, font=font_en, fill=(255, 255, 255, 220))
-                frame = _cv2.cvtColor(_np.array(pil), _cv2.COLOR_RGB2BGR)
-            out_writer.write(frame)
-            frame_idx += 1
-            if callable(self._on_progress) and total_frames > 0 and frame_idx % max(total_frames // 20, 1) == 0:
-                pct = int(max(1, min((frame_idx / total_frames) * 100, 99)))
-                try:
-                    self._on_progress("字幕压制", pct, f"{frame_idx}/{total_frames} frames")
-                except Exception:
-                    pass
 
-        cap.release()
-        out_writer.release()
+            try:
+                # P0.4: 安全上限防止损坏视频导致无限循环
+                max_frames = max(total_frames * 2, int(fps * 600)) if total_frames > 0 else int(fps * 600)
+                frame_idx = 0
+                while frame_idx < max_frames:
+                    if callable(self._should_cancel):
+                        try:
+                            if bool(self._should_cancel()):
+                                raise RuntimeError("__CANCELLED__")
+                        except RuntimeError:
+                            raise
+                        except Exception:
+                            pass
+                    ret, frame = cap.read()
+                    if not ret:
+                        break
+                    t = frame_idx / fps
+                    active = next(
+                        ((s.get("cn_text", ""), s.get("en_text", ""))
+                         for s in subtitles
+                         if s.get("start_time", 0) <= t <= s.get("end_time", 0)),
+                        None,
+                    )
+                    if active:
+                        cn_text, en_text = active
+                        pil = _Image.fromarray(_cv2.cvtColor(frame, _cv2.COLOR_BGR2RGB))
+                        draw = _Draw.Draw(pil)
+                        # Chinese line
+                        bbox = draw.textbbox((0, 0), cn_text, font=font_cn)
+                        cx = (w - (bbox[2] - bbox[0])) // 2
+                        cy = h - 200
+                        draw.text((cx + 2, cy + 2), cn_text, font=font_cn, fill=(0, 0, 0, 180))
+                        draw.text((cx, cy), cn_text, font=font_cn, fill=(255, 255, 255))
+                        # English line
+                        if en_text:
+                            ebbox = draw.textbbox((0, 0), en_text, font=font_en)
+                            ex = (w - (ebbox[2] - ebbox[0])) // 2
+                            ey = cy + font_size_cn + 8
+                            draw.text((ex + 1, ey + 1), en_text, font=font_en, fill=(0, 0, 0, 150))
+                            draw.text((ex, ey), en_text, font=font_en, fill=(255, 255, 255, 220))
+                        frame = _cv2.cvtColor(_np.array(pil), _cv2.COLOR_RGB2BGR)
+                    out_writer.write(frame)
+                    frame_idx += 1
+                    if callable(self._on_progress) and total_frames > 0 and frame_idx % max(total_frames // 20, 1) == 0:
+                        pct = int(max(1, min((frame_idx / total_frames) * 100, 99)))
+                        try:
+                            self._on_progress("字幕压制", pct, f"{frame_idx}/{total_frames} frames")
+                        except Exception:
+                            pass
+            finally:
+                out_writer.release()
+        finally:
+            cap.release()
 
         # Re-encode with H264 and copy audio from original
         cmd = [

@@ -22,7 +22,7 @@ class ManagedJobLog(list):
             try:
                 self._on_change()
             except Exception:
-                pass
+                traceback.print_exc()
 
     def append(self, item):
         super().append(str(item))
@@ -89,7 +89,7 @@ class ManagedJob(dict):
             try:
                 self._on_change()
             except Exception:
-                pass
+                traceback.print_exc()
 
     def __setitem__(self, key, value):
         dict.__setitem__(self, key, self._wrap(str(key), value))
@@ -141,7 +141,7 @@ class JobRuntime:
         try:
             self._persist_snapshot(str(job_id or ""), str(event_type or ""))
         except Exception:
-            pass
+            traceback.print_exc()
 
     def make_managed_job(self, job_id: str, payload: Dict[str, Any]) -> ManagedJob:
         base = dict(payload or {})

@@ -546,68 +546,71 @@ class VideoPipeline:
             cn_font = en_font = _Font.load_default()
 
         cap = _cv2.VideoCapture(video_path)
-        fps = cap.get(_cv2.CAP_PROP_FPS) or 30
-        w = int(cap.get(_cv2.CAP_PROP_FRAME_WIDTH))
-        h = int(cap.get(_cv2.CAP_PROP_FRAME_HEIGHT))
-        total = int(cap.get(_cv2.CAP_PROP_FRAME_COUNT))
+        try:
+            fps = cap.get(_cv2.CAP_PROP_FPS) or 30
+            w = int(cap.get(_cv2.CAP_PROP_FRAME_WIDTH))
+            h = int(cap.get(_cv2.CAP_PROP_FRAME_HEIGHT))
+            total = int(cap.get(_cv2.CAP_PROP_FRAME_COUNT))
 
-        # 先写无音频的视频
-        video_only = str(self.temp_dir / "sub_vid_only.mp4")
-        fourcc = _cv2.VideoWriter_fourcc(*'mp4v')
-        writer = _cv2.VideoWriter(video_only, fourcc, fps, (w, h))
+            # 先写无音频的视频
+            video_only = str(self.temp_dir / "sub_vid_only.mp4")
+            fourcc = _cv2.VideoWriter_fourcc(*'mp4v')
+            writer = _cv2.VideoWriter(video_only, fourcc, fps, (w, h))
 
-        # P0.4: 安全上限防止损坏视频导致无限循环
-        max_frames = max(total * 2, int(fps * 600)) if total > 0 else int(fps * 600)
-        frame_idx = 0
-        while frame_idx < max_frames:
-            ret, frame = cap.read()
-            if not ret:
-                break
+            try:
+                # P0.4: 安全上限防止损坏视频导致无限循环
+                max_frames = max(total * 2, int(fps * 600)) if total > 0 else int(fps * 600)
+                frame_idx = 0
+                while frame_idx < max_frames:
+                    ret, frame = cap.read()
+                    if not ret:
+                        break
 
-            ts = frame_idx / fps
+                    ts = frame_idx / fps
 
-            # 找当前时间点活跃的字幕
-            active = next(
-                (s for s in subtitles if s.get("start_time", 0) <= ts <= s.get("end_time", 0)),
-                None
-            )
+                    # 找当前时间点活跃的字幕
+                    active = next(
+                        (s for s in subtitles if s.get("start_time", 0) <= ts <= s.get("end_time", 0)),
+                        None
+                    )
 
-            if active:
-                pil_img = _Image.fromarray(_cv2.cvtColor(frame, _cv2.COLOR_BGR2RGB))
-                draw = ImageDraw.Draw(pil_img)
+                    if active:
+                        pil_img = _Image.fromarray(_cv2.cvtColor(frame, _cv2.COLOR_BGR2RGB))
+                        draw = ImageDraw.Draw(pil_img)
 
-                lines = []
-                if active.get("cn_text"):
-                    lines.append((active["cn_text"], cn_font))
-                if active.get("en_text"):
-                    lines.append((active["en_text"], en_font))
+                        lines = []
+                        if active.get("cn_text"):
+                            lines.append((active["cn_text"], cn_font))
+                        if active.get("en_text"):
+                            lines.append((active["en_text"], en_font))
 
-                margin_v = 60
-                line_gap = 8
-                # 计算总高度
-                heights = [draw.textbbox((0, 0), t, font=f)[3] for t, f in lines]
-                total_h = sum(heights) + line_gap * (len(lines) - 1)
-                y = h - margin_v - total_h
+                        margin_v = 60
+                        line_gap = 8
+                        # 计算总高度
+                        heights = [draw.textbbox((0, 0), t, font=f)[3] for t, f in lines]
+                        total_h = sum(heights) + line_gap * (len(lines) - 1)
+                        y = h - margin_v - total_h
 
-                for text, font in lines:
-                    bbox = draw.textbbox((0, 0), text, font=font)
-                    tw = bbox[2] - bbox[0]
-                    x = (w - tw) // 2
-                    lh = bbox[3]
-                    # 黑色描边
-                    for dx, dy in [(-2,0),(2,0),(0,-2),(0,2),(-2,-2),(2,2)]:
-                        draw.text((x + dx, y + dy), text, font=font, fill=(0, 0, 0))
-                    # 白色主体
-                    draw.text((x, y), text, font=font, fill=(255, 255, 255))
-                    y += lh + line_gap
+                        for text, font in lines:
+                            bbox = draw.textbbox((0, 0), text, font=font)
+                            tw = bbox[2] - bbox[0]
+                            x = (w - tw) // 2
+                            lh = bbox[3]
+                            # 黑色描边
+                            for dx, dy in [(-2,0),(2,0),(0,-2),(0,2),(-2,-2),(2,2)]:
+                                draw.text((x + dx, y + dy), text, font=font, fill=(0, 0, 0))
+                            # 白色主体
+                            draw.text((x, y), text, font=font, fill=(255, 255, 255))
+                            y += lh + line_gap
 
-                frame = _cv2.cvtColor(_np.array(pil_img), _cv2.COLOR_RGB2BGR)
+                        frame = _cv2.cvtColor(_np.array(pil_img), _cv2.COLOR_RGB2BGR)
 
-            writer.write(frame)
-            frame_idx += 1
-
-        cap.release()
-        writer.release()
+                    writer.write(frame)
+                    frame_idx += 1
+            finally:
+                writer.release()
+        finally:
+            cap.release()
 
         # 合并原始音频轨道
         print(f"   字幕烧录完成，合并音频...")
