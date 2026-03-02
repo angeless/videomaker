@@ -126,6 +126,15 @@
 - 回归验证：173/173 测试通过，0 warnings。
 - 详见 `docs/changelog-v0.3.1.md`。
 
+### v0.3.18 print→logging 全生产模块收官（2026-03-02）
+- **print→logging 全模块收官**：工作流引擎 + 索引器 + 匹配 + 适配器 + 预览 + 发布 共 10 个生产模块 118 处 `print()` 替换为 `logging.info/warning/error`。
+- 最大文件 `workflow.py`（62 处）涵盖全 7 步骤进度、CLI 命令、审核状态输出。
+- 累计 v0.3.14-v0.3.18 共 14 个生产模块 159 处 print 迁移完成。
+- **零残留**：`modules/` 全目录（排除 `legacy_lab/`）AST 扫描确认零 `print()` 调用。
+- 新增 3 个 AST 静态检查测试（含全目录扫描断言）。
+- 回归验证：173/173 测试通过，0 warnings。
+- 详见 `docs/changelog-v0.3.1.md`。
+
 ## Phase 1（高优先，1-2 周）
 
 1. 真实发布引擎（替换模拟）

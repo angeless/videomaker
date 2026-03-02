@@ -10,6 +10,7 @@ VideoEditer 7步工作流编排器
 
 import argparse
 import json
+import logging
 import re
 import shutil
 import subprocess
@@ -18,6 +19,8 @@ import os
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 # ═══════════════════════════════════════════════════════════════════════
 # WorkflowState — workflow.json 的读写
@@ -246,7 +249,7 @@ class WorkflowRunner:
     # ==================================================================
 
     def step1_analyze(self):
-        print("\n[Step 1] 素材语义分析")
+        logger.info("[Step 1] 素材语义分析")
         self._check_cancel()
         try:
             from modules.step1_material_analysis.video_asset_toolkit import VideoAssetToolkit
@@ -259,7 +262,7 @@ class WorkflowRunner:
                 str(Path(p).resolve()) for p in selected_paths
                 if Path(p).exists()
             )
-            print(f"  使用已选素材: {len(video_files)} 个视频文件")
+            logger.info("使用已选素材: %d 个视频文件", len(video_files))
         else:
             videos_dir = Path(self.state.videos_dir) if self.state.videos_dir else None
             if videos_dir is None:
@@ -270,7 +273,7 @@ class WorkflowRunner:
                 str(p) for p in videos_dir.rglob("*")
                 if p.suffix.lower() in exts
             )
-        print(f"  找到 {len(video_files)} 个视频文件")
+        logger.info("找到 %d 个视频文件", len(video_files))
         if not video_files:
             if selected_paths:
                 raise RuntimeError("已选素材均不存在，请重新选择")
@@ -284,7 +287,7 @@ class WorkflowRunner:
         mat_path.write_text(
             json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8"
         )
-        print(f"  素材索引已保存: {mat_path}")
+        logger.info("素材索引已保存: %s", mat_path)
 
         # 可选语义索引
         use_semantic = self.state.config.get("use_semantic_index", False)
@@ -299,23 +302,23 @@ class WorkflowRunner:
             review_file="reviews/01_materials.md",
             video_count=len(video_files),
         )
-        print(f"\n✅ Step 1 完成")
-        print(f"   请审核: {self.p('reviews', '01_materials.md')}")
-        print(f"   将 `approved: false` 改为 `approved: true` 后重跑 `run`")
+        logger.info("Step 1 完成")
+        logger.info("请审核: %s", self.p("reviews", "01_materials.md"))
+        logger.info("将 approved: false 改为 approved: true 后重跑 run")
 
     def _build_semantic_index(self, video_files: List[str]):
         try:
             from modules.step1_material_analysis.indexer.semantic import SemanticIndex
             idx_path = self.p("data", "semantic_index.json")
             idx = SemanticIndex(str(idx_path))
-            print("  建立语义索引（CLIP）...")
+            logger.info("建立语义索引（CLIP）...")
             count = idx.batch_index(
                 video_files,
-                progress_callback=lambda c, t: print(f"    [{c}/{t}]", end="\r"),
+                progress_callback=lambda c, t: logger.info("语义索引 [%d/%d]", c, t),
             )
-            print(f"\n  语义索引完成: {count} 个视频")
+            logger.info("语义索引完成: %d 个视频", count)
         except ImportError:
-            print("  ⚠️  CLIP 不可用（需 pip install torch transformers），跳过语义索引")
+            logger.warning("CLIP 不可用（需 pip install torch transformers），跳过语义索引")
 
     def _write_review_01(self, results: Dict):
         lines = [
@@ -364,7 +367,7 @@ class WorkflowRunner:
     # ==================================================================
 
     def step2_topics(self):
-        print("\n[Step 2] 脚本脑爆 — AI 生成选题建议")
+        logger.info("[Step 2] 脚本脑爆 — AI 生成选题建议")
         self._check_cancel()
         from modules.step2_topic_planning.ai_client import (
             AIClient,
@@ -380,7 +383,7 @@ class WorkflowRunner:
             summary = f"{summary}\n\n## 选题库模板（可复用）\n{topic_library_summary}"
 
         ai = AIClient.from_workflow_config(self.state.config)
-        print(f"  AI: {ai}")
+        logger.info("AI: %s", ai)
         prompt = PROMPT_TOPICS.format(material_summary=summary)
         response = ai.chat([{"role": "user", "content": prompt}], system=SYSTEM_PROMPT_VLOG)
         topics = self._extract_topics_from_response(response, materials)
@@ -393,9 +396,9 @@ class WorkflowRunner:
             ai_response_raw=response,
             topics=topics,
         )
-        print(f"\n✅ Step 2 完成")
-        print(f"   请在审核文件中填写选题序号和想法:")
-        print(f"   {self.p('reviews', '02_topics.md')}")
+        logger.info("Step 2 完成")
+        logger.info("请在审核文件中填写选题序号和想法:")
+        logger.info("%s", self.p("reviews", "02_topics.md"))
 
     def _build_material_summary(self, materials: Dict) -> str:
         lines = []
@@ -657,7 +660,7 @@ target_duration: 60
     # ==================================================================
 
     def step3_script(self):
-        print("\n[Step 3] 生成完整脚本")
+        logger.info("[Step 3] 生成完整脚本")
         self._check_cancel()
         from modules.step2_topic_planning.ai_client import (
             AIClient,
@@ -689,7 +692,7 @@ target_duration: 60
         summary = self._build_material_summary(materials)
 
         ai = AIClient.from_workflow_config(self.state.config)
-        print(f"  AI: {ai}  选题: #{chosen}  时长: {duration}s")
+        logger.info("AI: %s  选题: #%s  时长: %ss", ai, chosen, duration)
         prompt = PROMPT_SCRIPT.format(
             chosen_topic=chosen,
             topics_suggestions=topics_raw,
@@ -701,7 +704,7 @@ target_duration: 60
 
         script_json = self._parse_script_json(response, materials)
         if script_json.get("_parse_failed") or not script_json.get("clips"):
-            print("  ⚠️  AI 脚本解析失败，使用内容驱动兜底脚本生成")
+            logger.warning("AI 脚本解析失败，使用内容驱动兜底脚本生成")
             script_json = self._build_fallback_script(materials, duration, chosen, selected_topic_data)
         self.p("data", "script_draft.json").write_text(
             json.dumps(script_json, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -713,9 +716,9 @@ target_duration: 60
             output="data/script_draft.json",
             review_file="reviews/03_script.md",
         )
-        print(f"\n✅ Step 3 完成")
-        print(f"   脚本: {self.p('data', 'script_draft.json')}")
-        print(f"   审核: {self.p('reviews', '03_script.md')}")
+        logger.info("Step 3 完成")
+        logger.info("脚本: %s", self.p("data", "script_draft.json"))
+        logger.info("审核: %s", self.p("reviews", "03_script.md"))
 
     def _parse_script_json(self, text: str, materials: Dict) -> Dict:
         # 尝试提取 ```json 块
@@ -908,7 +911,7 @@ notes: ""
     # ==================================================================
 
     def step4_match(self):
-        print("\n[Step 4] 素材匹配")
+        logger.info("[Step 4] 素材匹配")
         self._check_cancel()
 
         script = self._load_json("data/script_draft.json")
@@ -925,7 +928,7 @@ notes: ""
             rewritten, changes = rewriter.rewrite_script(script, materials, search_fn)
             coverage = ScriptGapAnalyzer().analyze_coverage(script, materials)
         except Exception as e:
-            print(f"  ⚠️  AdaptiveRewriter 异常 ({e})，使用基础匹配")
+            logger.warning("AdaptiveRewriter 异常 (%s)，使用基础匹配", e)
             rewritten = script
             changes = []
             coverage = {"total_segments": len(script.get("clips", [])),
@@ -944,8 +947,8 @@ notes: ""
             review_file="reviews/04_matching.md",
             coverage_rate=coverage.get("coverage_rate", 0),
         )
-        print(f"\n✅ Step 4 完成  覆盖率: {coverage.get('coverage_rate',0)*100:.0f}%")
-        print(f"   审核: {self.p('reviews', '04_matching.md')}")
+        logger.info("Step 4 完成  覆盖率: %.0f%%", coverage.get("coverage_rate", 0) * 100)
+        logger.info("审核: %s", self.p("reviews", "04_matching.md"))
 
     @staticmethod
     def _to_search_index(materials: Dict) -> Dict:
@@ -1120,7 +1123,7 @@ notes: ""
     # ==================================================================
 
     def step5_frames(self):
-        print("\n[Step 5] 帧预览")
+        logger.info("[Step 5] 帧预览")
         self._emit_progress(5, "开始生成帧预览")
         self._check_cancel()
         script = self._load_json("data/script_matched.json")
@@ -1148,15 +1151,15 @@ notes: ""
             review_status="approved",
             output=f"preview/frames/ ({extracted} 帧)",
         )
-        print(f"\n✅ Step 5 完成  提取了 {extracted} 帧")
-        print(f"   目录: {frames_dir}")
+        logger.info("Step 5 完成  提取了 %d 帧", extracted)
+        logger.info("目录: %s", frames_dir)
 
     # ==================================================================
     # Step 6: 粗剪
     # ==================================================================
 
     def step6_rough(self):
-        print("\n[Step 6] 粗剪预览（文字粗剪 + 高光快剪）")
+        logger.info("[Step 6] 粗剪预览（文字粗剪 + 高光快剪）")
         self._emit_progress(15, "开始粗剪预览")
         self._check_cancel()
         script = self._load_json("data/script_matched.json")
@@ -1196,15 +1199,15 @@ notes: ""
             rough_segment_count=rough_result.get("segment_count"),
             rough_plan_file="preview/rough_plan.json",
         )
-        print(f"\n✅ Step 6 完成  粗剪: {rough_path}")
-        print(
-            "   策略: "
-            f"{rough_result.get('strategy', 'unknown')} | "
-            f"片段: {rough_result.get('segment_count', 0)} | "
-            f"时长: {rough_result.get('used_seconds', 0)}s"
+        logger.info("Step 6 完成  粗剪: %s", rough_path)
+        logger.info(
+            "策略: %s | 片段: %s | 时长: %ss",
+            rough_result.get("strategy", "unknown"),
+            rough_result.get("segment_count", 0),
+            rough_result.get("used_seconds", 0),
         )
-        print(f"   计划: {rough_plan_path}")
-        print(f"   请设置渲染选项: {self.p('reviews', '05_render_options.md')}")
+        logger.info("计划: %s", rough_plan_path)
+        logger.info("请设置渲染选项: %s", self.p("reviews", "05_render_options.md"))
 
     def _write_review_05(self):
         rc = self.state.render_config
@@ -1262,7 +1265,7 @@ timeout_audio_sec: {rc.get('timeout_audio_sec', 480)}
     # ==================================================================
 
     def step7_render(self):
-        print("\n[Step 7] 分阶段精渲染")
+        logger.info("[Step 7] 分阶段精渲染")
         self._emit_progress(30, "开始精渲染")
         self._check_cancel()
 
@@ -1295,7 +1298,7 @@ timeout_audio_sec: {rc.get('timeout_audio_sec', 480)}
             self._staged_render_pipeline(script, materials, rc, out_dir,
                                          bgm_path, narration_path)
         except ImportError:
-            print("  ⚠️  render.pipeline 不可用，使用 auto_render.py 替代")
+            logger.warning("render.pipeline 不可用，使用 auto_render.py 替代")
             self._staged_render_fallback(script, materials, rc, out_dir,
                                          bgm_path, narration_path)
 
@@ -1392,17 +1395,17 @@ timeout_audio_sec: {rc.get('timeout_audio_sec', 480)}
             self._check_cancel()
             out_file = out_dir / fname
             if out_file.exists():
-                print(f"  [Stage {i}/5] {fname} 已存在，跳过")
+                logger.info("[Stage %d/5] %s 已存在，跳过", i, fname)
                 current_input = str(out_file)
                 self._emit_progress(i * 20, f"Stage {i}/5 复用已有结果")
                 continue
-            print(f"  [Stage {i}/5] {fname} 处理中...")
+            logger.info("[Stage %d/5] %s 处理中...", i, fname)
             try:
                 result = _run_stage_with_retry(i, fn, current_input)
             except Exception as stage_err:
                 if "__CANCELLED__" in str(stage_err or ""):
                     raise
-                print(f"  ⚠️  Stage {i} 失败 ({stage_err.__class__.__name__}: {str(stage_err)[:80]})，使用上一阶段结果继续")
+                logger.warning("Stage %d 失败 (%s: %s)，使用上一阶段结果继续", i, stage_err.__class__.__name__, str(stage_err)[:80])
                 self._emit_progress((i - 1) * 20 + 5, f"Stage {i} 失败，使用上一阶段结果兜底")
                 result = current_input
             # pipeline 的 _* 方法输出到 base + suffix；重命名到 stage_0N_*.mp4
@@ -1414,17 +1417,17 @@ timeout_audio_sec: {rc.get('timeout_audio_sec', 480)}
             elif not out_file.exists() and current_input:
                 shutil.copy(current_input, str(out_file))
             current_input = str(out_file)
-            print(f"    -> {out_file}")
+            logger.info("-> %s", out_file)
             self._emit_progress(i * 20, f"Stage {i}/5 完成")
 
         self._check_cancel()
         # Stage 5: audio mix → final.mp4
         final = str(out_dir / "final.mp4")
         if Path(final).exists():
-            print(f"  [Stage 5/5] final.mp4 已存在，跳过")
+            logger.info("[Stage 5/5] final.mp4 已存在，跳过")
             self._emit_progress(98, "Stage 5/5 复用已有 final.mp4")
         else:
-            print(f"  [Stage 5/5] 音频混合 → final.mp4")
+            logger.info("[Stage 5/5] 音频混合 → final.mp4")
             if not current_input:
                 raise RuntimeError("Stage 5 无可用输入文件")
             try:
@@ -1449,7 +1452,7 @@ timeout_audio_sec: {rc.get('timeout_audio_sec', 480)}
             except Exception as stage_err:
                 if "__CANCELLED__" in str(stage_err or ""):
                     raise
-                print(f"  ⚠️  Stage 5 失败 ({stage_err.__class__.__name__}: {str(stage_err)[:120]})，复制上一阶段结果")
+                logger.warning("Stage 5 失败 (%s: %s)，复制上一阶段结果", stage_err.__class__.__name__, str(stage_err)[:120])
                 if current_input and Path(current_input).exists():
                     shutil.copy(current_input, final)
                 else:
@@ -1513,15 +1516,15 @@ timeout_audio_sec: {rc.get('timeout_audio_sec', 480)}
             review_status="approved",
             output="output/final.mp4",
         )
-        print(f"\n🎉 Step 7 完成  最终视频: {final}")
+        logger.info("Step 7 完成  最终视频: %s", final)
 
         # 列出所有阶段文件
         stages = sorted(out_dir.glob("stage_*.mp4"))
         if stages:
-            print("   中间文件（可回滚）:")
+            logger.info("   中间文件（可回滚）:")
             for s in stages:
                 size_mb = s.stat().st_size / 1048576
-                print(f"     {s.name}  {size_mb:.1f} MB")
+                logger.info("     %s  %.1f MB", s.name, size_mb)
 
     # ==================================================================
     # 工具
@@ -1611,9 +1614,9 @@ def cmd_init(args):
     }
     ws = WorkflowState.create(project_dir, args.videos, config)
     ws.save()
-    print(f"✅ 项目初始化完成: {project_dir}")
-    print(f"   视频目录: {args.videos}")
-    print(f"   下一步: python workflow.py run --project {args.project}")
+    logger.info("项目初始化完成: %s", project_dir)
+    logger.info("   视频目录: %s", args.videos)
+    logger.info("   下一步: python workflow.py run --project %s", args.project)
 
 
 def cmd_run(args):
@@ -1637,12 +1640,12 @@ def cmd_run(args):
                 }
                 remapped = {field_remap.get(prior, {}).get(k, k): v for k, v in parsed.items()}
                 ws.approve_review(prior, remapped)
-                print(f"✅ 第{prior}步审核文件已确认通过，继续...")
+                logger.info("第%s步审核文件已确认通过，继续...", prior)
             else:
                 review_path = project_dir / prior_step.get("review_file", "")
-                print(f"⚠️  第{prior}步尚未通过审核。")
-                print(f"   请编辑: {review_path}")
-                print(f"   将 `approved: false` 改为 `approved: true` 后重跑 run")
+                logger.warning("第%s步尚未通过审核。", prior)
+                logger.warning("   请编辑: %s", review_path)
+                logger.warning("   将 `approved: false` 改为 `approved: true` 后重跑 run")
                 sys.exit(1)
 
     # 检查当前步是否已完成（自动审核通过的步骤在前一次运行时未推进 current_step）
@@ -1654,7 +1657,7 @@ def cmd_run(args):
         ws.save()
         target = target + 1
         if target > 7:
-            print("🎉 所有步骤已完成！")
+            logger.info("所有步骤已完成！")
             cmd_status_print(ws)
             return
         current_step_data = ws.get_step(target)
@@ -1669,21 +1672,21 @@ def cmd_run(args):
             }
             remapped = {field_remap.get(target, {}).get(k, k): v for k, v in parsed.items()}
             ws.approve_review(target, remapped)
-            print(f"✅ 第{target}步审核通过，进入第{target+1}步")
+            logger.info("第%s步审核通过，进入第%s步", target, target + 1)
             # 自动执行下一步
             target = target + 1
             if target > 7:
-                print("🎉 所有步骤已完成！")
+                logger.info("所有步骤已完成！")
                 cmd_status_print(ws)
                 return
         else:
             review_path = project_dir / current_step_data.get("review_file", "")
-            print(f"⏳ 第{target}步等待审核中。")
-            print(f"   请编辑: {review_path}")
+            logger.info("第%s步等待审核中。", target)
+            logger.info("   请编辑: %s", review_path)
             sys.exit(0)
 
     if target not in STEP_METHODS:
-        print(f"错误: 步骤 {target} 不存在（有效范围 1-7）")
+        logger.error("步骤 %s 不存在（有效范围 1-7）", target)
         sys.exit(1)
 
     ws.set_step_status(target, "running")
@@ -1710,8 +1713,8 @@ def cmd_status(args):
 
 
 def cmd_status_print(ws: WorkflowState):
-    print(f"\n工作流状态: {ws.project_dir}")
-    print("─" * 55)
+    logger.info("工作流状态: %s", ws.project_dir)
+    logger.info("─" * 55)
     for n in range(1, 8):
         step = ws.get_step(n)
         status = step.get("status", "not_started")
@@ -1720,8 +1723,7 @@ def cmd_status_print(ws: WorkflowState):
         name = WorkflowState.STEP_NAMES.get(n, f"Step {n}")
         review_str = f"  [审核:{review}]" if review else ""
         current = " ←" if ws.data.get("current_step") == n else ""
-        print(f"  [{icon}] Step {n}: {name}{review_str}{current}")
-    print()
+        logger.info("  [%s] Step %s: %s%s%s", icon, n, name, review_str, current)
 
 
 # ═══════════════════════════════════════════════════════════════════════

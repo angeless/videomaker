@@ -6,9 +6,12 @@ VideoEditer - 剧本自适应重写引擎
 
 import json
 import itertools
+import logging
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 import re
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -452,37 +455,37 @@ def main():
     analyzer = ScriptGapAnalyzer()
     coverage = analyzer.analyze_coverage(script, materials)
     
-    print("=== 剧本覆盖度分析 ===")
-    print(f"覆盖率: {coverage['coverage_rate']*100:.1f}%")
-    print(f"完全匹配: {coverage['covered_segments']}/{coverage['total_segments']}")
-    print(f"缺失段落: {len(coverage['missing_segments'])}")
-    print(f"部分匹配: {len(coverage['partial_matches'])}")
+    logger.info("=== 剧本覆盖度分析 ===")
+    logger.info("覆盖率: %.1f%%", coverage['coverage_rate'] * 100)
+    logger.info("完全匹配: %s/%s", coverage['covered_segments'], coverage['total_segments'])
+    logger.info("缺失段落: %s", len(coverage['missing_segments']))
+    logger.info("部分匹配: %s", len(coverage['partial_matches']))
     
     if coverage['suggestions']:
-        print("\n建议:")
+        logger.info("建议:")
         for sug in coverage['suggestions']:
-            print(f"  - {sug}")
+            logger.info("  - %s", sug)
     
     # 执行重写
     if coverage['coverage_rate'] < 1.0:
-        print("\n=== 执行剧本重写 ===")
+        logger.info("=== 执行剧本重写 ===")
         rewriter = AdaptiveRewriter(similarity_threshold=args.threshold)
         rewritten, changes = rewriter.rewrite_script(script, materials)
         
         if changes:
-            print(f"\n重写 {len(changes)} 处:")
+            logger.info("重写 %s 处:", len(changes))
             for change in changes:
-                print(f"\n  [{change['clip_index']}] {change['reason']}")
-                print(f"    原文: {change['original'][:50]}...")
-                print(f"    改写: {change['rewritten'][:50]}...")
+                logger.info("  [%s] %s", change['clip_index'], change['reason'])
+                logger.info("    原文: %s...", change['original'][:50])
+                logger.info("    改写: %s...", change['rewritten'][:50])
         
         # 保存
         with open(args.output, 'w', encoding='utf-8') as f:
             json.dump(rewritten, f, ensure_ascii=False, indent=2)
         
-        print(f"\n✅ 重写完成: {args.output}")
+        logger.info("重写完成: %s", args.output)
     else:
-        print("\n✅ 剧本完全匹配，无需重写")
+        logger.info("剧本完全匹配，无需重写")
 
 
 if __name__ == "__main__":

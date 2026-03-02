@@ -9,8 +9,11 @@
 import sqlite3
 import hashlib
 import json
+import logging
 from pathlib import Path
 from typing import List, Dict, Set, Tuple, Optional, Callable
+
+logger = logging.getLogger(__name__)
 
 try:
     import cv2
@@ -231,7 +234,7 @@ class FingerprintDB:
                     seen_hashes.append(rep)
                     self.add_video(fp)
             except Exception as e:
-                print(f"  跳过 {path}: {e}")
+                logger.warning("跳过 %s: %s", path, e)
 
         return unique
 
@@ -262,7 +265,7 @@ class FingerprintDB:
                 self.add_video(fp)
                 indexed += 1
             except Exception as e:
-                print(f"  索引失败 {path.name}: {e}")
+                logger.error("索引失败 %s: %s", path.name, e)
 
         return indexed
 
@@ -291,25 +294,25 @@ class FingerprintDB:
 if __name__ == "__main__":
     import sys
     if len(sys.argv) < 2:
-        print("Usage: python fingerprint.py <video_dir> [db_path]")
+        logger.info("Usage: python fingerprint.py <video_dir> [db_path]")
         sys.exit(1)
 
     video_dir = sys.argv[1]
     db_path = sys.argv[2] if len(sys.argv) > 2 else "./fingerprints.db"
 
     with FingerprintDB(Path(db_path)) as db:
-        print(f"扫描目录: {video_dir}")
+        logger.info("扫描目录: %s", video_dir)
         count = db.scan_and_index(
             video_dir,
-            progress_callback=lambda cur, tot: print(f"  [{cur}/{tot}]", end="\r")
+            progress_callback=lambda cur, tot: logger.info("[%d/%d]", cur, tot)
         )
-        print(f"\n索引完成: {count} 个视频")
+        logger.info("索引完成: %d 个视频", count)
 
         stats = db.get_stats()
-        print(f"统计: {stats}")
+        logger.info("统计: %s", stats)
 
         dups = db.find_duplicates()
         if dups:
-            print(f"\n发现 {len(dups)} 组重复:")
+            logger.info("发现 %d 组重复:", len(dups))
             for g in dups:
-                print(f"  - {', '.join(Path(p).name for p in g)}")
+                logger.info("  - %s", ", ".join(Path(p).name for p in g))

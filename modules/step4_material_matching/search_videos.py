@@ -5,7 +5,10 @@
 
 import json
 import argparse
+import logging
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 class VideoSearch:
     def __init__(self, index_file="video_index.json"):
@@ -15,7 +18,7 @@ class VideoSearch:
     def load_index(self):
         """加载索引文件"""
         if not self.index_file.exists():
-            print(f"错误: 索引文件不存在 {self.index_file}")
+            logger.error("索引文件不存在 %s", self.index_file)
             return None
         
         with open(self.index_file, 'r', encoding='utf-8') as f:
@@ -192,39 +195,39 @@ def print_results(results, query=None):
     """打印搜索结果"""
     if not results:
         if query:
-            print(f"未找到匹配 '{query}' 的视频")
+            logger.info("未找到匹配 '%s' 的视频", query)
         else:
-            print("未找到匹配的视频")
+            logger.info("未找到匹配的视频")
         return
-    
-    print(f"找到 {len(results)} 个匹配的视频:")
-    print("=" * 80)
-    
+
+    logger.info("找到 %s 个匹配的视频:", len(results))
+    logger.info("=" * 80)
+
     for i, result in enumerate(results[:10], 1):  # 只显示前10个
-        print(f"{i}. {result['filename']}")
-        print(f"   ID: {result['video_id']}")
-        
+        logger.info("%s. %s", i, result['filename'])
+        logger.info("   ID: %s", result['video_id'])
+
         if 'match_score' in result:
-            print(f"   匹配度: {result['match_score']}分")
-        
+            logger.info("   匹配度: %s分", result['match_score'])
+
         if 'match_details' in result and result['match_details']:
-            print(f"   匹配项: {', '.join(result['match_details'][:3])}")
-        
+            logger.info("   匹配项: %s", ', '.join(result['match_details'][:3]))
+
         if 'matched_tags' in result:
-            print(f"   匹配标签: {', '.join(result['matched_tags'])}")
-        
+            logger.info("   匹配标签: %s", ', '.join(result['matched_tags']))
+
         preview = result.get('preview_info', {})
-        print(f"   分辨率: {preview.get('resolution', '未知')}")
-        print(f"   时长: {preview.get('duration', '未知')}s")
-        
+        logger.info("   分辨率: %s", preview.get('resolution', '未知'))
+        logger.info("   时长: %ss", preview.get('duration', '未知'))
+
         if preview.get('has_audio'):
-            print(f"   音频: 有")
-        
+            logger.info("   音频: 有")
+
         content = result.get('content_summary', {})
         if content.get('notes'):
-            print(f"   备注: {', '.join(content['notes'][:2])}")
-        
-        print()
+            logger.info("   备注: %s", ', '.join(content['notes'][:2]))
+
+        logger.info("")
 
 def main():
     parser = argparse.ArgumentParser(description="视频索引搜索工具")
@@ -251,7 +254,7 @@ def main():
             results = search.search_by_resolution(width, height)
             print_results(results, f"分辨率 ≥ {args.resolution}")
         except Exception:
-            print("错误: 分辨率格式应为 宽度x高度，如 1920x1080")
+            logger.error("分辨率格式应为 宽度x高度，如 1920x1080")
     
     elif args.min_width or args.min_height:
         results = search.search_by_resolution(args.min_width, args.min_height)
@@ -288,7 +291,7 @@ def main():
                 })
             print_results(all_videos, "所有视频")
         else:
-            print("无法加载索引文件")
+            logger.error("无法加载索引文件")
 
 if __name__ == "__main__":
     main()

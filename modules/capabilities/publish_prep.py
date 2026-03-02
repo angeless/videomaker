@@ -5,7 +5,10 @@ from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional
 import argparse
 import json
+import logging
 import re
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -597,7 +600,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.output:
         Path(args.output).write_text(rendered, encoding="utf-8")
     else:
-        print(rendered)
+        logger.info("%s", rendered)
     return 0
 
 

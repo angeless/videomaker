@@ -9,11 +9,14 @@
 """
 
 import json
+import logging
 import uuid
 import argparse
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, asdict
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -538,7 +541,7 @@ def main():
     
     # 保存草稿
     output_path = builder.save(args.output)
-    print(f"✅ 剪映草稿已生成: {output_path}")
+    logger.info("剪映草稿已生成: %s", output_path)
 
 
 def search_materials_by_script(materials_index: Dict, script: Dict) -> List[Dict]:

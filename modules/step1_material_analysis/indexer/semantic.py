@@ -8,8 +8,11 @@
 """
 
 import json
+import logging
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional, Callable
+
+logger = logging.getLogger(__name__)
 
 try:
     import numpy as np
@@ -47,7 +50,7 @@ class CLIPEncoder:
     def _load_model(self):
         """延迟加载（首次使用时）"""
         if self._model is None:
-            print(f"加载 CLIP 模型: {self.model_name} (device={self.device})")
+            logger.info("加载 CLIP 模型: %s (device=%s)", self.model_name, self.device)
             self._model = CLIPModel.from_pretrained(self.model_name).to(self.device)
             self._processor = CLIPProcessor.from_pretrained(self.model_name)
 
@@ -150,7 +153,7 @@ class SemanticIndex:
             生成的向量 ID 列表
         """
         if not HAS_CLIP:
-            print("  跳过语义索引：CLIP 未安装")
+            logger.warning("跳过语义索引：CLIP 未安装")
             return []
 
         encoder = self._get_encoder()
@@ -180,7 +183,7 @@ class SemanticIndex:
             [{"path": str, "score": float, "match_frame": int}, ...]
         """
         if not HAS_CLIP:
-            print("CLIP 未安装，降级为关键词搜索")
+            logger.warning("CLIP 未安装，降级为关键词搜索")
             return self._keyword_fallback(query, top_k)
 
         encoder = self._get_encoder()
@@ -235,7 +238,7 @@ class SemanticIndex:
                 self.index_video(path)
                 indexed += 1
             except Exception as e:
-                print(f"  索引失败 {Path(path).name}: {e}")
+                logger.error("索引失败 %s: %s", Path(path).name, e)
         return indexed
 
     def get_stats(self) -> Dict:
@@ -249,7 +252,7 @@ class SemanticIndex:
 if __name__ == "__main__":
     import sys
     if len(sys.argv) < 3:
-        print("Usage: python semantic.py <video_dir> <index.json> [query]")
+        logger.info("Usage: python semantic.py <video_dir> <index.json> [query]")
         sys.exit(1)
 
     video_dir, index_path = sys.argv[1], sys.argv[2]
@@ -261,13 +264,13 @@ if __name__ == "__main__":
         # 建立索引
         files = [str(p) for p in Path(video_dir).rglob("*")
                  if p.suffix.lower() in (".mp4", ".mov", ".avi", ".mkv")]
-        print(f"发现 {len(files)} 个视频，开始索引...")
-        count = idx.batch_index(files, progress_callback=lambda c, t: print(f"  [{c}/{t}]", end="\r"))
-        print(f"\n完成: {count} 个视频")
-        print(idx.get_stats())
+        logger.info("发现 %d 个视频，开始索引...", len(files))
+        count = idx.batch_index(files, progress_callback=lambda c, t: logger.info("[%d/%d]", c, t))
+        logger.info("完成: %d 个视频", count)
+        logger.info("统计: %s", idx.get_stats())
     else:
         # 搜索
         results = idx.search(query, top_k=5)
-        print(f"\n查询: {query}")
+        logger.info("查询: %s", query)
         for r in results:
-            print(f"  {r['score']:.3f}  {Path(r['path']).name}")
+            logger.info("  %.3f  %s", r['score'], Path(r['path']).name)

@@ -3,8 +3,11 @@
 
 from pathlib import Path
 from typing import Callable, Dict, Optional
+import logging
 import re
 import subprocess
+
+logger = logging.getLogger(__name__)
 
 
 def generate_frame_previews(
@@ -45,7 +48,7 @@ def generate_frame_previews(
 
         vid_path = resolve_video_path(str(vid_id))
         if not vid_path:
-            print(f"  片段 {idx}: 找不到 {vid_id}，跳过")
+            logger.warning("  片段 %s: 找不到 %s，跳过", idx, vid_id)
             continue
 
         ss = clip.get("source_start", 0)
@@ -58,10 +61,10 @@ def generate_frame_previews(
         result = subprocess.run(cmd, capture_output=True, timeout=30)
         if result.returncode == 0:
             extracted += 1
-            print(f"  ✓ 片段 {idx}: {out_jpg.name}")
+            logger.info("  片段 %s: %s", idx, out_jpg.name)
             _emit(5 + (extracted / total) * 10, f"帧预览 {extracted}/{total}")
         else:
-            print(f"  ✗ 片段 {idx}: 提取失败")
+            logger.error("  片段 %s: 提取失败", idx)
 
     return {"extracted": extracted}
 

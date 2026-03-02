@@ -519,6 +519,48 @@ macOS `open` 命令的 `Popen` 改为 `subprocess.run(timeout=5, check=False)`�
 
 回归验证：**173/173 测试通过，0 warnings**。
 
+## v0.3.18（2026-03-02）— print→logging 全生产模块收官
+
+### print() → logging 全面迁移
+
+将所有生产模块中剩余的 `print()` 调用替换为 `logging.info/warning/error`，
+实现生产代码中零 `print()` 调用。
+
+| 文件 | 替换数 | 日志级别 |
+|------|--------|---------|
+| `workflow_engine/workflow.py` | 62 处 | info（步骤进度/状态/审核）、warning（审核未通过/解析失败）、error（步骤不存在） |
+| `step4_material_matching/search_videos.py` | 12 处 | info（搜索结果展示）、error（索引文件缺失） |
+| `step4_material_matching/adaptive_rewriter.py` | 12 处 | info（覆盖度分析/重写进度） |
+| `step1_material_analysis/indexer/semantic.py` | 10 处 | info（CLIP 加载/索引进度）、warning（CLIP 未安装降级） |
+| `step1_material_analysis/indexer/fingerprint.py` | 8 处 | info（扫描/索引进度）、warning（跳过异常文件）、error（索引失败） |
+| `step1_material_analysis/video_asset_toolkit.py` | 5 处 | info（分析进度/结果保存）、warning（配置/视频缺失） |
+| `adapters/materials_mapper.py` | 4 处 | info（转换/合并完成） |
+| `step5_frame_preview/frame_preview.py` | 3 处 | info（帧提取成功）、warning（视频缺失）、error（提取失败） |
+| `step3_script_generation/jianying_draft.py` | 1 处 | info（草稿生成完成） |
+| `capabilities/publish_prep.py` | 1 处 | info（渲染结果） |
+| 合计 | **118 处** | |
+
+### print→logging 迁移总览
+
+| 批次 | 版本 | 范围 | 替换数 |
+|------|------|------|--------|
+| API 层 | v0.3.14 | library_routes.py | 8 |
+| API + 渲染 | v0.3.17 | server.py + 渲染管道 3 文件 | 33 |
+| **全生产模块** | **v0.3.18** | **工作流 + 索引 + 匹配 + 适配器 + 发布 10 文件** | **118** |
+| **合计** | | **14 个生产模块** | **159 处** |
+
+至此，`modules/` 下所有生产模块（排除 `legacy_lab/`）中零 `print()` 调用。
+
+### 新增测试（+3）
+
+| 测试名 | 验证内容 |
+|--------|---------|
+| `test_v0318_zero_print_in_all_production_modules` | AST 检查 modules/ 全目录零 print()（排除 legacy_lab） |
+| `test_v0318_no_print_in_workflow_engine` | workflow.py 零 print() |
+| `test_v0318_no_print_in_indexer_modules` | semantic.py + fingerprint.py + video_asset_toolkit.py 零 print() |
+
+回归验证：**173/173 测试通过，0 warnings**。
+
 ## 下一步计划
 
 参见 `docs/next_dev_plan.md` 中的 Phase 1-4 计划。当前优先项：

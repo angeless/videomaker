@@ -1437,3 +1437,68 @@ def test_v0317_no_traceback_print_exc_in_api():
         assert "traceback.print_exc()" not in src, (
             f"{Path(rel).name} still uses traceback.print_exc()"
         )
+
+
+# ── v0.3.18 tests ────────────────────────────────────────────────
+
+
+def test_v0318_zero_print_in_all_production_modules():
+    """All production modules must use logging, not print(). Excludes legacy_lab."""
+    import ast as _ast
+
+    prod_root = ROOT / "modules"
+    skip_dirs = {"legacy_lab", "__pycache__"}
+    violations = []
+    for py_file in prod_root.rglob("*.py"):
+        if any(s in py_file.parts for s in skip_dirs):
+            continue
+        try:
+            tree = _ast.parse(py_file.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        prints = [
+            node for node in _ast.walk(tree)
+            if isinstance(node, _ast.Call)
+            and isinstance(node.func, _ast.Name)
+            and node.func.id == "print"
+        ]
+        if prints:
+            violations.append(f"{py_file.relative_to(ROOT)}:{len(prints)}")
+    assert not violations, f"print() found in: {violations}"
+
+
+def test_v0318_no_print_in_workflow_engine():
+    """workflow.py must use logging, not print()."""
+    import ast as _ast
+
+    src = (ROOT / "modules" / "workflow_engine" / "workflow.py").read_text()
+    tree = _ast.parse(src)
+    prints = [
+        node for node in _ast.walk(tree)
+        if isinstance(node, _ast.Call)
+        and isinstance(node.func, _ast.Name)
+        and node.func.id == "print"
+    ]
+    assert len(prints) == 0, f"workflow.py still has {len(prints)} print() calls"
+
+
+def test_v0318_no_print_in_indexer_modules():
+    """Indexer modules (semantic.py, fingerprint.py) must use logging."""
+    import ast as _ast
+
+    indexer_files = [
+        "modules/step1_material_analysis/indexer/semantic.py",
+        "modules/step1_material_analysis/indexer/fingerprint.py",
+        "modules/step1_material_analysis/video_asset_toolkit.py",
+    ]
+    for rel in indexer_files:
+        src = (ROOT / rel).read_text()
+        tree = _ast.parse(src)
+        prints = [
+            node for node in _ast.walk(tree)
+            if isinstance(node, _ast.Call)
+            and isinstance(node.func, _ast.Name)
+            and node.func.id == "print"
+        ]
+        fname = Path(rel).name
+        assert len(prints) == 0, f"{fname} still has {len(prints)} print() calls"

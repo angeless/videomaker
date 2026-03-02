@@ -12,6 +12,9 @@ import subprocess
 from pathlib import Path
 from datetime import datetime
 import hashlib
+import logging
+
+logger = logging.getLogger(__name__)
 
 try:
     import cv2
@@ -69,7 +72,7 @@ class VideoAssetToolkit:
                     user_config = json.load(f)
                 default_config.update(user_config)
             except Exception:
-                print(f"警告: 无法读取配置文件 {config_path}, 使用默认配置")
+                logger.warning("无法读取配置文件 %s, 使用默认配置", config_path)
                 
         return default_config
     
@@ -82,10 +85,10 @@ class VideoAssetToolkit:
         for video_path in video_paths:
             video_path = Path(video_path)
             if not video_path.exists():
-                print(f"警告: 视频不存在 {video_path}")
+                logger.warning("视频不存在 %s", video_path)
                 continue
-                
-            print(f"分析: {video_path.name}")
+
+            logger.info("分析: %s", video_path.name)
             result = self.analyze_single_video(video_path)
             
             # 生成唯一ID
@@ -593,9 +596,9 @@ class VideoAssetToolkit:
             csv_file.write_text(csv_content, encoding='utf-8')
             saved_files.append(str(csv_file))
             
-        print(f"\n分析结果已保存到:")
+        logger.info("分析结果已保存到:")
         for file in saved_files:
-            print(f"  - {file}")
+            logger.info("  - %s", file)
             
         return saved_files
     

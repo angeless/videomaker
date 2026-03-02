@@ -6,8 +6,11 @@
 
 import json
 import argparse
+import logging
 from pathlib import Path
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 
 def materials_to_search_index(materials: dict) -> dict:
@@ -79,8 +82,8 @@ def convert_managevideos_to_videoeditor(input_file: str, output_file: str):
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(target_data, f, ensure_ascii=False, indent=2)
     
-    print(f"✅ 转换完成: {output_path}")
-    print(f"   共 {len(target_data['videos'])} 个视频")
+    logger.info("转换完成: %s", output_path)
+    logger.info("   共 %s 个视频", len(target_data['videos']))
     
     return output_path
 
@@ -271,8 +274,8 @@ def merge_indexes(index_files: list, output_file: str):
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(merged, f, ensure_ascii=False, indent=2)
     
-    print(f"✅ 合并完成: {output_file}")
-    print(f"   共 {merged['total_videos']} 个视频")
+    logger.info("合并完成: %s", output_file)
+    logger.info("   共 %s 个视频", merged['total_videos'])
     
     return output_file
 
