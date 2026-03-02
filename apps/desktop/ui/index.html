@@ -4,28 +4,37 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>视频制作助手</title>
-  <link rel="stylesheet" href="styles.css?v=20260228r6" />
+  <link rel="stylesheet" href="styles.css?v=20260302r1" />
   <!-- Alpine.js -->
   <script defer src="vendor/alpine.min.js?v=3.14.8"></script>
-  <script src="modules/app_store.js?v=20260301r3"></script>
-  <script src="modules/runtime_mixin.js?v=20260301r2"></script>
-  <script src="modules/settings_mixin.js?v=20260301r1"></script>
-  <script src="modules/project_workflow_mixin.js?v=20260301r1"></script>
-  <script src="modules/capability_admin_mixin.js?v=20260301r2"></script>
-  <script src="modules/agent_templates_mixin.js?v=20260301r1"></script>
-  <script src="modules/common_utils_mixin.js?v=20260301r1"></script>
-  <script src="modules/editing_capabilities_mixin.js?v=20260301r2"></script>
-  <script src="modules/semantic_publish_mixin.js?v=20260301r3"></script>
-  <script src="modules/distribution_audio_mixin.js?v=20260301r1"></script>
-  <script src="modules/material_semantics_mixin.js?v=20260301r1"></script>
-  <script src="modules/library_mixin.js?v=20260228r1"></script>
-  <script src="modules/workflow_builder_mixin.js?v=20260228r1"></script>
+  <script src="modules/app_store.js?v=20260302r1"></script>
+  <script src="modules/runtime_mixin.js?v=20260302r1"></script>
+  <script src="modules/settings_mixin.js?v=20260302r1"></script>
+  <script src="modules/project_workflow_mixin.js?v=20260302r1"></script>
+  <script src="modules/capability_admin_mixin.js?v=20260302r1"></script>
+  <script src="modules/agent_templates_mixin.js?v=20260302r1"></script>
+  <script src="modules/common_utils_mixin.js?v=20260302r1"></script>
+  <script src="modules/editing_capabilities_mixin.js?v=20260302r1"></script>
+  <script src="modules/semantic_publish_mixin.js?v=20260302r1"></script>
+  <script src="modules/distribution_audio_mixin.js?v=20260302r1"></script>
+  <script src="modules/material_semantics_mixin.js?v=20260302r1"></script>
+  <script src="modules/library_mixin.js?v=20260302r1"></script>
+  <script src="modules/workflow_builder_mixin.js?v=20260302r1"></script>
   <!-- Alpine 数据组件 -->
-  <script src="app.js?v=20260301r23"></script>
+  <script src="app.js?v=20260302r1"></script>
 </head>
 <body>
 
 <div id="app" x-data="app" x-cloak>
+
+  <!-- ── Toast 通知容器 ──────────────────────────────────────── -->
+  <div class="toast-container" x-show="toasts.length > 0" x-cloak>
+    <template x-for="t in toasts" :key="t.id">
+      <div class="toast" :class="`toast-${t.type || 'info'}`" @click="dismissToast(t.id)">
+        <span x-text="t.message"></span>
+      </div>
+    </template>
+  </div>
 
   <!-- ──────────────────────────────────────────────────────────
        顶部标题栏
@@ -244,14 +253,14 @@
       </div>
       <div style="font-size:12px;color:var(--muted)" x-show="preflightMessage" x-text="preflightMessage"></div>
       <div x-show="preflightReport && preflightReport.summary" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
-        <span class="badge badge-success" x-text="`通过 ${preflightReport.summary.ok || 0}`"></span>
-        <span class="badge badge-warn" x-text="`警告 ${preflightReport.summary.warning || 0}`"></span>
-        <span class="badge badge-danger" x-text="`阻塞 ${preflightReport.summary.error || 0}`"></span>
-        <span class="badge badge-info" x-text="`评分 ${preflightReport.summary.score || 0}`"></span>
+        <span class="badge badge-success" x-text="`通过 ${preflightReport?.summary?.ok || 0}`"></span>
+        <span class="badge badge-warn" x-text="`警告 ${preflightReport?.summary?.warning || 0}`"></span>
+        <span class="badge badge-danger" x-text="`阻塞 ${preflightReport?.summary?.error || 0}`"></span>
+        <span class="badge badge-info" x-text="`评分 ${preflightReport?.summary?.score || 0}`"></span>
       </div>
       <div x-show="preflightReport && preflightReport.checks && preflightReport.checks.length > 0"
            style="margin-top:8px;max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:8px">
-        <template x-for="item in (preflightReport.checks || [])" :key="item.id">
+        <template x-for="item in (preflightReport?.checks || [])" :key="item.id">
           <div style="padding:6px 0;border-bottom:1px dashed var(--border)">
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
               <span class="badge" :class="preflightBadgeClass(item.status)" x-text="preflightStatusText(item.status)"></span>
@@ -427,7 +436,7 @@
           <span x-text="(ingestLocalPreview && ingestLocalPreview.video_candidates) || 0"></span> 个
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px" x-show="ingestLocalPreview && ingestLocalPreview.sample_videos && ingestLocalPreview.sample_videos.length>0">
-          <template x-for="p in (ingestLocalPreview.sample_videos || [])" :key="p">
+          <template x-for="p in (ingestLocalPreview?.sample_videos || [])" :key="p">
             <span class="badge badge-info" x-text="p"></span>
           </template>
         </div>
@@ -438,7 +447,7 @@
           <span x-text="(ingestImagePreview && ingestImagePreview.image_candidates) || 0"></span> 个
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px" x-show="ingestImagePreview && ingestImagePreview.sample_images && ingestImagePreview.sample_images.length>0">
-          <template x-for="p in (ingestImagePreview.sample_images || [])" :key="`img-${p}`">
+          <template x-for="p in (ingestImagePreview?.sample_images || [])" :key="`img-${p}`">
             <span class="badge badge-success" x-text="p"></span>
           </template>
         </div>
@@ -792,7 +801,7 @@
             刷新能力数据
           </button>
         </div>
-        <div x-show="capabilityMessage" class="badge badge-info" style="margin-bottom:10px" x-text="capabilityMessage"></div>
+        <div x-show="capabilityMessage" class="badge" :class="`badge-${capabilityMessageType || 'info'}`" style="margin-bottom:10px" x-text="capabilityMessage"></div>
         <div x-show="!projectDir" class="badge badge-warn" style="margin-bottom:10px">
           当前未打开项目：仍可直接使用单功能模式（如字幕校准、图片语义、公众号扩写、发布文案、内容发布预演）。
         </div>
@@ -1046,7 +1055,7 @@
             </div>
             <div style="font-size:12px;color:var(--muted);margin-top:6px"
                  x-show="nleConnectorByEditor(handoffInput.editor || '') && nleConnectorByEditor(handoffInput.editor || '').hint"
-                 x-text="`提示：${nleConnectorByEditor(handoffInput.editor || '').hint}`"></div>
+                 x-text="`提示：${(nleConnectorByEditor(handoffInput.editor || '') || {}).hint || ''}`"></div>
           </div>
           <div class="form-grid" style="margin-top:10px">
             <div class="form-field">
@@ -2518,24 +2527,24 @@
               </button>
             </div>
             <div x-show="idempotencyCacheLastPrune" style="margin-top:8px;font-size:12px;color:var(--muted)"
-                 x-text="`上次清理：内存 ${idempotencyCacheLastPrune.memory_before || 0} -> ${idempotencyCacheLastPrune.memory_after || 0}，落盘 ${idempotencyCacheLastPrune.persisted_before || 0} -> ${idempotencyCacheLastPrune.persisted_after || 0}`"></div>
+                 x-text="`上次清理：内存 ${idempotencyCacheLastPrune?.memory_before || 0} -> ${idempotencyCacheLastPrune?.memory_after || 0}，落盘 ${idempotencyCacheLastPrune?.persisted_before || 0} -> ${idempotencyCacheLastPrune?.persisted_after || 0}`"></div>
           </div>
 
           <div class="card" style="margin-top:10px">
             <div class="card-title">缓存统计</div>
             <div x-show="!idempotencyCacheStats" style="font-size:12px;color:var(--muted)">暂无统计，点击“刷新缓存”加载。</div>
             <div x-show="idempotencyCacheStats" style="display:flex;gap:8px;flex-wrap:wrap">
-              <span class="badge badge-info" x-text="`source: ${idempotencySourceZh(idempotencyCacheStats.source)}`"></span>
-              <span class="badge badge-info" x-text="`ttl: ${idempotencyCacheStats.ttl_seconds || 0}s`"></span>
-              <span class="badge badge-info" x-text="`总数: ${idempotencyCacheStats.total || 0}`"></span>
-              <span class="badge badge-success" x-text="`有效: ${idempotencyCacheStats.active || 0}`"></span>
-              <span class="badge badge-warn" x-text="`过期: ${idempotencyCacheStats.expired || 0}`"></span>
-              <span class="badge badge-info" x-text="`返回: ${idempotencyCacheStats.returned || 0}`"></span>
+              <span class="badge badge-info" x-text="`source: ${idempotencySourceZh(idempotencyCacheStats?.source)}`"></span>
+              <span class="badge badge-info" x-text="`ttl: ${idempotencyCacheStats?.ttl_seconds || 0}s`"></span>
+              <span class="badge badge-info" x-text="`总数: ${idempotencyCacheStats?.total || 0}`"></span>
+              <span class="badge badge-success" x-text="`有效: ${idempotencyCacheStats?.active || 0}`"></span>
+              <span class="badge badge-warn" x-text="`过期: ${idempotencyCacheStats?.expired || 0}`"></span>
+              <span class="badge badge-info" x-text="`返回: ${idempotencyCacheStats?.returned || 0}`"></span>
             </div>
             <div x-show="idempotencyCacheStats" style="font-size:12px;color:var(--muted);margin-top:8px"
-                 x-text="`raw(memory/persisted): ${(idempotencyCacheStats && idempotencyCacheStats.memory_total_raw) || 0} / ${(idempotencyCacheStats && idempotencyCacheStats.persisted_total_raw) || 0}`"></div>
+                 x-text="`raw(memory/persisted): ${idempotencyCacheStats?.memory_total_raw || 0} / ${idempotencyCacheStats?.persisted_total_raw || 0}`"></div>
             <div x-show="idempotencyCacheStats && idempotencyCacheStats.filters" style="font-size:12px;color:var(--muted);margin-top:6px"
-                 x-text="`filters: actor=${(idempotencyCacheStats.filters && idempotencyCacheStats.filters.actor_id) || '-'} | endpoint=${(idempotencyCacheStats.filters && idempotencyCacheStats.filters.endpoint) || '-'} | key=${(idempotencyCacheStats.filters && idempotencyCacheStats.filters.idempotency_key) || '-'} | mode=${(idempotencyCacheStats.filters && idempotencyCacheStats.filters.match_mode) || 'contains'}`"></div>
+                 x-text="`filters: actor=${idempotencyCacheStats?.filters?.actor_id || '-'} | endpoint=${idempotencyCacheStats?.filters?.endpoint || '-'} | key=${idempotencyCacheStats?.filters?.idempotency_key || '-'} | mode=${idempotencyCacheStats?.filters?.match_mode || 'contains'}`"></div>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px" x-show="idempotencyCacheStats">
               <button class="btn btn-ghost"
                       :disabled="idempotencyCacheLoading || ((idempotencyCacheStats && idempotencyCacheStats.offset) || 0) <= 0"
@@ -2855,7 +2864,7 @@
                     x-text="`offset ${(agentObservabilityItemsOffset || 0)} / 命中 ${(agentObservabilityItemsTotal || 0)}`"></span>
             </div>
             <div x-show="agentTaskDetailLoading" style="font-size:12px;color:var(--muted);margin-top:8px">任务详情加载中…</div>
-            <div x-show="agentTaskDetailError" style="font-size:12px;color:#b42318;margin-top:8px" x-text="agentTaskDetailError"></div>
+            <div x-show="agentTaskDetailError" style="font-size:12px;margin-top:8px" class="text-danger" x-text="agentTaskDetailError"></div>
             <div class="card" style="margin-top:10px" x-show="agentTaskDetail">
               <div class="card-title" x-text="`任务详情：${agentTaskDetailJobId || '-'}`"></div>
               <div style="font-size:12px;color:var(--muted);margin-bottom:8px"
@@ -3173,7 +3182,7 @@
       <div x-show="jobStatus==='cancelled'"
            style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);
                   border-radius:10px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center">
-        <div style="font-size:13px;color:#f59e0b">任务已取消</div>
+        <div style="font-size:13px" class="text-warn">任务已取消</div>
         <button class="btn btn-ghost" @click="jobStatus=''">关闭</button>
       </div>
 

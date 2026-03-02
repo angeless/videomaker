@@ -237,6 +237,7 @@
     // ── 能力工作台（Capability）──────────────────────────────────
     capabilityTab: "topic_library",
     capabilityMessage: "",
+    capabilityMessageType: "info",
     capabilityGroups: [
       {
         key: "creative",
@@ -681,6 +682,9 @@
 
     // ── 素材列表（Step 1）──────────────────────────────────────
     materials:   {},
+
+    // ── Toast 通知 ──────────────────────────────────────────────
+    toasts: [],
 
     };
   };

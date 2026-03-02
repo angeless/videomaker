@@ -212,6 +212,7 @@
         this.capabilitiesLoading = false;
         if (data.error) {
           this.capabilityMessage = `能力列表读取失败：${data.error}`;
+          this.capabilityMessageType = "danger";
           return;
         }
         this.capabilities = Array.isArray(data.capabilities) ? data.capabilities : [];
@@ -251,6 +252,7 @@
         const mode = this.capabilityModeText(entry && entry.mode ? entry.mode : "hybrid");
         if (!this.projectDir && mode === "project") {
           this.capabilityMessage = `模块「${entry && entry.label ? entry.label : key}」需要先打开项目后使用`;
+          this.capabilityMessageType = "warn";
           return;
         }
         if (key === "text_rough") await this.loadTextRoughSource();
@@ -319,6 +321,7 @@
         this.idempotencyCacheLoading = false;
         if (data.error) {
           this.capabilityMessage = `幂等缓存读取失败：${data.error}`;
+          this.capabilityMessageType = "danger";
           return;
         }
         this.idempotencyCacheRecords = Array.isArray(data.records) ? data.records : [];
@@ -390,6 +393,7 @@
         this.idempotencyCachePruning = false;
         if (data.error) {
           this.capabilityMessage = `幂等缓存清理失败：${data.error}`;
+          this.capabilityMessageType = "danger";
           return;
         }
         this.idempotencyCacheRecords = Array.isArray(data.records) ? data.records : [];
@@ -397,6 +401,7 @@
         this.idempotencyCacheLastPrune = data.prune || null;
         const prune = this.idempotencyCacheLastPrune || {};
         this.capabilityMessage = `幂等缓存已清理：内存移除 ${prune.memory_removed || 0}，落盘移除 ${prune.persisted_removed || 0}`;
+        this.capabilityMessageType = "success";
       },
 
       async loadAgentObservability(resetHistoryOffset = true) {
@@ -460,6 +465,7 @@
 
         if (summaryData.error) {
           this.capabilityMessage = `Agent 观测读取失败：${summaryData.error}`;
+          this.capabilityMessageType = "danger";
           return;
         }
         this.agentObservabilitySummary = summaryData.summary || null;
@@ -483,6 +489,7 @@
           this.agentObservabilityItemsTotal = 0;
           this.agentObservabilityItemsHasMore = false;
           this.capabilityMessage = `Agent 历史读取失败：${historyData.error}`;
+          this.capabilityMessageType = "danger";
           return;
         }
         this.agentObservabilityItems = Array.isArray(historyData && historyData.items) ? historyData.items : [];
@@ -553,17 +560,20 @@
         this.agentObservabilityExporting = "";
         if (data.error) {
           this.capabilityMessage = `Agent 观测导出失败：${data.error}`;
+          this.capabilityMessageType = "danger";
           return;
         }
         this.agentObservabilityLastExport = `${data.output || ""}`;
         if (data.summary) this.agentObservabilitySummary = data.summary;
         this.capabilityMessage = `Agent 观测已导出 ${fmt.toUpperCase()}：${this.agentObservabilityLastExport || "-"}`;
+        this.capabilityMessageType = "success";
       },
 
       async openAgentObservabilityExport() {
         const path = `${this.agentObservabilityLastExport || ""}`.trim();
         if (!path) {
           this.capabilityMessage = "暂无 Agent 观测导出文件";
+          this.capabilityMessageType = "warn";
           return;
         }
         await this.openFinder(path);
@@ -574,6 +584,7 @@
         const sourceJobId = `${item && item.job_id ? item.job_id : ""}`.trim();
         if (!sourceJobId) {
           this.capabilityMessage = "缺少任务ID，无法重放";
+          this.capabilityMessageType = "warn";
           return "";
         }
         if (this.agentReplayRunningJobId) return "";
@@ -585,23 +596,29 @@
         if (data.error || !data.ok) {
           this.agentReplayRunningJobId = "";
           this.capabilityMessage = `任务重放失败：${data && data.error ? data.error : "调用失败"}`;
+          this.capabilityMessageType = "danger";
           return "";
         }
         const newJobId = `${data.new_job_id || (data.response && data.response.job_id) || ""}`.trim();
         if (!newJobId) {
           this.agentReplayRunningJobId = "";
           this.capabilityMessage = "重放请求已发送，但未返回新任务ID";
+          this.capabilityMessageType = "warn";
           return "";
         }
         this.capabilityMessage = `已启动任务重放：${sourceJobId} -> ${newJobId}`;
+        this.capabilityMessageType = "info";
         const job = await this.waitForJob(newJobId, null, 3 * 60 * 60 * 1000);
         this.agentReplayRunningJobId = "";
         if (job.status === "done") {
           this.capabilityMessage = `任务重放完成：${newJobId}`;
+          this.capabilityMessageType = "success";
         } else if (job.status === "cancelled") {
           this.capabilityMessage = `任务重放已取消：${newJobId}`;
+          this.capabilityMessageType = "warn";
         } else {
           this.capabilityMessage = `任务重放失败：${job.error || newJobId}`;
+          this.capabilityMessageType = "danger";
         }
         await this.loadAgentObservability();
         return newJobId;
@@ -633,6 +650,7 @@
         const currentJobId = `${this.agentTaskDetailJobId || ""}`.trim();
         if (!currentJobId) {
           this.capabilityMessage = "请先选择一个任务详情";
+          this.capabilityMessageType = "warn";
           return;
         }
         const newJobId = await this.replayAgentTask({ job_id: currentJobId });
@@ -646,6 +664,7 @@
         const jobId = `${this.agentTaskDetailJobId || ""}`.trim();
         if (!jobId) {
           this.capabilityMessage = "请先选择一个任务详情";
+          this.capabilityMessageType = "warn";
           return;
         }
         const fmt = `${format || "json"}`.trim().toLowerCase();
@@ -658,16 +677,19 @@
         const data = await this.api("POST", `/api/agent/tasks/${encodeURIComponent(jobId)}/export`, payload);
         if (data.error || !data.ok) {
           this.capabilityMessage = `任务导出失败：${data && data.error ? data.error : "调用失败"}`;
+          this.capabilityMessageType = "danger";
           return;
         }
         this.agentTaskDetailLastExport = `${data.output || ""}`;
         this.capabilityMessage = `任务已导出 ${fmt.toUpperCase()}：${this.agentTaskDetailLastExport || "-"}`;
+        this.capabilityMessageType = "success";
       },
 
       async openAgentTaskDetailExport() {
         const path = `${this.agentTaskDetailLastExport || ""}`.trim();
         if (!path) {
           this.capabilityMessage = "暂无任务导出文件";
+          this.capabilityMessageType = "warn";
           return;
         }
         await this.openFinder(path);

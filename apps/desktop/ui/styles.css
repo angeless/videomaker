@@ -1328,3 +1328,40 @@ input[type=number].input::-webkit-outer-spin-button {
     overflow: visible;
   }
 }
+
+/* ── Toast 通知 ───────────────────────────────────────────────────── */
+.toast-container {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 380px;
+  pointer-events: none;
+}
+.toast {
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  pointer-events: auto;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  animation: toast-in 0.25s ease-out;
+}
+.toast-info    { background: var(--surface2); color: var(--text); border-left: 3px solid var(--accent); }
+.toast-success { background: var(--surface2); color: var(--success); border-left: 3px solid var(--success); }
+.toast-warn    { background: var(--surface2); color: var(--warn); border-left: 3px solid var(--warn); }
+.toast-danger  { background: var(--surface2); color: var(--danger); border-left: 3px solid var(--danger); }
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ── 文本颜色工具类 ───────────────────────────────────────────────── */
+.text-success { color: var(--success); }
+.text-warn    { color: var(--warn); }
+.text-danger  { color: var(--danger); }
+.text-muted   { color: var(--muted); }
+.text-accent  { color: var(--accent); }

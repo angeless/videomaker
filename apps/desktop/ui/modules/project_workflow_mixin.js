@@ -116,13 +116,13 @@
       async runCurrentStep() {
         if (!(await this._ensureWorkflowRunnable("执行下一步"))) return;
         if (!this.projectDir) {
-          alert("请先选择素材并创建制作项目");
+          this.showToast("请先选择素材并创建制作项目", "warn");
           return;
         }
         const data = await this.api("POST", "/api/run_step");
         if (data.error) {
           const handled = await this._handleBusyConflict(data, "执行下一步");
-          if (!handled) alert(data.error);
+          if (!handled) this.showToast(data.error, "danger");
           return;
         }
         this.startPolling(data.job_id);
@@ -133,7 +133,7 @@
         const data = await this.api("POST", `/api/approve/${step}`, { approved: true, ...fields });
         if (data.error) {
           const handled = await this._handleBusyConflict(data, `审核 Step ${step}`);
-          if (!handled) alert(data.error);
+          if (!handled) this.showToast(data.error, "danger");
           return;
         }
         this.startPolling(data.job_id);
@@ -296,7 +296,7 @@
             const parsed = JSON.parse(this.scriptJson);
             await this.api("POST", "/api/script", parsed);
           } catch (e) {
-            alert(`JSON 格式错误: ${e.message}`);
+            this.showToast(`JSON 格式错误: ${e.message}`, "danger");
             this.scriptSaving = false;
             return;
           }

@@ -44,6 +44,18 @@
         return Array.from(out).sort((a, b) => a - b);
       },
 
+      /* ── Toast 通知 ─────────────────────────────────────────── */
+      showToast(message, type = "info", durationMs = 4000) {
+        const id = Date.now() + Math.random();
+        this.toasts.push({ id, message, type });
+        if (durationMs > 0) {
+          setTimeout(() => this.dismissToast(id), durationMs);
+        }
+      },
+      dismissToast(id) {
+        this.toasts = this.toasts.filter(t => t.id !== id);
+      },
+
       formatSpanIndexExpr(indexes) {
         const arr = Array.isArray(indexes)
           ? indexes.map(x => parseInt(x, 10)).filter(x => Number.isFinite(x) && x > 0).sort((a, b) => a - b)

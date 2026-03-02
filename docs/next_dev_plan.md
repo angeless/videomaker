@@ -142,6 +142,40 @@
 - 回归验证：173/173 测试通过，0 warnings。
 - 详见 `docs/changelog-v0.3.1.md`。
 
+### v0.3.21 Alpine null-access 警告修复（2026-03-02）
+- **模板 null 保护**：`index.html` 20 处 `x-text`/`x-for` 表达式添加可选链 `?.` 保护。
+- 涵盖：自检面板 `preflightReport?.summary`、素材预览 `ingestLocalPreview?.sample_videos`、NLE 交接 `nleConnectorByEditor()` 返回值、幂等缓存 `idempotencyCacheStats?.source` 等。
+- 零 JS 逻辑变更，纯模板防御。
+- 回归验证：173/173 测试通过，0 warnings。
+- 详见 `docs/changelog-v0.3.1.md`。
+
+### v0.3.22 内联颜色规范化 + CSS 工具类（2026-03-02）
+- **CSS 工具类**：`styles.css` 新增 `.text-success/.text-warn/.text-danger/.text-muted/.text-accent`。
+- **硬编码消除**：`index.html` 2 处 `color:#b42318`/`#f59e0b` 替换为 `class="text-danger"`/`"text-warn"`。
+- 扫描确认 `index.html` 零残留 `color:#` 硬编码。
+- 回归验证：173/173 测试通过，0 warnings。
+- 详见 `docs/changelog-v0.3.1.md`。
+
+### v0.3.25 capabilityMessage 类型着色 + 缓存版本号（2026-03-02）
+- **类型着色**：`capability_admin_mixin.js` 22 处 `capabilityMessage` 全部配套 `capabilityMessageType`（danger/warn/success/info）。
+- **动态 badge**：`index.html` capabilityMessage badge 从固定 `badge-info` 改为动态 `:class`。
+- **缓存刷新**：`index.html` 全部 `?v=` 标签统一更新至 `20260302r1`。
+- 回归验证：173/173 测试通过，0 warnings。
+- 详见 `docs/changelog-v0.3.1.md`。
+
+### v0.3.24 alert→toast 全量迁移（2026-03-02）
+- **全量迁移**：`runtime_mixin.js`(5) + `settings_mixin.js`(2) + `project_workflow_mixin.js`(4) 共 11 处 `alert()` 替换为 `showToast()`。
+- `confirm()` 对话框保留（需要用户决策）。
+- 扫描确认 `apps/desktop/ui/` 目录零残留 `alert()`。
+- 回归验证：173/173 测试通过，0 warnings。
+- 详见 `docs/changelog-v0.3.1.md`。
+
+### v0.3.23 Toast 通知系统（2026-03-02）
+- **新增 Toast 组件**：`app_store.js` 新增 `toasts` 状态；`common_utils_mixin.js` 新增 `showToast()`/`dismissToast()`；`styles.css` 新增样式+动画；`index.html` 新增渲染模板。
+- 纯新增代码，零已有逻辑修改。
+- 回归验证：173/173 测试通过，0 warnings。
+- 详见 `docs/changelog-v0.3.1.md`。
+
 ## Phase 1（高优先，1-2 周）
 
 1. 真实发布引擎（替换模拟）

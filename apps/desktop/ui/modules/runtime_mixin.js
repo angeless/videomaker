@@ -470,7 +470,7 @@
       if (!this.jobId) return;
       const data = await this.cancelJob(this.jobId);
       if (data.error) {
-        alert(`取消失败：${data.error}`);
+        this.showToast(`取消失败：${data.error}`, "danger");
         return;
       }
       this.jobLog = (this.jobLog || []).concat(["[系统] 已发送取消请求，正在安全停止…"]);
@@ -498,7 +498,7 @@
         .join("、");
       const ingestJob = jobs.find((j) => `${j.kind || ""}`.startsWith("library_ingest"));
       if (!ingestJob) {
-        alert(`${actionLabel}被阻塞：${data.error || "有任务运行中"}\n正在运行：${summary}`);
+        this.showToast(`${actionLabel}被阻塞：${data.error || "有任务运行中"}；正在运行：${summary}`, "warn", 6000);
         return true;
       }
       const ok = confirm(
@@ -508,7 +508,7 @@
       if (!ok) return true;
       const cancelRet = await this.cancelJob(ingestJob.job_id);
       if (cancelRet.error) {
-        alert(`取消素材分析失败：${cancelRet.error}`);
+        this.showToast(`取消素材分析失败：${cancelRet.error}`, "danger");
         return true;
       }
       this.ingestMessage = "已发送取消请求，待分析任务安全停止后再继续。";
@@ -517,7 +517,7 @@
 
     async _ensureWorkflowRunnable(actionLabel = "当前操作") {
       if (this.jobStatus === "running" || this.jobStatus === "queued") {
-        alert("制作流程任务正在运行，请稍后再操作");
+        this.showToast("制作流程任务正在运行，请稍后再操作", "warn");
         return false;
       }
       if (this.ingestLoading && this.ingestJobId) {
@@ -525,7 +525,7 @@
         if (!ok) return false;
         const ret = await this.cancelJob(this.ingestJobId);
         if (ret.error) {
-          alert(`取消素材分析失败：${ret.error}`);
+          this.showToast(`取消素材分析失败：${ret.error}`, "danger");
           return false;
         }
         this.ingestMessage = "已发送取消请求，待分析任务安全停止后再继续。";

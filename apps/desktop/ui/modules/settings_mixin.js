@@ -26,7 +26,7 @@
           return;
         }
         if (data.error && !data.cancelled) {
-          alert(`选择文件夹失败：${data.error}`);
+          this.showToast(`选择文件夹失败：${data.error}`, "danger");
         }
       },
 
@@ -37,7 +37,7 @@
           return;
         }
         if (data.error && !data.cancelled) {
-          alert(`选择文件失败：${data.error}`);
+          this.showToast(`选择文件失败：${data.error}`, "danger");
         }
       },
 

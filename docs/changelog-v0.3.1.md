@@ -606,6 +606,92 @@ macOS `open` 命令的 `Popen` 改为 `subprocess.run(timeout=5, check=False)`�
 
 回归验证：**173/173 测试通过，0 warnings**。
 
+## v0.3.21（2026-03-02）— Alpine null-access 警告修复
+
+### 问题
+
+页面加载或切换标签页时，浏览器控制台出现多条 TypeError 警告。原因：Alpine.js 即使在
+`x-show="false"` 时仍然会求值 `x-text`/`x-for` 表达式，当变量为 `null` 时访问其属性抛 TypeError。
+
+### 修复
+
+在 `index.html` 中为所有 null 初始化变量的属性访问添加可选链（`?.`）保护：
+
+| 区域 | 变量 | 修改数 |
+|------|------|--------|
+| 自检面板 (L247-254) | `preflightReport?.summary?.ok` 等 | 5 处 |
+| 素材入库预览 (L430-441) | `ingestLocalPreview?.sample_videos`、`ingestImagePreview?.sample_images` | 2 处 |
+| NLE 交接提示 (L1049) | `(nleConnectorByEditor(...) \|\| {}).hint` | 1 处 |
+| 幂等缓存统计 (L2521-2538) | `idempotencyCacheLastPrune?.memory_before`、`idempotencyCacheStats?.source` 等 | 12 处 |
+
+总计 20 处模板表达式修复，零 JS 逻辑变更。
+
+回归验证：**173/173 测试通过，0 warnings**。
+
+## v0.3.22（2026-03-02）— 内联颜色规范化 + CSS 工具类
+
+### 变更
+
+1. `styles.css` 末尾新增 5 个文本颜色工具类：`.text-success` / `.text-warn` / `.text-danger` / `.text-muted` / `.text-accent`，均使用 CSS 变量。
+2. `index.html` L2858：`color:#b42318` → `class="text-danger"`（Agent 任务详情错误提示）。
+3. `index.html` L3176：`color:#f59e0b` → `class="text-warn"`（任务已取消文本）。
+
+扫描确认：`index.html` 中零残留 `color:#` 硬编码。
+
+回归验证：**173/173 测试通过，0 warnings**。
+
+## v0.3.23（2026-03-02）— Toast 通知系统
+
+### 新增
+
+轻量级 Toast 通知组件，为后续替换 `alert()` 提供基础设施。纯新增代码，未修改任何已有逻辑。
+
+| 文件 | 变更 |
+|------|------|
+| `app_store.js` | 新增 `toasts: []` 状态 |
+| `common_utils_mixin.js` | 新增 `showToast(message, type, durationMs)` + `dismissToast(id)` |
+| `styles.css` | 新增 `.toast-container` / `.toast` / `.toast-info/success/warn/danger` + 动画 |
+| `index.html` | `#app` 内顶部新增 toast 渲染模板（`x-for` + `x-cloak`） |
+
+**API**：`this.showToast('消息', 'success')` / `this.showToast('错误', 'danger', 6000)`
+
+回归验证：**173/173 测试通过，0 warnings**。
+
+## v0.3.24（2026-03-02）— alert() → showToast() 全量迁移
+
+### 变更
+
+将 UI 模块中全部 11 处 `alert()` 调用替换为非阻塞 `showToast()`。`confirm()` 对话框保留（需要用户决策）。
+
+| 文件 | 替换数 | 示例 |
+|------|--------|------|
+| `runtime_mixin.js` | 5 处 | 取消失败 → `showToast(..., 'danger')` |
+| `settings_mixin.js` | 2 处 | 选择文件夹/文件失败 → `showToast(..., 'danger')` |
+| `project_workflow_mixin.js` | 4 处 | 未选项目/执行错误/JSON 错误 → `showToast(..., 'warn'/'danger')` |
+
+扫描确认：`apps/desktop/ui/` 目录零残留 `alert()`。
+
+回归验证：**173/173 测试通过，0 warnings**。
+
+## v0.3.25（2026-03-02）— capabilityMessage 类型着色 + 缓存版本号统一
+
+### 变更
+
+1. `app_store.js` 新增 `capabilityMessageType: "info"` 状态。
+2. `index.html` L804：badge 从固定 `badge-info` 改为动态 `:class="\`badge-${capabilityMessageType || 'info'}\`"`。
+3. `capability_admin_mixin.js`：22 处 `capabilityMessage` 赋值全部配套设置 `capabilityMessageType`。
+
+| 类型 | 数量 | 场景 |
+|------|------|------|
+| `danger` | 10 | 读取失败、导出失败、重放失败 |
+| `warn` | 7 | 需要打开项目、缺少数据、已取消 |
+| `success` | 4 | 清理完成、导出成功、重放完成 |
+| `info` | 1 | 重放已启动 |
+
+4. `index.html` 头部所有 `?v=` 缓存版本号统一更新为 `20260302r1`。
+
+回归验证：**173/173 测试通过，0 warnings**。
+
 ## 下一步计划
 
 参见 `docs/next_dev_plan.md` 中的 Phase 1-4 计划。当前优先项：
