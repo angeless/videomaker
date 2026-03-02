@@ -66,7 +66,7 @@ class FFmpegRenderer:
         """检测当前 FFmpeg 是否支持 subtitles filter（需要 libass）"""
         result = subprocess.run(
             [self.ffmpeg_path, "-filters"],
-            capture_output=True, text=True
+            capture_output=True, text=True, timeout=15
         )
         has_it = " subtitles " in result.stdout or "\tsubtitles " in result.stdout
         if not has_it:
@@ -99,7 +99,7 @@ class FFmpegRenderer:
             video_path
         ]
         
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         if result.returncode != 0:
             raise RuntimeError(f"无法获取视频信息: {result.stderr}")
         
@@ -245,8 +245,8 @@ class FFmpegRenderer:
         print(f"🎬 渲染: {output_path.name}")
         print(f"   滤镜: {video_filter[:80]}...")
         
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+
         if result.returncode != 0:
             print(f"❌ 渲染失败: {result.stderr}")
             raise RuntimeError(f"FFmpeg 渲染失败: {result.stderr[:500]}")
@@ -433,7 +433,7 @@ class VideoPipeline:
                     clip_cmd.extend(["-r", "30", "-vsync", "cfr",
                                      "-c:v", "libx264", "-crf", "18", "-preset", "fast",
                                      "-c:a", "aac", clipped])
-                    subprocess.run(clip_cmd, capture_output=True, check=True)
+                    subprocess.run(clip_cmd, capture_output=True, check=True, timeout=300)
 
                     # Step 2: 磨皮（仅视频）
                     beauty_vid_only = str(self.temp_dir / f"beauty_vid_{i:03d}.mp4")
@@ -446,7 +446,7 @@ class VideoPipeline:
                                  "-map", "0:v", "-map", "1:a?",
                                  "-c:v", "copy", "-c:a", "copy",
                                  beauty_output]
-                    subprocess.run(merge_cmd, capture_output=True, check=True)
+                    subprocess.run(merge_cmd, capture_output=True, check=True, timeout=300)
                     print(f"   磨皮: 频率分解（高级）")
                 except Exception as e:
                     print(f"   磨皮: 降级到 smartblur ({e})")
@@ -623,7 +623,7 @@ class VideoPipeline:
             "-c:a", "aac",
             output_path
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
         if result.returncode != 0:
             print(f"  ⚠️  音频合并失败，使用无声版: {result.stderr[:200]}")
             shutil.copy(video_only, output_path)
@@ -639,7 +639,7 @@ class VideoPipeline:
             [self.renderer.ffprobe_path, "-v", "error",
              "-select_streams", "a:0", "-show_entries", "stream=codec_type",
              "-of", "csv=p=0", video_path],
-            capture_output=True, text=True
+            capture_output=True, text=True, timeout=30
         )
         has_audio = probe.stdout.strip() == "audio"
 
@@ -666,7 +666,7 @@ class VideoPipeline:
                 "-shortest", output_path
             ]
 
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
         if result.returncode != 0:
             print(f"  ⚠️  BGM 混合失败，保留原音频: {result.stderr[:200]}")
             shutil.copy(video_path, output_path)

@@ -174,7 +174,7 @@ class RenderPipeline:
                 "-an",  # 去掉原始音轨，BGM 在 Stage 5 叠加
                 seg_out,
             ]
-            r = subprocess.run(cmd, capture_output=True)
+            r = subprocess.run(cmd, capture_output=True, timeout=600)
             if r.returncode == 0:
                 segs.append(seg_out)
                 try:
@@ -541,7 +541,7 @@ class RenderPipeline:
             "-c:a", "copy",
             output,
         ]
-        r = subprocess.run(cmd, capture_output=True)
+        r = subprocess.run(cmd, capture_output=True, timeout=600)
         if r.returncode != 0:
             print(f"  ⚠️  字幕 re-encode 失败，使用无字幕版本")
             return input_path

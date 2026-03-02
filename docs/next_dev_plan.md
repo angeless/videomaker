@@ -51,6 +51,12 @@
 - 回归验证：146/146 测试通过，0 warnings。
 - 详见 `docs/changelog-v0.3.1.md`。
 
+### v0.3.8 子进程超时 + 裸 except 修复（2026-03-02）
+- **subprocess 超时防护**：`auto_render.py`(8处)/`pipeline.py`(2处)/`rough_cut.py`(2处)/`video_asset_toolkit.py`(1处) 全部添加 `timeout` 参数。
+- **裸 except 修复第二批**：`search_videos.py`(3处) + `materials_mapper.py`(1处)。
+- 回归验证：146/146 测试通过，0 warnings。
+- 详见 `docs/changelog-v0.3.1.md`。
+
 ## Phase 1（高优先，1-2 周）
 
 1. 真实发布引擎（替换模拟）

@@ -174,6 +174,29 @@ max_frames = max(total_frames * 2, int(fps * 600))
 
 回归验证：**146/146 测试通过，0 warnings**。
 
+## v0.3.8 子进程超时 + 裸 except 修复（2026-03-02）
+
+### subprocess 超时防护
+
+为所有核心模块的 `subprocess.run()` / `check_output()` 添加 `timeout` 参数，防止损坏文件或网络文件导致 FFmpeg/FFprobe 无限挂起。
+
+| 文件 | 调用数 | 超时值 |
+|------|--------|--------|
+| `auto_render.py` | 8 处 | 15s（filter检测）/ 30s（ffprobe）/ 300s（裁剪/合并）/ 600s（音频混合）/ 3600s（完整渲染） |
+| `pipeline.py` | 2 处 | 600s（片段编码/字幕 re-encode） |
+| `rough_cut.py` | 2 处 | 600s（片段编码/concat） |
+| `video_asset_toolkit.py` | 1 处 | 30s（ffprobe 元数据提取） |
+
+### 裸 except 修复（第二批）
+
+| 文件 | 修复 |
+|------|------|
+| `search_videos.py` L150/184 | `except:` → `except Exception:` |
+| `search_videos.py` L253 | `except:` → `except Exception:` |
+| `materials_mapper.py` L192 | `except:` → `except (TypeError, ValueError):` |
+
+回归验证：**146/146 测试通过，0 warnings**。
+
 ## 下一步计划
 
 参见 `docs/next_dev_plan.md` 中的 Phase 1-4 计划。当前优先项：

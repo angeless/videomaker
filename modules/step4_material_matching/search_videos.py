@@ -147,7 +147,7 @@ class VideoSearch:
                             "preview_info": video_data["index_data"]["preview_info"],
                             "content_summary": video_data["content_summary"]
                         })
-            except:
+            except Exception:
                 continue
         
         # 按分辨率排序（从高到低）
@@ -181,7 +181,7 @@ class VideoSearch:
                         "preview_info": video_data["index_data"]["preview_info"],
                         "content_summary": video_data["content_summary"]
                     })
-            except:
+            except Exception:
                 continue
         
         # 按时长排序
@@ -250,7 +250,7 @@ def main():
             width, height = map(int, args.resolution.split("x"))
             results = search.search_by_resolution(width, height)
             print_results(results, f"分辨率 ≥ {args.resolution}")
-        except:
+        except Exception:
             print("错误: 分辨率格式应为 宽度x高度，如 1920x1080")
     
     elif args.min_width or args.min_height:

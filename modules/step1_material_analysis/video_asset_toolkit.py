@@ -144,7 +144,7 @@ class VideoAssetToolkit:
                 "-show_streams",
                 str(video_path)
             ]
-            output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+            output = subprocess.check_output(cmd, stderr=subprocess.STDOUT, timeout=30)
             metadata = json.loads(output)
             
             # 提取关键信息

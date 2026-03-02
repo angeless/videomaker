@@ -107,7 +107,7 @@ def build_rough_cut(
                 "yuv420p",
                 str(seg_out),
             ]
-            r = subprocess.run(cmd, capture_output=True)
+            r = subprocess.run(cmd, capture_output=True, timeout=600)
             if r.returncode == 0:
                 segs.append(str(seg_out))
                 used += allot
@@ -123,7 +123,7 @@ def build_rough_cut(
         concat_list.write_text("\n".join(f"file '{p}'" for p in segs), encoding="utf-8")
         cmd2 = [ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", str(concat_list), "-c", "copy", str(rough_path)]
         _check_cancel()
-        subprocess.run(cmd2, capture_output=True, check=True)
+        subprocess.run(cmd2, capture_output=True, check=True, timeout=600)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

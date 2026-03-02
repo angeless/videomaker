@@ -189,7 +189,7 @@ def parse_resolution(resolution: str) -> tuple:
         if "x" in resolution:
             w, h = resolution.split("x")
             return int(w), int(h)
-    except:
+    except (TypeError, ValueError):
         pass
     return 1920, 1080
 
