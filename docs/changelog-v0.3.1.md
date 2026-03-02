@@ -269,6 +269,34 @@ macOS `open` 命令的 `Popen` 改为 `subprocess.run(timeout=5, check=False)`�
 
 回归验证：**150/150 测试通过，0 warnings**。
 
+---
+
+## v0.3.12（2026-03-02）— 参数解析统一（第三批）+ library 端点测试
+
+### 路由参数解析统一
+
+将 `library_routes.py` 和 `capability_audio_voice_routes.py` 中剩余的手写
+`try/except int()/float() + max(min())` 模式替换为共享工具函数。
+
+| 文件 | 替换数 | 参数 |
+|------|--------|------|
+| `library_routes.py` | 15 处 | limit, offset, max_results, max_videos, max_images, max_scan_folders |
+| `capability_audio_voice_routes.py` | 8 处 | origin_volume, narration_volume, bgm_volume, bgm_fade_out_s, ducking_* |
+
+净减代码约 55 行，行为完全保持一致。
+
+### 新增测试（+5）
+
+| 测试 | 端点 | 验证内容 |
+|------|------|---------|
+| `test_v0312_library_search_default_params` | GET /api/library/search | 默认参数、browse 模式 |
+| `test_v0312_library_search_with_query_and_bounds` | GET /api/library/search | 无效/超大 limit/offset 安全降级 |
+| `test_v0312_library_assets_post` | POST /api/library/assets | UID 批量查询 |
+| `test_v0312_library_preview_local_missing_path` | POST /api/library/preview/local | 缺少 path 返回 400 |
+| `test_v0312_library_preview_local_invalid_max_results` | POST /api/library/preview/local | 无效数值安全降级 |
+
+回归验证：**152/152 测试通过，0 warnings**。
+
 ## 下一步计划
 
 参见 `docs/next_dev_plan.md` 中的 Phase 1-4 计划。当前优先项：

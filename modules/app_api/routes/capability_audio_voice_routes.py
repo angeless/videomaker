@@ -10,6 +10,8 @@ import uuid
 
 from flask import Blueprint, jsonify, request
 
+from modules.app_api.param_utils import parse_float_param
+
 
 def create_audio_voice_capability_blueprint(
     *,
@@ -391,16 +393,16 @@ def create_audio_voice_capability_blueprint(
                 bgm_audio=bgm_audio,
                 ffmpeg_bin=ffmpeg_bin,
                 ffprobe_bin=ffprobe_bin,
-                origin_volume=max(0.0, min(float(payload.get("origin_volume", 0.8) or 0.8), 3.0)),
-                narration_volume=max(0.0, min(float(payload.get("narration_volume", 1.0) or 1.0), 3.0)),
-                bgm_volume=max(0.0, min(float(payload.get("bgm_volume", 0.25) or 0.25), 3.0)),
+                origin_volume=parse_float_param(payload.get("origin_volume", 0.8) or 0.8, default=0.8, min_val=0.0, max_val=3.0),
+                narration_volume=parse_float_param(payload.get("narration_volume", 1.0) or 1.0, default=1.0, min_val=0.0, max_val=3.0),
+                bgm_volume=parse_float_param(payload.get("bgm_volume", 0.25) or 0.25, default=0.25, min_val=0.0, max_val=3.0),
                 bgm_loop=bool(payload.get("bgm_loop", True)),
-                bgm_fade_out_s=max(0.0, min(float(payload.get("bgm_fade_out_s", 2.0) or 0.0), 30.0)),
+                bgm_fade_out_s=parse_float_param(payload.get("bgm_fade_out_s", 2.0) or 0.0, default=0.0, min_val=0.0, max_val=30.0),
                 enable_ducking=bool(payload.get("enable_ducking", True)),
-                ducking_threshold=max(0.0, min(float(payload.get("ducking_threshold", 0.03) or 0.03), 1.0)),
-                ducking_ratio=max(1.0, min(float(payload.get("ducking_ratio", 8.0) or 8.0), 50.0)),
-                ducking_attack_ms=max(0.0, min(float(payload.get("ducking_attack_ms", 15.0) or 15.0), 500.0)),
-                ducking_release_ms=max(0.0, min(float(payload.get("ducking_release_ms", 250.0) or 250.0), 2000.0)),
+                ducking_threshold=parse_float_param(payload.get("ducking_threshold", 0.03) or 0.03, default=0.03, min_val=0.0, max_val=1.0),
+                ducking_ratio=parse_float_param(payload.get("ducking_ratio", 8.0) or 8.0, default=8.0, min_val=1.0, max_val=50.0),
+                ducking_attack_ms=parse_float_param(payload.get("ducking_attack_ms", 15.0) or 15.0, default=15.0, min_val=0.0, max_val=500.0),
+                ducking_release_ms=parse_float_param(payload.get("ducking_release_ms", 250.0) or 250.0, default=250.0, min_val=0.0, max_val=2000.0),
                 audio_bitrate=str(payload.get("audio_bitrate", "192k") or "192k"),
                 timeout_seconds=timeout_seconds,
                 dry_run=dry_run,

@@ -77,6 +77,13 @@
 - 回归验证：150/150 测试通过，0 warnings。
 - 详见 `docs/changelog-v0.3.1.md`。
 
+### v0.3.12 参数解析统一（第三批）+ library 端点测试（2026-03-02）
+- **library_routes.py**：15 处 try/except+clamp 参数解析替换为 `parse_int_param()`（limit, offset, max_results, max_videos, max_images, max_scan_folders）。
+- **capability_audio_voice_routes.py**：8 处 inline `max(min(float(...)))` 音量/ducking 参数替换为 `parse_float_param()`，同时增加对非法字符串输入的容错。
+- **新增 5 个测试**：library search（默认参数 + 边界值）、assets POST、preview/local（缺失路径 + 非法 max_results）。
+- 回归验证：152/152 测试通过，0 warnings。
+- 详见 `docs/changelog-v0.3.1.md`。
+
 ## Phase 1（高优先，1-2 周）
 
 1. 真实发布引擎（替换模拟）

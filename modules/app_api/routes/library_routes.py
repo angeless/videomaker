@@ -9,6 +9,8 @@ import uuid
 
 from flask import Blueprint, jsonify, request
 
+from modules.app_api.param_utils import parse_int_param
+
 
 def create_library_blueprint(
     *,
@@ -62,17 +64,9 @@ def create_library_blueprint(
             media_type = "all"
         if retrieval_mode not in {"hybrid", "keyword", "vector"}:
             retrieval_mode = "hybrid"
-        try:
-            default_limit = "120" if not query else "150"
-            limit = int(request.args.get("limit", default_limit))
-        except Exception:
-            limit = 120 if not query else 150
-        try:
-            offset = int(request.args.get("offset", "0"))
-        except Exception:
-            offset = 0
-        limit = max(1, min(limit, 500))
-        offset = max(0, offset)
+        default_limit = 120 if not query else 150
+        limit = parse_int_param(request.args.get("limit", default_limit), default=default_limit, min_val=1, max_val=500)
+        offset = parse_int_param(request.args.get("offset", "0"), default=0, min_val=0)
         effective_mode = retrieval_mode if query else "browse"
         lib = _library()
         results = lib.search_assets(
@@ -122,11 +116,7 @@ def create_library_blueprint(
     def api_library_preview_local():
         data = request.json or {}
         source_path = (data.get("path", "") or "").strip()
-        try:
-            max_results = int(data.get("max_results", 30))
-        except Exception:
-            max_results = 30
-        max_results = max(1, min(max_results, 200))
+        max_results = parse_int_param(data.get("max_results", 30), default=30, min_val=1, max_val=200)
         if not source_path:
             return jsonify({"error": "path 不能为空"}), 400
         running = running_heavy_jobs_getter()
@@ -171,11 +161,7 @@ def create_library_blueprint(
     def api_library_ingest_local():
         data = request.json or {}
         source_path = (data.get("path", "") or "").strip()
-        try:
-            max_videos = int(data.get("max_videos", 600))
-        except Exception:
-            max_videos = 600
-        max_videos = max(1, min(max_videos, 5000))
+        max_videos = parse_int_param(data.get("max_videos", 600), default=600, min_val=1, max_val=5000)
 
         if not source_path:
             return jsonify({"error": "path 不能为空"}), 400
@@ -233,11 +219,7 @@ def create_library_blueprint(
     def api_library_preview_local_images():
         data = request.json or {}
         source_path = (data.get("path", "") or "").strip()
-        try:
-            max_results = int(data.get("max_results", 30))
-        except Exception:
-            max_results = 30
-        max_results = max(1, min(max_results, 300))
+        max_results = parse_int_param(data.get("max_results", 30), default=30, min_val=1, max_val=300)
         if not source_path:
             return jsonify({"error": "path 不能为空"}), 400
         running = running_heavy_jobs_getter()
@@ -282,11 +264,7 @@ def create_library_blueprint(
     def api_library_ingest_local_images():
         data = request.json or {}
         source_path = (data.get("path", "") or "").strip()
-        try:
-            max_images = int(data.get("max_images", 1200))
-        except Exception:
-            max_images = 1200
-        max_images = max(1, min(max_images, 8000))
+        max_images = parse_int_param(data.get("max_images", 1200), default=1200, min_val=1, max_val=8000)
 
         if not source_path:
             return jsonify({"error": "path 不能为空"}), 400
@@ -346,20 +324,8 @@ def create_library_blueprint(
         url = (data.get("url", "") or "").strip()
         refresh = bool(data.get("refresh", False))
         priority_subdirs = data.get("priority_subdirs", "")
-        try:
-            max_videos = int(data.get("max_videos", 500))
-        except Exception:
-            max_videos = 500
-        try:
-            max_scan_folders = int(data.get("max_scan_folders", 120))
-        except Exception:
-            max_scan_folders = 120
-        if max_videos <= 0:
-            max_videos = 500
-        max_videos = min(max_videos, 5000)
-        if max_scan_folders <= 0:
-            max_scan_folders = 120
-        max_scan_folders = min(max_scan_folders, 2000)
+        max_videos = parse_int_param(data.get("max_videos", 500), default=500, min_val=1, max_val=5000)
+        max_scan_folders = parse_int_param(data.get("max_scan_folders", 120), default=120, min_val=1, max_val=2000)
         if not url:
             return jsonify({"error": "url 不能为空"}), 400
 
@@ -421,20 +387,8 @@ def create_library_blueprint(
         data = request.json or {}
         url = (data.get("url", "") or "").strip()
         priority_subdirs = data.get("priority_subdirs", "")
-        try:
-            max_scan_folders = int(data.get("max_scan_folders", 120))
-        except Exception:
-            max_scan_folders = 120
-        try:
-            max_results = int(data.get("max_results", 30))
-        except Exception:
-            max_results = 30
-        if max_scan_folders <= 0:
-            max_scan_folders = 120
-        max_scan_folders = min(max_scan_folders, 2000)
-        if max_results <= 0:
-            max_results = 30
-        max_results = min(max_results, 200)
+        max_scan_folders = parse_int_param(data.get("max_scan_folders", 120), default=120, min_val=1, max_val=2000)
+        max_results = parse_int_param(data.get("max_results", 30), default=30, min_val=1, max_val=200)
         if not url:
             return jsonify({"error": "url 不能为空"}), 400
         running = running_heavy_jobs_getter()
@@ -466,20 +420,8 @@ def create_library_blueprint(
         url = (data.get("url", "") or "").strip()
         refresh = bool(data.get("refresh", False))
         priority_subdirs = data.get("priority_subdirs", "")
-        try:
-            max_images = int(data.get("max_images", 1200))
-        except Exception:
-            max_images = 1200
-        try:
-            max_scan_folders = int(data.get("max_scan_folders", 120))
-        except Exception:
-            max_scan_folders = 120
-        if max_images <= 0:
-            max_images = 1200
-        max_images = min(max_images, 8000)
-        if max_scan_folders <= 0:
-            max_scan_folders = 120
-        max_scan_folders = min(max_scan_folders, 2000)
+        max_images = parse_int_param(data.get("max_images", 1200), default=1200, min_val=1, max_val=8000)
+        max_scan_folders = parse_int_param(data.get("max_scan_folders", 120), default=120, min_val=1, max_val=2000)
         if not url:
             return jsonify({"error": "url 不能为空"}), 400
 
@@ -541,20 +483,8 @@ def create_library_blueprint(
         data = request.json or {}
         url = (data.get("url", "") or "").strip()
         priority_subdirs = data.get("priority_subdirs", "")
-        try:
-            max_scan_folders = int(data.get("max_scan_folders", 120))
-        except Exception:
-            max_scan_folders = 120
-        try:
-            max_results = int(data.get("max_results", 30))
-        except Exception:
-            max_results = 30
-        if max_scan_folders <= 0:
-            max_scan_folders = 120
-        max_scan_folders = min(max_scan_folders, 2000)
-        if max_results <= 0:
-            max_results = 30
-        max_results = min(max_results, 200)
+        max_scan_folders = parse_int_param(data.get("max_scan_folders", 120), default=120, min_val=1, max_val=2000)
+        max_results = parse_int_param(data.get("max_results", 30), default=30, min_val=1, max_val=200)
         if not url:
             return jsonify({"error": "url 不能为空"}), 400
         running = running_heavy_jobs_getter()

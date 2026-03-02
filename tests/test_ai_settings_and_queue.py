@@ -20,6 +20,21 @@ class _FakeGlobalMediaLibrary:
     def stats(self):
         return {}
 
+    def search_assets(self, query="", limit=120, offset=0, retrieval_mode="hybrid", media_type="all"):
+        return [{"uid": "fake_001", "filename": "clip.mp4", "score": 0.9}][:limit]
+
+    def count_matching_assets(self, query="", retrieval_mode="hybrid", media_type="all"):
+        return 1
+
+    def get_assets(self, uids):
+        return [{"uid": u, "filename": f"{u}.mp4"} for u in uids]
+
+    def discover_videos(self, root):
+        return []
+
+    def discover_images(self, root):
+        return []
+
     def ingest_local_path(self, source_path, max_videos=600, progress_callback=None, should_cancel=None):
         total = 8
         for i in range(total):
@@ -1017,3 +1032,123 @@ def test_v0310_topic_library_list_inline_returns_200():
         server._library = old_library
         server._REQUIRE_LOCAL_API_TOKEN = old_require
         server._reset_job_store_for_tests()
+
+
+# ---------------------------------------------------------------------------
+# v0.3.12 — library search / assets / preview endpoint tests
+# ---------------------------------------------------------------------------
+
+
+def test_v0312_library_search_default_params(tmp_path):
+    """GET /api/library/search with no params returns 200 and browse mode."""
+    old_library = server._library
+    old_require = server._REQUIRE_LOCAL_API_TOKEN
+    try:
+        lib = _FakeGlobalMediaLibrary()
+        lib.db_path = tmp_path / "test_search.db"
+        server._library = lib
+        server._REQUIRE_LOCAL_API_TOKEN = False
+        client = server.app.test_client()
+
+        resp = client.get("/api/library/search")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["retrieval_mode"] == "browse"
+        assert data["limit"] >= 1
+        assert data["offset"] == 0
+        assert isinstance(data["results"], list)
+    finally:
+        server._library = old_library
+        server._REQUIRE_LOCAL_API_TOKEN = old_require
+
+
+def test_v0312_library_search_with_query_and_bounds(tmp_path):
+    """GET /api/library/search validates limit/offset bounds."""
+    old_library = server._library
+    old_require = server._REQUIRE_LOCAL_API_TOKEN
+    try:
+        lib = _FakeGlobalMediaLibrary()
+        lib.db_path = tmp_path / "test_search2.db"
+        server._library = lib
+        server._REQUIRE_LOCAL_API_TOKEN = False
+        client = server.app.test_client()
+
+        # Invalid limit → falls back to default
+        resp = client.get("/api/library/search?q=test&limit=abc&offset=-5")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["limit"] == 150  # default when query present
+        assert data["offset"] == 0  # clamped to min_val=0
+        assert data["retrieval_mode"] == "hybrid"
+
+        # Oversized limit → clamped to 500
+        resp2 = client.get("/api/library/search?limit=9999")
+        assert resp2.status_code == 200
+        assert resp2.get_json()["limit"] == 500
+    finally:
+        server._library = old_library
+        server._REQUIRE_LOCAL_API_TOKEN = old_require
+
+
+def test_v0312_library_assets_post(tmp_path):
+    """POST /api/library/assets returns asset details for given UIDs."""
+    old_library = server._library
+    old_require = server._REQUIRE_LOCAL_API_TOKEN
+    try:
+        lib = _FakeGlobalMediaLibrary()
+        lib.db_path = tmp_path / "test_assets.db"
+        server._library = lib
+        server._REQUIRE_LOCAL_API_TOKEN = False
+        client = server.app.test_client()
+
+        resp = client.post("/api/library/assets", json={"uids": ["a1", "b2"]})
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert isinstance(data["assets"], list)
+        assert len(data["assets"]) == 2
+    finally:
+        server._library = old_library
+        server._REQUIRE_LOCAL_API_TOKEN = old_require
+
+
+def test_v0312_library_preview_local_missing_path(tmp_path):
+    """POST /api/library/preview/local without path returns 400."""
+    old_library = server._library
+    old_require = server._REQUIRE_LOCAL_API_TOKEN
+    try:
+        lib = _FakeGlobalMediaLibrary()
+        lib.db_path = tmp_path / "test_preview.db"
+        server._library = lib
+        server._REQUIRE_LOCAL_API_TOKEN = False
+        client = server.app.test_client()
+
+        resp = client.post("/api/library/preview/local", json={})
+        assert resp.status_code == 400
+        assert "path" in resp.get_json().get("error", "").lower() or "空" in resp.get_json().get("error", "")
+    finally:
+        server._library = old_library
+        server._REQUIRE_LOCAL_API_TOKEN = old_require
+
+
+def test_v0312_library_preview_local_invalid_max_results(tmp_path):
+    """POST /api/library/preview/local with invalid max_results uses default."""
+    old_library = server._library
+    old_require = server._REQUIRE_LOCAL_API_TOKEN
+    try:
+        lib = _FakeGlobalMediaLibrary()
+        lib.db_path = tmp_path / "test_preview2.db"
+        server._library = lib
+        server._REQUIRE_LOCAL_API_TOKEN = False
+        client = server.app.test_client()
+
+        resp = client.post(
+            "/api/library/preview/local",
+            json={"path": str(tmp_path), "max_results": "not_a_number"},
+        )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["ok"] is True
+        assert data["preview"]["max_results"] == 30  # default
+    finally:
+        server._library = old_library
+        server._REQUIRE_LOCAL_API_TOKEN = old_require
