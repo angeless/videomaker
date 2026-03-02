@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "desktop-app",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["apps/desktop/launcher.py"],
+      "port": 9527
+    },
+    {
+      "name": "vue-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "apps/desktop/ui-vue"],
+      "port": 5173
+    }
+  ]
+}

@@ -254,15 +254,30 @@
    - 下一步：补 Windows Credential Manager / Linux Secret Service 后端，消除降级明文场景
    - 命令参数审计与黑/白名单策略
 
-## 本周执行顺序（建议）
+## v0.4.0 — Vue 3 前端重写（进行中）
 
-1. `content_publish` connector 抽象 + YouTube/Blog 真实发布首版
-2. `services/agent_runtime.py` 落地，迁移技能执行/预算治理逻辑
-3. 前端落地 `views + components` 分层（先拆 `workflow-view.js` 与能力面板组件）
-4. 迁移体系扩展到 `library/topic/settings` 三类数据库
+用户测试反馈 14 项 UX 问题后，决定从 Alpine.js 全面迁移到 Vue 3 + Vite + Pinia。
+
+### 已完成（Phase 0）
+
+- Vite 项目脚手架 `apps/desktop/ui-vue/`，83 模块零错误编译
+- `launcher.py` 增加 `--debug` CLI 参数
+- `server.py` 支持 `VIDEOEDITOR_UI_DIR` 环境变量
+- 6 个 Pinia Store（api / app / toast / settings / library / workflow / capabilities）
+- 4 个视图页面（Startup / Library / Production / Settings）
+- 核心组件（OnboardingModal / WorkflowStepper / Step1-7 / LogViewer / IngestProgress / AssetCard）
+- 3 个 Composable（useSemanticTranslation / useJobPoller / useFormatters）
+- i18n/labels.js 统一文案管理
+
+### 待完成
+
+- GPS/EXIF 地点信息提取（后端 `global_media_library.py`）
+- 工具台 11 个能力面板逐个迁移
+- 端到端全流程验证
+- 切换到生产 UI
 
 ## 风险与依赖
 
 1. 平台发布 API 的官方限制与账号风控策略差异大，需分平台推进。
-2. 本地自动化发布（浏览器驱动）需要额外稳定性与风控兜底。
-3. 大文件架构拆分需分批进行，避免一次性改动过大。
+2. Vue 3 迁移期间保留旧 `ui/` 作为回退，通过 `VIDEOEDITOR_UI_DIR` 切换。
+3. 后端 API 接口保持不变，不影响业务逻辑。

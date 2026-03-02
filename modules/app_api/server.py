@@ -110,7 +110,7 @@ from pathlib import Path
 from typing import Optional, Dict, List, Any, Tuple, Callable
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-APP_UI_DIR = REPO_ROOT / "apps" / "desktop" / "ui"
+APP_UI_DIR = Path(os.environ.get("VIDEOEDITOR_UI_DIR", "")) if os.environ.get("VIDEOEDITOR_UI_DIR") else REPO_ROOT / "apps" / "desktop" / "ui"
 
 from flask import Flask, jsonify, request, send_file, abort
 from werkzeug.exceptions import HTTPException, RequestEntityTooLarge

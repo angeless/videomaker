@@ -1,0 +1,105 @@
+<template>
+  <div class="card" style="margin-bottom: 16px">
+    <div class="card-header">
+      📥 {{ labels.library.ingest }}
+      <div style="margin-left: auto; display: flex; gap: 4px">
+        <button
+          v-for="tab in tabs"
+          :key="tab.key"
+          class="btn btn-sm"
+          :class="activeTab === tab.key ? 'btn-primary' : 'btn-ghost'"
+          @click="activeTab = tab.key"
+        >
+          {{ tab.label }}
+        </button>
+      </div>
+    </div>
+
+    <!-- 本地视频 -->
+    <div v-if="activeTab === 'local'">
+      <div class="form-group">
+        <label class="form-label">选择视频文件夹</label>
+        <div class="form-row">
+          <input v-model="lib.ingestLocalPath" class="form-input" readonly placeholder="点击选择…" />
+          <button class="btn btn-ghost btn-sm" @click="pickLocalPath">选择文件夹</button>
+        </div>
+      </div>
+      <div class="form-row" style="gap: 8px">
+        <button class="btn btn-ghost btn-sm" :disabled="!lib.ingestLocalPath || lib.ingestLocalPreviewLoading" @click="lib.previewLocalIngest()">
+          {{ lib.ingestLocalPreviewLoading ? '扫描中…' : '预览扫描' }}
+        </button>
+        <button class="btn btn-primary btn-sm" :disabled="!lib.ingestLocalPath || lib.ingestLoading" @click="lib.startLocalIngest()">
+          {{ lib.ingestLoading ? '入库中…' : '开始入库' }}
+        </button>
+      </div>
+      <div v-if="lib.ingestLocalPreview" class="form-hint" style="margin-top: 8px">
+        发现 {{ lib.ingestLocalPreview.sample_videos?.length || 0 }} 个视频文件
+      </div>
+      <p v-if="lib.ingestLocalPreviewError" class="text-danger" style="font-size: 12px; margin-top: 4px">
+        {{ lib.ingestLocalPreviewError }}
+      </p>
+    </div>
+
+    <!-- 本地图片 -->
+    <div v-if="activeTab === 'image'">
+      <div class="form-group">
+        <label class="form-label">选择图片文件夹</label>
+        <div class="form-row">
+          <input v-model="lib.ingestImagePath" class="form-input" readonly placeholder="点击选择…" />
+          <button class="btn btn-ghost btn-sm" @click="pickImagePath">选择文件夹</button>
+        </div>
+      </div>
+      <div class="form-row" style="gap: 8px">
+        <button class="btn btn-ghost btn-sm" :disabled="!lib.ingestImagePath || lib.ingestImagePreviewLoading" @click="lib.previewImageIngest()">
+          {{ lib.ingestImagePreviewLoading ? '扫描中…' : '预览扫描' }}
+        </button>
+        <button class="btn btn-primary btn-sm" :disabled="!lib.ingestImagePath || lib.ingestLoading" @click="lib.startImageIngest()">
+          {{ lib.ingestLoading ? '入库中…' : '开始入库' }}
+        </button>
+      </div>
+      <div v-if="lib.ingestImagePreview" class="form-hint" style="margin-top: 8px">
+        发现 {{ lib.ingestImagePreview.sample_images?.length || 0 }} 张图片
+      </div>
+    </div>
+
+    <!-- 云端 placeholder -->
+    <div v-if="activeTab === 'cloud'">
+      <div class="form-group">
+        <label class="form-label">Google Drive 分享链接</label>
+        <input v-model="lib.ingestDriveUrl" class="form-input" placeholder="https://drive.google.com/..." />
+      </div>
+      <button class="btn btn-primary btn-sm" disabled>即将支持</button>
+    </div>
+
+    <!-- 入库进度 -->
+    <IngestProgress v-if="lib.ingestLoading || lib.ingestMessage" />
+  </div>
+</template>
+
+<script setup>
+import { ref } from 'vue'
+import { useLibraryStore } from '../../stores/library.js'
+import { useApiStore } from '../../stores/api.js'
+import labels from '../../i18n/labels.js'
+import IngestProgress from './IngestProgress.vue'
+
+const lib = useLibraryStore()
+const apiStore = useApiStore()
+
+const activeTab = ref('local')
+const tabs = [
+  { key: 'local', label: labels.library.ingestLocal },
+  { key: 'image', label: labels.library.ingestImage },
+  { key: 'cloud', label: labels.library.ingestCloud },
+]
+
+async function pickLocalPath() {
+  const result = await apiStore.api('POST', '/api/dialog/folder')
+  if (result.path) lib.ingestLocalPath = result.path
+}
+
+async function pickImagePath() {
+  const result = await apiStore.api('POST', '/api/dialog/folder')
+  if (result.path) lib.ingestImagePath = result.path
+}
+</script>

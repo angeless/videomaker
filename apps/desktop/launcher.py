@@ -74,11 +74,12 @@ def _find_free_port(start: int = 9527) -> int:
 
 # ── Flask 线程 ────────────────────────────────────────────────────────
 
-def _start_flask(flask_app, port: int):
+def _start_flask(flask_app, port: int, debug: bool = False):
     import logging
     log = logging.getLogger("werkzeug")
-    log.setLevel(logging.ERROR)   # 静音 Flask 请求日志
-    flask_app.run(host="127.0.0.1", port=port, debug=False, use_reloader=False)
+    if not debug:
+        log.setLevel(logging.ERROR)   # 静音 Flask 请求日志
+    flask_app.run(host="127.0.0.1", port=port, debug=debug, use_reloader=False)
 
 
 # ── 主入口 ────────────────────────────────────────────────────────────
@@ -91,6 +92,11 @@ def main():
         action="store_true",
         help="跳过依赖自动检测与安装（调试模式）",
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="启用 Flask 与 pywebview 调试模式（显示开发者工具）",
+    )
     args = parser.parse_args()
 
     _ensure_runtime_dependencies(auto_install=not bool(args.skip_bootstrap))
@@ -101,12 +107,14 @@ def main():
     import webview  # noqa: WPS433
     from modules.app_api.server import create_app, set_window  # noqa: WPS433
 
+    debug_mode = bool(args.debug)
+
     port = _find_free_port(9527)
     flask_app = create_app(project_dir=args.project)
 
     # Flask 在后台线程运行
     t = threading.Thread(
-        target=_start_flask, args=(flask_app, port), daemon=True
+        target=_start_flask, args=(flask_app, port, debug_mode), daemon=True
     )
     t.start()
 
@@ -138,11 +146,11 @@ def main():
     # macOS: 隐藏标题栏但保留交通灯按钮（需 pywebview >= 4.x）
     try:
         webview.start(
-            debug=False,
+            debug=debug_mode,
             http_server=False,
         )
     except Exception:
-        webview.start(debug=False)
+        webview.start(debug=debug_mode)
 
 
 if __name__ == "__main__":

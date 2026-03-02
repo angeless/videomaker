@@ -1,0 +1,16 @@
+/* ── CSS 变量 ── 保留原始深色主题 ─────────────────────────────────── */
+
+:root {
+  --bg:        #0f0f0f;
+  --surface:   #1a1a1a;
+  --surface2:  #222222;
+  --border:    #2e2e2e;
+  --accent:    #5a8dee;
+  --accent2:   #8b5cf6;
+  --success:   #34d399;
+  --warn:      #fbbf24;
+  --danger:    #f87171;
+  --text:      #e8e8e8;
+  --muted:     #6b7280;
+  --sidebar-w: 200px;
+}

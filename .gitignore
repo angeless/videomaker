@@ -26,6 +26,9 @@ ENV/
 env/
 .venv
 
+# Node.js
+node_modules/
+
 # IDE
 .vscode/
 .idea/

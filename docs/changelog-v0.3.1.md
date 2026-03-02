@@ -692,9 +692,87 @@ macOS `open` 命令的 `Popen` 改为 `subprocess.run(timeout=5, check=False)`�
 
 回归验证：**173/173 测试通过，0 warnings**。
 
+---
+
+## v0.4.0（2026-03-02）— Vue 3 前端框架重写
+
+根据用户测试反馈（14 项问题），决定从 Alpine.js 全面迁移到 Vue 3。
+
+### 技术栈
+
+| 技术 | 版本 | 用途 |
+|------|------|------|
+| Vue 3 Composition API | 3.5.x | 组件框架 |
+| Vite | 6.x | 构建工具 |
+| Pinia | 2.3.x | 状态管理 |
+| Vue Router (hash mode) | 4.5.x | 客户端路由 |
+
+### Phase 0 完成内容
+
+1. **Vite 项目脚手架** — `apps/desktop/ui-vue/`
+   - 完整目录结构：stores/、composables/、i18n/、views/、components/
+   - 代理配置：`/api/*` → Flask 9527
+   - 构建验证：83 模块，零错误
+
+2. **后端改动（3 处）**
+   - `launcher.py`：新增 `--debug` CLI 参数，控制 Flask + pywebview 调试模式
+   - `server.py`：`VIDEOEDITOR_UI_DIR` 环境变量支持切换新旧 UI
+
+3. **6 个 Pinia Store**
+   - `api.js`：会话 + fetch + token + CSRF（从 runtime_mixin.js 迁移）
+   - `app.js`：全局状态 + preflight + UI 设置（从 app_store.js + settings_mixin.js 迁移）
+   - `toast.js`：通知队列
+   - `settings.js`：AI 配置（从 settings_mixin.js 迁移）
+   - `library.js`：素材库 + 入库 + 搜索
+   - `workflow.js`：7 步工作流状态
+   - `capabilities.js`：工具台布局
+
+4. **4 个视图页**
+   - `StartupView.vue`：加载条 → 自检 → 自动跳转（解决反馈 #1）
+   - `LibraryView.vue`：搜索 + 过滤 + 入库 + 素材网格
+   - `ProductionView.vue`：侧栏导航 + 子路由（工作流 / 工具台）
+   - `SettingsView.vue`：AI + UI 设置 + 系统自检
+
+5. **核心组件**
+   - `OnboardingModal.vue`：居中 3 步引导（解决反馈 #2）
+   - `WorkflowStepper.vue`：可视化水平步骤条（解决反馈 #10）
+   - `Step1-7` 面板：完整 7 步工作流 UI
+   - `CapabilityLayout.vue`：左侧分类导航 + 右侧面板
+   - `LogViewer.vue`：增量追加 + 固定滚动 + 不闪烁（解决反馈 #9）
+   - `IngestProgress.vue`：文件级进度 + 日志（解决反馈 #3, #11）
+   - `LibraryAssetCard.vue`：标签翻译 + 去重 + 地点显示
+
+6. **Composables**
+   - `useSemanticTranslation.js`：100+ 英中翻译 + 同义词合并（解决反馈 #6）
+   - `useJobPoller.js`：通用任务轮询 + JSON diff 守卫
+   - `useFormatters.js`：从 common_utils_mixin.js 迁移工具函数
+
+7. **i18n/labels.js**：所有用户可见文案统一管理（解决反馈 #8, #12）
+
+### 14 个反馈解决状态
+
+| # | 问题 | 状态 |
+|---|------|------|
+| 1 | 启动前判断不该放首页 | ✅ StartupView 加载条 |
+| 2 | 引导弹窗居中 | ✅ OnboardingModal + Teleport |
+| 3 | 入库进度不准确 | ✅ IngestProgress 逐文件 |
+| 4 | 开启 debug 模式 | ✅ --debug 参数 |
+| 5 | 重新设计前端 | ✅ Vue 3 全新架构 |
+| 6 | 语义库英文翻译 | ✅ useSemanticTranslation |
+| 7 | 地点信息 | 🔧 待 Phase 2 后端 GPS 提取 |
+| 8 | 用词太技术 | ✅ labels.js |
+| 9 | 日志闪烁 | ✅ LogViewer 固定滚动 |
+| 10 | 工作流展示 | ✅ WorkflowStepper |
+| 11 | 语义生成无反馈 | ✅ IngestProgress |
+| 12 | 按钮文案 | ✅ labels.js |
+| 13 | 脚本卡住 | ✅ Step3 AI 动画 + ETA |
+| 14 | 软件难用 | ✅ 全部改动累加 |
+
+回归验证：**173/173 后端测试通过**，前端 Vite build 零错误。
+
 ## 下一步计划
 
-参见 `docs/next_dev_plan.md` 中的 Phase 1-4 计划。当前优先项：
-1. 真实发布引擎（官方平台 connector）
-2. 安全基线增强（细粒度权限 + 审计日志）
-3. 前端 views + components 分层
+1. GPS/EXIF 地点提取（后端 `global_media_library.py`）
+2. 能力工具台面板逐个迁移（Phase 4）
+3. 端到端全流程验证
+4. 切换 `VIDEOEDITOR_UI_DIR` 到 `ui-vue/dist/`
