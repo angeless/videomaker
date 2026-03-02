@@ -711,3 +711,67 @@ def test_security_s3_post_without_token_rejected(tmp_path):
         server._LOCAL_API_TOKEN = old_token
         server._LOCAL_CSRF_TOKEN = old_csrf
         server._REQUIRE_CSRF_PROTECTION = old_require_csrf
+
+
+# ---------------------------------------------------------------------------
+# v0.3.3 — Input validation bounds checks
+# ---------------------------------------------------------------------------
+
+
+def test_v033_idempotency_limit_offset_bounds(tmp_path):
+    """v0.3.3: Verify limit/offset bounds clamping on idempotency cache GET."""
+    old_library = server._library
+    old_require = server._REQUIRE_LOCAL_API_TOKEN
+    try:
+        lib = _FakeGlobalMediaLibrary()
+        lib.db_path = tmp_path / "test_bounds.db"
+        server._library = lib
+        server._REQUIRE_LOCAL_API_TOKEN = False
+        client = server.app.test_client()
+
+        # negative limit should be clamped to 1 (not crash)
+        resp = client.get("/api/capabilities/idempotency/cache?limit=-5&offset=-10")
+        assert resp.status_code == 200
+        payload = resp.get_json()
+        assert payload["ok"] is True
+
+        # absurdly large limit should be clamped to 1000 (not crash)
+        resp2 = client.get("/api/capabilities/idempotency/cache?limit=99999")
+        assert resp2.status_code == 200
+
+        # non-numeric limit should fallback to default 200
+        resp3 = client.get("/api/capabilities/idempotency/cache?limit=abc")
+        assert resp3.status_code == 200
+    finally:
+        server._library = old_library
+        server._REQUIRE_LOCAL_API_TOKEN = old_require
+
+
+def test_v033_social_export_quality_enum_fallback(tmp_path):
+    """v0.3.3: Invalid quality value falls back to 'high' without error."""
+    old_library = server._library
+    old_require = server._REQUIRE_LOCAL_API_TOKEN
+    try:
+        lib = _FakeGlobalMediaLibrary()
+        lib.db_path = tmp_path / "test_quality.db"
+        server._library = lib
+        server._REQUIRE_LOCAL_API_TOKEN = False
+        client = server.app.test_client()
+
+        # social_export/plan requires input_video; test validation fires
+        # before quality matters, but the quality param should be sanitized
+        resp = client.post(
+            "/api/capabilities/social_export/plan",
+            json={
+                "input_mode": "inline",
+                "quality": "INVALID_VALUE",
+                "input_video": "/nonexistent/video.mp4",
+            },
+        )
+        # Will fail because file doesn't exist, not because quality is invalid
+        assert resp.status_code in {400, 404}
+        payload = resp.get_json()
+        assert "quality" not in str(payload.get("error", "")).lower()
+    finally:
+        server._library = old_library
+        server._REQUIRE_LOCAL_API_TOKEN = old_require

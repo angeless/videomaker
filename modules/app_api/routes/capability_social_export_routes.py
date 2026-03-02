@@ -205,6 +205,8 @@ def create_social_export_capability_blueprint(
             return jsonify({"error": f"输入视频不存在: {input_video}"}), 404
 
         quality = str(payload.get("quality", "high") or "high").strip().lower()
+        if quality not in {"low", "medium", "high", "lossless"}:
+            quality = "high"
         strict_duration_limit = bool(payload.get("strict_duration_limit", True))
         ffprobe_bin = str(payload.get("ffprobe_bin", "ffprobe") or "ffprobe")
         platforms = parse_platforms(payload.get("platforms"))
@@ -252,11 +254,17 @@ def create_social_export_capability_blueprint(
             return jsonify({"error": "项目未加载"}), 400
 
         base_dir = capability_base_dir(input_mode)
-        timeout_seconds = float(payload.get("timeout_seconds", 3600) or 3600)
+        try:
+            timeout_seconds = float(payload.get("timeout_seconds", 3600) or 3600)
+        except (TypeError, ValueError):
+            timeout_seconds = 3600.0
+        timeout_seconds = max(10.0, min(timeout_seconds, 7200.0))
         ffmpeg_bin = str(payload.get("ffmpeg_bin", "ffmpeg") or "ffmpeg")
         ffprobe_bin = str(payload.get("ffprobe_bin", "ffprobe") or "ffprobe")
         strict_duration_limit = bool(payload.get("strict_duration_limit", True))
         quality = str(payload.get("quality", "high") or "high").strip().lower()
+        if quality not in {"low", "medium", "high", "lossless"}:
+            quality = "high"
         platforms = parse_platforms(payload.get("platforms"))
         output_dir_raw = str(payload.get("output_dir", "") or "").strip()
         input_video_raw = str(payload.get("input_video", "") or "").strip()
@@ -304,10 +312,16 @@ def create_social_export_capability_blueprint(
         input_video_raw = str(payload.get("input_video", record.get("input_video", "")) or "")
         output_dir_raw = str(payload.get("output_dir", record.get("output_dir", "")) or "")
         quality = str(payload.get("quality", record.get("quality", "high")) or "high").strip().lower()
+        if quality not in {"low", "medium", "high", "lossless"}:
+            quality = "high"
         strict_duration_limit = bool(payload.get("strict_duration_limit", record.get("strict_duration_limit", True)))
         ffmpeg_bin = str(payload.get("ffmpeg_bin", "ffmpeg") or "ffmpeg")
         ffprobe_bin = str(payload.get("ffprobe_bin", "ffprobe") or "ffprobe")
-        timeout_seconds = float(payload.get("timeout_seconds", 3600) or 3600)
+        try:
+            timeout_seconds = float(payload.get("timeout_seconds", 3600) or 3600)
+        except (TypeError, ValueError):
+            timeout_seconds = 3600.0
+        timeout_seconds = max(10.0, min(timeout_seconds, 7200.0))
         platforms = parse_platforms(payload.get("platforms", record.get("platforms", [])))
         templates = coerce_social_export_overrides(payload, input_mode=input_mode)
 

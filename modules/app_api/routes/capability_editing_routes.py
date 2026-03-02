@@ -258,7 +258,11 @@ def create_editing_capability_blueprint(
         if input_mode == "project" and project_dir_getter() is None:
             return jsonify({"error": "项目未加载"}), 400
         slug = str(payload.get("slug", "") or "").strip()
-        target_duration_s = int(payload.get("target_duration_s", 60) or 60)
+        try:
+            target_duration_s = int(payload.get("target_duration_s", 60) or 60)
+        except (TypeError, ValueError):
+            target_duration_s = 60
+        target_duration_s = max(1, min(target_duration_s, 600))
 
         from modules.capabilities.topic_library import TopicTemplate, get_topic, list_topics
         from modules.capabilities.topic_copy import build_copy_payload
@@ -425,8 +429,16 @@ def create_editing_capability_blueprint(
         input_mode = parse_capability_input_mode(payload.get("input_mode", "project"), default="project")
         if input_mode == "project" and project_dir_getter() is None:
             return jsonify({"error": "项目未加载"}), 400
-        target_duration_s = float(payload.get("target_duration_s", 30) or 30)
-        max_clips = int(payload.get("max_clips", 8) or 8)
+        try:
+            target_duration_s = float(payload.get("target_duration_s", 30) or 30)
+        except (TypeError, ValueError):
+            target_duration_s = 30.0
+        target_duration_s = max(1.0, min(target_duration_s, 600.0))
+        try:
+            max_clips = int(payload.get("max_clips", 8) or 8)
+        except (TypeError, ValueError):
+            max_clips = 8
+        max_clips = max(1, min(max_clips, 50))
 
         from modules.capabilities.short_clip import HighlightCandidate, highlights_to_timeline, pick_highlights
 
@@ -540,7 +552,11 @@ def create_editing_capability_blueprint(
             return jsonify({"error": "项目未加载"}), 400
         editor = str(payload.get("editor", "finalcut") or "finalcut").strip().lower()
         title = str(payload.get("title", "VideoEditer Timeline") or "VideoEditer Timeline").strip()
-        fps = int(payload.get("fps", 30) or 30)
+        try:
+            fps = int(payload.get("fps", 30) or 30)
+        except (TypeError, ValueError):
+            fps = 30
+        fps = max(1, min(fps, 120))
         from modules.adapters.nle_connector import get_nle_connector, normalize_nle_editor
 
         script = coerce_script_input(payload, input_mode=input_mode)
@@ -587,10 +603,18 @@ def create_editing_capability_blueprint(
             return jsonify({"error": "项目未加载"}), 400
         editor = str(payload.get("editor", "finalcut") or "finalcut").strip().lower()
         title = str(payload.get("title", "VideoEditer Timeline") or "VideoEditer Timeline").strip()
-        fps = int(payload.get("fps", 30) or 30)
+        try:
+            fps = int(payload.get("fps", 30) or 30)
+        except (TypeError, ValueError):
+            fps = 30
+        fps = max(1, min(fps, 120))
         launch = bool(payload.get("launch", True))
         app_name = str(payload.get("app_name", "") or "").strip()
-        timeout_seconds = float(payload.get("timeout_seconds", 20) or 20)
+        try:
+            timeout_seconds = float(payload.get("timeout_seconds", 20) or 20)
+        except (TypeError, ValueError):
+            timeout_seconds = 20.0
+        timeout_seconds = max(1.0, min(timeout_seconds, 300.0))
         from modules.adapters.nle_connector import get_nle_connector, normalize_nle_editor
 
         script = coerce_script_input(payload, input_mode=input_mode)

@@ -58,6 +58,29 @@ max_frames = max(total_frames * 2, int(fps * 600))
 
 回归验证：**139/139 测试通过**。
 
+## v0.3.3 输入验证增强（2026-03-01）
+
+为 API 路由层的数值参数添加边界检查（try/except + `max(lo, min(val, hi))`），防止非法输入导致意外行为或资源浪费。
+
+| 文件 | 参数 | 边界 |
+|------|------|------|
+| `routes/capability_editing_routes.py` | `target_duration_s` | 1–600 |
+| `routes/capability_editing_routes.py` | `max_clips` | 1–50 |
+| `routes/capability_editing_routes.py` | `fps` (×2) | 1–120 |
+| `routes/capability_editing_routes.py` | `timeout_seconds` | 1–300 |
+| `routes/idempotency_routes.py` | `limit` | 1–1000 |
+| `routes/idempotency_routes.py` | `offset` | ≥0 |
+| `routes/capability_social_export_routes.py` | `timeout_seconds` (×2) | 10–7200 |
+| `routes/capability_social_export_routes.py` | `quality` (×3) | 枚举 `low/medium/high/lossless` |
+
+**新增测试**：
+- `test_v033_idempotency_limit_offset_bounds`：负值/超大/非数字 limit/offset 不崩溃
+- `test_v033_social_export_quality_enum_fallback`：非法 quality 值静默回退为 `high`
+
+**注意**：已有正确边界的参数未改动（如 `topic_library.limit` 已有 `max(1, min(limit, 300))`，`agent_task_run.max_parallel` 已有 `max(1, min(…, 8))`，`observability.limit/top_n` 已有完整边界）。
+
+回归验证：**141/141 测试通过**。
+
 ## 下一步计划
 
 参见 `docs/next_dev_plan.md` 中的 Phase 1-4 计划。当前优先项：

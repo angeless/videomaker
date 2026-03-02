@@ -48,10 +48,12 @@ def create_idempotency_blueprint(
             limit = int(request.args.get("limit", "200") or "200")
         except Exception:
             limit = 200
+        limit = max(1, min(limit, 1000))
         try:
             offset = int(request.args.get("offset", "0") or "0")
         except Exception:
             offset = 0
+        offset = max(0, offset)
 
         payload = collect_records(
             source=source,
