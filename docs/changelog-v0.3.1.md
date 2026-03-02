@@ -326,9 +326,59 @@ macOS `open` 命令的 `Popen` 改为 `subprocess.run(timeout=5, check=False)`�
 
 回归验证：**152/152 测试通过，0 warnings**。
 
+## v0.3.14（2026-03-02）— 共享工具函数 + print→logging + JSON 写入归一
+
+### 新增工具函数
+
+| 函数 | 位置 | 作用 |
+|------|------|------|
+| `parse_str_param(value, default="")` | `param_utils.py` | 替代 `str(payload.get(...) or "").strip()` 模式 |
+| `write_json_result(path_obj, data)` | `param_utils.py` | 替代 3 行 JSON 安全写入模式（None 检查 + dumps + write_text） |
+
+### print() → logging
+
+| 文件 | 替换数 | 说明 |
+|------|--------|------|
+| `library_routes.py` | 8 处 | `print(f"[素材分析]...")` → `logger.info(...)` (%-style) |
+
+### write_json_result 应用
+
+| 文件 | 替换数 | 减少代码行 |
+|------|--------|-----------|
+| `capability_content_publish_routes.py` | 3 处 | −6 行 |
+| `capability_text_semantic_routes.py` | 4 处 | −8 行 |
+| `capability_audio_voice_routes.py` | 5 处 | −5 行 |
+| 合计 | 12 处 | −19 行 |
+
+### parse_str_param 应用（首批）
+
+| 文件 | 替换数 | 典型参数 |
+|------|--------|---------|
+| `capability_content_publish_routes.py` | 11 处 | actor_id, session_id, run_id, output_root, platform_content_type, plan_id |
+| `capability_text_semantic_routes.py` | 10 处 | mode, translation, source_audio, query, retrieval_mode, source_text, tone |
+| 合计 | 21 处 | |
+
+### 附带清理
+
+- `capability_content_publish_routes.py`、`capability_text_semantic_routes.py`、
+  `capability_audio_voice_routes.py` 移除了不再需要的 `import json`
+
+### 新增测试
+
+| 测试名 | 验证内容 |
+|--------|---------|
+| `test_v0314_parse_str_param` | None / 空串 / 数字 / 空白 / 默认值 / 链式 .lower() |
+| `test_v0314_write_json_result` | 文件写入 + pretty-print + None 路径返回 False |
+| `test_v0314_library_routes_use_logging` | AST 检查无 print()，确认 logging import |
+| `test_v0314_content_publish_no_direct_json_import` | 确认 write_json_result + 无 json import |
+| `test_v0314_audio_voice_no_direct_json_import` | 确认 write_json_result + 无 json import |
+
+回归验证：**157/157 测试通过，0 warnings**。
+
 ## 下一步计划
 
 参见 `docs/next_dev_plan.md` 中的 Phase 1-4 计划。当前优先项：
-1. 真实发布引擎（官方平台 connector）
-2. 安全基线增强（细粒度权限 + 审计日志）
-3. 队列恢复体验（中断任务批量重试）
+1. `parse_str_param` 扩展到剩余路由文件（~98 处待替换）
+2. `write_json_result` 扩展到 editing/social_export/observability 路由（~13 处）
+3. 真实发布引擎（官方平台 connector）
+4. 安全基线增强（细粒度权限 + 审计日志）

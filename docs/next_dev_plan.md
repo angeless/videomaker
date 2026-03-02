@@ -91,6 +91,16 @@
 - 回归验证：152/152 测试通过，0 warnings。
 - 详见 `docs/changelog-v0.3.1.md`。
 
+### v0.3.14 共享工具函数 + print→logging + JSON 写入归一（2026-03-02）
+- **新增工具函数**：`parse_str_param()` + `write_json_result()` 加入 `param_utils.py`。
+- **print→logging**：`library_routes.py` 8 处 `print()` → `logger.info()`，消除生产环境不可控输出。
+- **write_json_result 应用**：3 个路由文件 12 处 JSON 安全写入归一，减少 19 行重复代码。
+- **parse_str_param 首批**：2 个路由文件 21 处 `str(...or "").strip()` 归一。
+- 附带清理：3 个文件移除不再需要的 `import json`。
+- 新增 5 个测试（含 AST 静态检查 + 文件写入验证）。
+- 回归验证：157/157 测试通过，0 warnings。
+- 详见 `docs/changelog-v0.3.1.md`。
+
 ## Phase 1（高优先，1-2 周）
 
 1. 真实发布引擎（替换模拟）

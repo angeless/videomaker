@@ -5,12 +5,11 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Callable, Dict
-import json
 import uuid
 
 from flask import Blueprint, jsonify, request
 
-from modules.app_api.param_utils import parse_float_param, parse_int_param
+from modules.app_api.param_utils import parse_float_param, parse_int_param, write_json_result
 
 
 def create_audio_voice_capability_blueprint(
@@ -49,7 +48,7 @@ def create_audio_voice_capability_blueprint(
         plan = build_audio_capability_payload(script, mood=mood)
         out_path = project_data_path("audio_voice_plan.json") if input_mode == "project" else None
         if out_path is not None and bool(payload.get("store_result", True)):
-            out_path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
+            write_json_result(out_path, plan)
         return jsonify({"ok": True, "input_mode": input_mode, "plan": plan, "output": str(out_path) if out_path else None})
 
     @bp.route("/api/capabilities/audio_voice/pick_bgm", methods=["POST"])
@@ -127,7 +126,7 @@ def create_audio_voice_capability_blueprint(
         }
         out_path = project_data_path("audio_voice_bgm_last.json") if input_mode == "project" else None
         if out_path is not None and bool(payload.get("store_result", True)):
-            out_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+            write_json_result(out_path, summary)
         return jsonify({"ok": True, "input_mode": input_mode, "pick": pick, "output": str(out_path) if out_path else None})
 
     @bp.route("/api/capabilities/audio_voice/synthesize", methods=["POST"])
@@ -187,7 +186,7 @@ def create_audio_voice_capability_blueprint(
         }
         out_path = project_data_path("audio_voice_synthesize_last.json") if input_mode == "project" else None
         if out_path is not None and bool(payload.get("store_result", True)):
-            out_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+            write_json_result(out_path, summary)
         return jsonify({
             "ok": True,
             "input_mode": input_mode,
@@ -243,7 +242,7 @@ def create_audio_voice_capability_blueprint(
         }
         out_path = project_data_path("audio_voice_timeline_last.json") if input_mode == "project" else None
         if out_path is not None and bool(payload.get("store_result", True)):
-            out_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+            write_json_result(out_path, summary)
         return jsonify({"ok": True, "input_mode": input_mode, "timeline": result, "output": str(out_path) if out_path else None})
 
     @bp.route("/api/capabilities/audio_voice/mix_master", methods=["POST"])
@@ -423,7 +422,7 @@ def create_audio_voice_capability_blueprint(
         }
         out_path = project_data_path("audio_voice_mix_last.json") if input_mode == "project" else None
         if out_path is not None and bool(payload.get("store_result", True)):
-            out_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+            write_json_result(out_path, summary)
         return jsonify(
             {
                 "ok": True,

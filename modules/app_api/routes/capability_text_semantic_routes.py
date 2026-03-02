@@ -4,11 +4,10 @@
 from __future__ import annotations
 
 from typing import Any, Callable, Dict, List
-import json
 
 from flask import Blueprint, jsonify, request
 
-from modules.app_api.param_utils import parse_int_param
+from modules.app_api.param_utils import parse_int_param, parse_str_param, write_json_result
 from modules.step2_topic_planning.ai_client import AIClient
 
 
@@ -96,10 +95,10 @@ def create_text_semantic_capability_blueprint(
         if not subtitles:
             return jsonify({"error": "缺少 subtitles，input_mode=project 时可自动读取脚本字幕"}), 400
 
-        mode = str(payload.get("mode", "text_only") or "text_only").strip().lower()
+        mode = parse_str_param(payload.get("mode", "text_only"), default="text_only").lower()
         if mode not in {"text_only", "timeline_align"}:
             mode = "text_only"
-        translation = str(payload.get("translation", "off") or "off").strip().lower()
+        translation = parse_str_param(payload.get("translation", "off"), default="off").lower()
         if translation not in {"off", "zh2en", "en2zh", "bilingual"}:
             translation = "off"
 
@@ -109,7 +108,7 @@ def create_text_semantic_capability_blueprint(
             subtitles=subtitles,
             mode=mode,
             translation="off",
-            source_audio=str(payload.get("source_audio", "") or "").strip(),
+            source_audio=parse_str_param(payload.get("source_audio", "")),
             translator=None,
         )
         plan = {
@@ -134,13 +133,13 @@ def create_text_semantic_capability_blueprint(
         if not subtitles:
             return jsonify({"error": "缺少 subtitles，input_mode=project 时可自动读取脚本字幕"}), 400
 
-        mode = str(payload.get("mode", "text_only") or "text_only").strip().lower()
+        mode = parse_str_param(payload.get("mode", "text_only"), default="text_only").lower()
         if mode not in {"text_only", "timeline_align"}:
             mode = "text_only"
-        translation = str(payload.get("translation", "off") or "off").strip().lower()
+        translation = parse_str_param(payload.get("translation", "off"), default="off").lower()
         if translation not in {"off", "zh2en", "en2zh", "bilingual"}:
             translation = "off"
-        source_audio = str(payload.get("source_audio", "") or "").strip()
+        source_audio = parse_str_param(payload.get("source_audio", ""))
 
         from modules.capabilities.subtitle_calibration import calibrate_subtitles
 
@@ -154,9 +153,7 @@ def create_text_semantic_capability_blueprint(
             translator=translator,
         )
         if project_dir_getter() is not None and bool(payload.get("store_result", True)):
-            out_path = project_data_path("subtitle_calibration_last.json")
-            if out_path is not None:
-                out_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+            write_json_result(project_data_path("subtitle_calibration_last.json"), result)
         return jsonify(
             {
                 "ok": True,
@@ -196,19 +193,17 @@ def create_text_semantic_capability_blueprint(
             image_paths,
             library=library_getter(),
             max_images=max_images,
-            retrieval_mode=str(payload.get("retrieval_mode", "hybrid") or "hybrid"),
+            retrieval_mode=parse_str_param(payload.get("retrieval_mode", "hybrid"), default="hybrid"),
             auto_ingest=bool(payload.get("auto_ingest", True)),
         )
         if project_dir_getter() is not None and bool(payload.get("store_result", True)):
-            out = project_data_path("image_semantic_analyze_last.json")
-            if out is not None:
-                out.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+            write_json_result(project_data_path("image_semantic_analyze_last.json"), result)
         return jsonify({"ok": True, "input_mode": input_mode, "max_images": max_images, "result": result})
 
     @bp.route("/api/capabilities/image_semantic/search", methods=["POST"])
     def api_image_semantic_search():
         payload = request.json or {}
-        query = str(payload.get("query", "") or "").strip()
+        query = parse_str_param(payload.get("query", ""))
         from modules.capabilities.image_semantic import search_images
 
         result = search_images(
@@ -216,23 +211,21 @@ def create_text_semantic_capability_blueprint(
             library=library_getter(),
             limit=parse_int_param(payload.get("limit", 30), default=30, min_val=1, max_val=500),
             offset=parse_int_param(payload.get("offset", 0), default=0, min_val=0),
-            retrieval_mode=str(payload.get("retrieval_mode", "hybrid") or "hybrid"),
+            retrieval_mode=parse_str_param(payload.get("retrieval_mode", "hybrid"), default="hybrid"),
         )
         if project_dir_getter() is not None and bool(payload.get("store_result", True)):
-            out = project_data_path("image_semantic_search_last.json")
-            if out is not None:
-                out.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+            write_json_result(project_data_path("image_semantic_search_last.json"), result)
         return jsonify({"ok": True, "result": result})
 
     @bp.route("/api/capabilities/article_expand/generate", methods=["POST"])
     def api_article_expand_generate():
         payload = request.json or {}
         input_mode = parse_capability_input_mode(payload.get("input_mode", "inline"), default="inline")
-        source_text = str(payload.get("source_text", payload.get("text", "")) or "").strip()
+        source_text = parse_str_param(payload.get("source_text", payload.get("text", "")))
         key_points = payload.get("key_points", payload.get("points", []))
         if input_mode == "project" and not source_text:
             script_blocks = script_to_text_blocks(read_script_json())
-            source_text = str(script_blocks.get("script_text", "") or "").strip()
+            source_text = parse_str_param(script_blocks.get("script_text", ""))
             if not key_points:
                 key_points = script_blocks.get("voiceover_text", "")
 
@@ -294,15 +287,13 @@ def create_text_semantic_capability_blueprint(
         result = generate_article_expansion(
             source_text=source_text,
             key_points=key_points,
-            tone=str(payload.get("tone", "professional") or "professional"),
+            tone=parse_str_param(payload.get("tone", "professional"), default="professional"),
             length_target=parse_int_param(payload.get("length_target", 1200), default=1200, min_val=100, max_val=10000),
             title_count=parse_int_param(payload.get("title_count", 5), default=5, min_val=1, max_val=20),
             text_generator=text_generator,
         )
         if project_dir_getter() is not None and bool(payload.get("store_result", True)):
-            out = project_data_path("article_expand_last.json")
-            if out is not None:
-                out.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+            write_json_result(project_data_path("article_expand_last.json"), result)
         return jsonify({"ok": True, "input_mode": input_mode, "llm": llm_meta, "result": result, "warnings": warnings})
 
     return bp

@@ -1152,3 +1152,72 @@ def test_v0312_library_preview_local_invalid_max_results(tmp_path):
     finally:
         server._library = old_library
         server._REQUIRE_LOCAL_API_TOKEN = old_require
+
+
+# ── v0.3.14 tests ─────────────────────────────────────────────────────
+def test_v0314_parse_str_param():
+    """parse_str_param handles falsy, None, whitespace, and default."""
+    from modules.app_api.param_utils import parse_str_param
+
+    assert parse_str_param("  hello  ") == "hello"
+    assert parse_str_param(None) == ""
+    assert parse_str_param(None, default="fallback") == "fallback"
+    assert parse_str_param("", default="x") == "x"
+    assert parse_str_param(0, default="zero") == "zero"
+    assert parse_str_param("  video_post  ", default="video_post") == "video_post"
+    assert parse_str_param(False, default="no") == "no"
+    assert parse_str_param(42) == "42"
+    # chaining .lower() still works
+    assert parse_str_param("  TEXT_ONLY  ").lower() == "text_only"
+
+
+def test_v0314_write_json_result(tmp_path):
+    """write_json_result writes pretty JSON and returns True; None returns False."""
+    from modules.app_api.param_utils import write_json_result
+
+    p = tmp_path / "out.json"
+    data = {"key": "值", "num": 42}
+    assert write_json_result(p, data) is True
+    assert p.exists()
+    loaded = json.loads(p.read_text(encoding="utf-8"))
+    assert loaded == data
+    # check pretty print (indent=2)
+    raw = p.read_text(encoding="utf-8")
+    assert "  " in raw
+
+    # None path returns False
+    assert write_json_result(None, data) is False
+
+
+def test_v0314_library_routes_use_logging():
+    """library_routes.py uses logging.getLogger, not print()."""
+    import ast
+    src = (ROOT / "modules" / "app_api" / "routes" / "library_routes.py").read_text()
+    tree = ast.parse(src)
+    # ensure no bare print calls
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            func = node.func
+            if isinstance(func, ast.Name) and func.id == "print":
+                raise AssertionError(f"Found bare print() at line {node.lineno}")
+    # ensure logging import exists
+    assert "import logging" in src
+    assert 'logging.getLogger(__name__)' in src
+
+
+def test_v0314_content_publish_no_direct_json_import():
+    """content_publish_routes uses write_json_result, no direct json import."""
+    src = (ROOT / "modules" / "app_api" / "routes" / "capability_content_publish_routes.py").read_text()
+    assert "write_json_result" in src
+    assert "parse_str_param" in src
+    # json module should NOT be imported (all writes go through write_json_result)
+    lines = [l.strip() for l in src.splitlines()]
+    assert "import json" not in lines
+
+
+def test_v0314_audio_voice_no_direct_json_import():
+    """audio_voice_routes uses write_json_result, no direct json import."""
+    src = (ROOT / "modules" / "app_api" / "routes" / "capability_audio_voice_routes.py").read_text()
+    assert "write_json_result" in src
+    lines = [l.strip() for l in src.splitlines()]
+    assert "import json" not in lines

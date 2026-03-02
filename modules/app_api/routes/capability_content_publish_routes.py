@@ -5,12 +5,11 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Callable, Dict
-import json
 import uuid
 
 from flask import Blueprint, jsonify, request
 
-from modules.app_api.param_utils import parse_int_param
+from modules.app_api.param_utils import parse_int_param, parse_str_param, write_json_result
 
 
 def create_content_publish_capability_blueprint(
@@ -45,8 +44,8 @@ def create_content_publish_capability_blueprint(
         from modules.capabilities.content_publish import bootstrap_publish_session
 
         session = bootstrap_publish_session(
-            actor_id=str(payload.get("actor_id", "") or "").strip(),
-            session_id=str(payload.get("session_id", "") or "").strip(),
+            actor_id=parse_str_param(payload.get("actor_id", "")),
+            session_id=parse_str_param(payload.get("session_id", "")),
             authenticated=bool(payload.get("authenticated", False)),
             expires_in_minutes=parse_int_param(payload.get("expires_in_minutes", 120), default=120, min_val=1, max_val=43200),
         )
@@ -69,12 +68,12 @@ def create_content_publish_capability_blueprint(
         content_payload = resolve_content_publish_content(payload, input_mode=input_mode)
         connectors = resolve_content_publish_connectors(payload)
         sessions = read_content_publish_sessions() if project_dir_getter() is not None else {}
-        session_id = str(payload.get("session_id", "") or "").strip()
+        session_id = parse_str_param(payload.get("session_id", ""))
         session = sessions.get(session_id, {}) if session_id else {}
         plan = build_publish_plan(
             content=content_payload,
             platform_ids=platforms,
-            platform_content_type=str(payload.get("platform_content_type", "video_post") or "video_post"),
+            platform_content_type=parse_str_param(payload.get("platform_content_type", "video_post"), default="video_post"),
             dry_run=bool(payload.get("dry_run", True)),
             session=session,
             humanization=payload.get("humanization", {}) if isinstance(payload.get("humanization"), dict) else {},
@@ -88,9 +87,7 @@ def create_content_publish_capability_blueprint(
             **plan,
         }
         if project_dir_getter() is not None:
-            out = project_data_path("content_publish_plan_last.json")
-            if out is not None:
-                out.write_text(json.dumps(plan_record, ensure_ascii=False, indent=2), encoding="utf-8")
+            write_json_result(project_data_path("content_publish_plan_last.json"), plan_record)
         return jsonify({"ok": True, "plan": plan_record})
 
     @bp.route("/api/capabilities/content_publish/run", methods=["POST"])
@@ -109,12 +106,12 @@ def create_content_publish_capability_blueprint(
             return jsonify({"error": "缺少 plan，请先调用 /api/capabilities/content_publish/plan"}), 400
 
         sessions = read_content_publish_sessions() if project_dir_getter() is not None else {}
-        session_id = str(payload.get("session_id", "") or "").strip()
+        session_id = parse_str_param(payload.get("session_id", ""))
         if not session_id:
             session_id = str(plan.get("session", {}).get("session_id", "") if isinstance(plan.get("session"), dict) else "")
         session = sessions.get(session_id, {}) if session_id else {}
         connectors = resolve_content_publish_connectors(payload)
-        output_root = str(payload.get("output_root", "") or "").strip()
+        output_root = parse_str_param(payload.get("output_root", ""))
         if not output_root and project_dir_getter() is not None:
             output_root = str((project_dir_getter() / "output" / "content_publish").resolve())
 
@@ -132,7 +129,7 @@ def create_content_publish_capability_blueprint(
             "run_id": str(uuid.uuid4())[:10],
             "requested_at": datetime.now().isoformat(timespec="seconds"),
             "input_mode": input_mode,
-            "plan_id": str(plan.get("plan_id", "") or ""),
+            "plan_id": parse_str_param(plan.get("plan_id", "")),
             "plan": plan,
             "connector_count": len(connectors),
             "output_root": output_root,
@@ -143,9 +140,7 @@ def create_content_publish_capability_blueprint(
         history = history[-300:]
         if project_dir_getter() is not None:
             save_content_publish_history(history)
-            out = project_data_path("content_publish_run_last.json")
-            if out is not None:
-                out.write_text(json.dumps(run_record, ensure_ascii=False, indent=2), encoding="utf-8")
+            write_json_result(project_data_path("content_publish_run_last.json"), run_record)
         waiting_auth = str(result.get("status", "")).lower() == "waiting_auth"
         return jsonify(
             {
@@ -164,7 +159,7 @@ def create_content_publish_capability_blueprint(
         if input_mode == "project" and project_dir_getter() is None:
             return jsonify({"error": "项目未加载"}), 400
 
-        run_id = str(payload.get("run_id", "") or "").strip()
+        run_id = parse_str_param(payload.get("run_id", ""))
         if not run_id:
             return jsonify({"error": "run_id 不能为空"}), 400
 
@@ -180,12 +175,12 @@ def create_content_publish_capability_blueprint(
             return jsonify({"error": f"run_id={run_id} 缺少可复跑 plan"}), 400
 
         sessions = read_content_publish_sessions() if project_dir_getter() is not None else {}
-        session_id = str(payload.get("session_id", "") or "").strip()
+        session_id = parse_str_param(payload.get("session_id", ""))
         if not session_id:
             session_id = str(plan.get("session", {}).get("session_id", "") if isinstance(plan.get("session"), dict) else "")
         session = sessions.get(session_id, {}) if session_id else {}
         connectors = resolve_content_publish_connectors(payload)
-        output_root = str(payload.get("output_root", "") or "").strip()
+        output_root = parse_str_param(payload.get("output_root", ""))
         if not output_root and project_dir_getter() is not None:
             output_root = str((project_dir_getter() / "output" / "content_publish").resolve())
 
@@ -202,7 +197,7 @@ def create_content_publish_capability_blueprint(
             "run_id": str(uuid.uuid4())[:10],
             "requested_at": datetime.now().isoformat(timespec="seconds"),
             "input_mode": input_mode,
-            "plan_id": str(plan.get("plan_id", "") or ""),
+            "plan_id": parse_str_param(plan.get("plan_id", "")),
             "plan": plan,
             "connector_count": len(connectors),
             "output_root": output_root,
@@ -213,9 +208,7 @@ def create_content_publish_capability_blueprint(
         history = history[-300:]
         if project_dir_getter() is not None:
             save_content_publish_history(history)
-            out = project_data_path("content_publish_run_last.json")
-            if out is not None:
-                out.write_text(json.dumps(run_record, ensure_ascii=False, indent=2), encoding="utf-8")
+            write_json_result(project_data_path("content_publish_run_last.json"), run_record)
 
         waiting_auth = str(result.get("status", "")).lower() == "waiting_auth"
         return jsonify(

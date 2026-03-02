@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any, Callable, Dict
 import uuid
@@ -10,6 +11,8 @@ import uuid
 from flask import Blueprint, jsonify, request
 
 from modules.app_api.param_utils import parse_int_param
+
+logger = logging.getLogger(__name__)
 
 
 def create_library_blueprint(
@@ -172,7 +175,7 @@ def create_library_blueprint(
         job_id = str(uuid.uuid4())[:8]
 
         def _do_local():
-            print(f"[素材分析] 开始本地分析: {source_path} (max_videos={max_videos})")
+            logger.info("[素材分析] 开始本地分析: %s (max_videos=%d)", source_path, max_videos)
 
             def _should_cancel():
                 return _cancel_requested(job_id)
@@ -197,9 +200,10 @@ def create_library_blueprint(
                     _cancel_token(),
                     {"ok": False, "cancelled": True, "result": result, "stats": _library().stats()},
                 )
-            print(
-                f"[素材分析] 本地分析完成: 扫描 {result.get('scanned', 0)}，入库 {result.get('indexed', 0)}，"
-                f"重复 {result.get('dedup_hits', 0)}，失败 {result.get('failed', 0)}"
+            logger.info(
+                "[素材分析] 本地分析完成: 扫描 %s，入库 %s，重复 %s，失败 %s",
+                result.get("scanned", 0), result.get("indexed", 0),
+                result.get("dedup_hits", 0), result.get("failed", 0),
             )
             return {"ok": True, "result": result, "stats": _library().stats()}
 
@@ -275,7 +279,7 @@ def create_library_blueprint(
         job_id = str(uuid.uuid4())[:8]
 
         def _do_local_images():
-            print(f"[图片分析] 开始本地分析: {source_path} (max_images={max_images})")
+            logger.info("[图片分析] 开始本地分析: %s (max_images=%d)", source_path, max_images)
 
             def _should_cancel():
                 return _cancel_requested(job_id)
@@ -300,9 +304,10 @@ def create_library_blueprint(
                     _cancel_token(),
                     {"ok": False, "cancelled": True, "result": result, "stats": _library().stats()},
                 )
-            print(
-                f"[图片分析] 本地分析完成: 扫描 {result.get('scanned', 0)}，入库 {result.get('indexed', 0)}，"
-                f"重复 {result.get('dedup_hits', 0)}，失败 {result.get('failed', 0)}"
+            logger.info(
+                "[图片分析] 本地分析完成: 扫描 %s，入库 %s，重复 %s，失败 %s",
+                result.get("scanned", 0), result.get("indexed", 0),
+                result.get("dedup_hits", 0), result.get("failed", 0),
             )
             return {"ok": True, "result": result, "stats": _library().stats()}
 
@@ -332,9 +337,9 @@ def create_library_blueprint(
         job_id = str(uuid.uuid4())[:8]
 
         def _do_gdrive():
-            print(
-                f"[素材分析] 开始 Google Drive 分析: max_videos={max_videos}, "
-                f"max_scan_folders={max_scan_folders}, refresh={refresh}"
+            logger.info(
+                "[素材分析] 开始 Google Drive 分析: max_videos=%d, max_scan_folders=%d, refresh=%s",
+                max_videos, max_scan_folders, refresh,
             )
 
             def _should_cancel():
@@ -363,9 +368,10 @@ def create_library_blueprint(
                     _cancel_token(),
                     {"ok": False, "cancelled": True, "result": result, "stats": _library().stats()},
                 )
-            print(
-                f"[素材分析] Google Drive 分析完成: 列出 {result.get('listed_files', 0)}，"
-                f"候选 {result.get('video_candidates', 0)}，入库 {result.get('indexed', 0)}"
+            logger.info(
+                "[素材分析] Google Drive 分析完成: 列出 %s，候选 %s，入库 %s",
+                result.get("listed_files", 0), result.get("video_candidates", 0),
+                result.get("indexed", 0),
             )
             return {"ok": True, "result": result, "stats": _library().stats()}
 
@@ -428,9 +434,9 @@ def create_library_blueprint(
         job_id = str(uuid.uuid4())[:8]
 
         def _do_gdrive_images():
-            print(
-                f"[图片分析] 开始 Google Drive 分析: max_images={max_images}, "
-                f"max_scan_folders={max_scan_folders}, refresh={refresh}"
+            logger.info(
+                "[图片分析] 开始 Google Drive 分析: max_images=%d, max_scan_folders=%d, refresh=%s",
+                max_images, max_scan_folders, refresh,
             )
 
             def _should_cancel():
@@ -459,9 +465,10 @@ def create_library_blueprint(
                     _cancel_token(),
                     {"ok": False, "cancelled": True, "result": result, "stats": _library().stats()},
                 )
-            print(
-                f"[图片分析] Google Drive 分析完成: 列出 {result.get('listed_files', 0)}，"
-                f"候选 {result.get('image_candidates', 0)}，入库 {result.get('indexed', 0)}"
+            logger.info(
+                "[图片分析] Google Drive 分析完成: 列出 %s，候选 %s，入库 %s",
+                result.get("listed_files", 0), result.get("image_candidates", 0),
+                result.get("indexed", 0),
             )
             return {"ok": True, "result": result, "stats": _library().stats()}
 
