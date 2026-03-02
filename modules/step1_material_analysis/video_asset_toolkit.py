@@ -13,6 +13,7 @@ from pathlib import Path
 from datetime import datetime
 import hashlib
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +138,32 @@ class VideoAssetToolkit:
         
         return result
     
+    @staticmethod
+    def _parse_iso6709_location(tag_value):
+        """Parse ISO 6709 location string to lat/lon/alt dict.
+
+        Handles formats like ``+40.7128-074.0060+000.00/`` produced by
+        Apple QuickTime and similar Android ``location`` tags.
+
+        Returns ``{"latitude": float, "longitude": float, "altitude": float|None}``
+        or ``None`` if parsing fails.
+        """
+        if not tag_value:
+            return None
+        try:
+            m = re.match(
+                r'([+-]\d+\.?\d*)([+-]\d+\.?\d*)([+-]\d+\.?\d*)?/?',
+                str(tag_value).strip(),
+            )
+            if not m:
+                return None
+            lat = float(m.group(1))
+            lon = float(m.group(2))
+            alt = float(m.group(3)) if m.group(3) else None
+            return {"latitude": lat, "longitude": lon, "altitude": alt}
+        except Exception:
+            return None
+
     def extract_metadata(self, video_path):
         """提取视频元数据"""
         try:
@@ -173,6 +200,27 @@ class VideoAssetToolkit:
                         "sample_rate": stream.get("sample_rate")
                     })
             
+            # --- GPS / location extraction ---
+            gps = None
+            format_tags = format_info.get("tags", {})
+            # Collect all tags (format-level + every stream) for location search
+            all_tags = dict(format_tags)
+            for stream in streams:
+                for k, v in (stream.get("tags") or {}).items():
+                    all_tags.setdefault(k, v)
+
+            for tag_name in (
+                "com.apple.quicktime.location.ISO6709",
+                "com.apple.quicktime.location",
+                "location",
+            ):
+                raw = all_tags.get(tag_name)
+                if raw:
+                    parsed = self._parse_iso6709_location(raw)
+                    if parsed:
+                        gps = parsed
+                        break
+
             return {
                 "duration": format_info.get("duration"),
                 "size": format_info.get("size"),
@@ -180,7 +228,8 @@ class VideoAssetToolkit:
                 "format": format_info.get("format_name"),
                 "video_streams": video_streams,
                 "audio_streams": audio_streams,
-                "tags": format_info.get("tags", {})
+                "tags": format_tags,
+                "gps": gps,
             }
             
         except Exception as e:

@@ -1,0 +1,61 @@
+<template>
+  <div>
+    <h3>发布文案</h3>
+    <div class="cap-section">
+      <div class="form-row"><label>脚本文案</label><textarea v-model="input.script_text" class="form-input" rows="3" placeholder="粘贴脚本文案"></textarea></div>
+      <div class="form-row"><label>旁白文案</label><textarea v-model="input.voiceover_text" class="form-input" rows="2" placeholder="粘贴旁白"></textarea></div>
+      <div class="form-row"><label>目标平台</label><input v-model="input.platforms" class="form-input" placeholder="youtube,douyin,xiaohongshu (逗号分隔)" /></div>
+      <div class="form-row"><label>内容类型</label>
+        <select v-model="input.platform_content_type" class="form-input"><option value="video_post">视频</option><option value="article">文章</option></select>
+      </div>
+      <div class="form-row"><label>使用 LLM</label><input type="checkbox" v-model="input.use_llm" /></div>
+      <button class="btn btn-primary btn-sm" @click="generate">生成发布文案</button>
+    </div>
+    <div v-if="result" class="cap-section">
+      <div class="cap-subtitle">生成结果 (覆盖 {{ result.platform_results?.length || 0 }} 个平台)</div>
+      <pre class="result-pre">{{ JSON.stringify(result, null, 2) }}</pre>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, reactive, onMounted } from 'vue'
+import { useApiStore } from '../../stores/api.js'
+import { useCapabilitiesStore } from '../../stores/capabilities.js'
+import { useAppStore } from '../../stores/app.js'
+
+const apiStore = useApiStore()
+const capStore = useCapabilitiesStore()
+const appStore = useAppStore()
+
+const input = reactive({
+  input_mode: 'inline', script_text: '', voiceover_text: '', platforms: '',
+  platform_content_type: 'video_post', use_saved_profiles: true,
+  profile_overrides_json: '{}', use_llm: true, llm_provider: '', llm_model: '',
+})
+const result = ref(null)
+
+async function generate() {
+  let overrides = {}
+  try { overrides = JSON.parse(input.profile_overrides_json) } catch { capStore.setMessage('profile_overrides_json 需为 JSON 对象', 'error'); return }
+  const platforms = input.platforms.replace(/\n/g, ',').replace(/，/g, ',').split(',').map(x => x.trim()).filter(Boolean)
+  const data = await apiStore.api('POST', '/api/capabilities/publish_prep/generate', {
+    input_mode: input.input_mode, script_text: input.script_text, voiceover_text: input.voiceover_text,
+    platforms, platform_content_type: input.platform_content_type,
+    use_saved_profiles: input.use_saved_profiles, profile_overrides: overrides,
+    use_llm: input.use_llm, llm_provider: input.llm_provider, llm_model: input.llm_model,
+  })
+  if (data.error) { capStore.setMessage(`发布文案生成失败：${data.error}`, 'error'); return }
+  result.value = data.result || null
+  capStore.setMessage(`发布文案生成完成：覆盖 ${result.value?.platform_results?.length || 0} 个平台`, 'success')
+}
+</script>
+
+<style scoped>
+h3 { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
+.cap-section { margin-bottom: 20px; }
+.cap-subtitle { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 8px; }
+.form-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.form-row label { width: 80px; font-size: 12px; color: var(--muted); flex-shrink: 0; }
+.result-pre { background: var(--surface2); padding: 12px; border-radius: 6px; font-size: 12px; overflow-x: auto; white-space: pre-wrap; max-height: 400px; overflow-y: auto; }
+</style>

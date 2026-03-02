@@ -222,6 +222,8 @@ class GlobalMediaLibrary:
             "semantic_text": "TEXT",
             "keywords_json": "TEXT",
             "semantic_version": "TEXT",
+            "gps_latitude": "REAL",
+            "gps_longitude": "REAL",
         }
         for col, col_type in extra_columns.items():
             if col not in existing_columns:
@@ -3299,6 +3301,11 @@ class GlobalMediaLibrary:
             quality_score=quality_score,
         )
 
+        # GPS extraction from metadata
+        gps = metadata.get("gps")
+        gps_latitude = gps["latitude"] if isinstance(gps, dict) and gps.get("latitude") is not None else None
+        gps_longitude = gps["longitude"] if isinstance(gps, dict) and gps.get("longitude") is not None else None
+
         return {
             "analysis": analysis,
             "duration": duration,
@@ -3316,6 +3323,8 @@ class GlobalMediaLibrary:
             "semantic_text": semantic_bundle["semantic_text"],
             "search_keywords": semantic_bundle["search_keywords"],
             "semantic_version": SEMANTIC_SCHEMA_VERSION,
+            "gps_latitude": gps_latitude,
+            "gps_longitude": gps_longitude,
         }
 
     def _analyze_image(self, path: Path) -> Dict:
@@ -3640,6 +3649,7 @@ class GlobalMediaLibrary:
                         duration=?, size_bytes=?, resolution=?, width=?, height=?, fps=?, codec=?,
                         quality_score=?, scene_description=?, mood=?, objects_json=?,
                         analysis_json=?, semantic_json=?, semantic_text=?, keywords_json=?, semantic_version=?,
+                        gps_latitude=?, gps_longitude=?,
                         updated_at=?
                     WHERE uid=?
                     """,
@@ -3663,6 +3673,8 @@ class GlobalMediaLibrary:
                         semantic_text,
                         json.dumps(search_keywords, ensure_ascii=False),
                         semantic_version,
+                        refreshed_bundle.get("gps_latitude"),
+                        refreshed_bundle.get("gps_longitude"),
                         now,
                         uid,
                     ),
@@ -3725,8 +3737,9 @@ class GlobalMediaLibrary:
                 duration, size_bytes, resolution, width, height, fps, codec,
                 quality_score, scene_description, mood, objects_json,
                 analysis_json, semantic_json, semantic_text, keywords_json, semantic_version,
+                gps_latitude, gps_longitude,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(uid) DO UPDATE SET
                 sha256=excluded.sha256,
                 phash=COALESCE(excluded.phash, assets.phash),
@@ -3749,6 +3762,8 @@ class GlobalMediaLibrary:
                 semantic_text=excluded.semantic_text,
                 keywords_json=excluded.keywords_json,
                 semantic_version=excluded.semantic_version,
+                gps_latitude=excluded.gps_latitude,
+                gps_longitude=excluded.gps_longitude,
                 updated_at=excluded.updated_at
             """,
             (
@@ -3774,6 +3789,8 @@ class GlobalMediaLibrary:
                 analysis_bundle["semantic_text"],
                 json.dumps(analysis_bundle["search_keywords"], ensure_ascii=False),
                 analysis_bundle["semantic_version"],
+                analysis_bundle.get("gps_latitude"),
+                analysis_bundle.get("gps_longitude"),
                 created_at,
                 now,
             ),
@@ -3872,6 +3889,7 @@ class GlobalMediaLibrary:
                         duration=?, size_bytes=?, resolution=?, width=?, height=?, fps=?, codec=?,
                         quality_score=?, scene_description=?, mood=?, objects_json=?,
                         analysis_json=?, semantic_json=?, semantic_text=?, keywords_json=?, semantic_version=?,
+                        gps_latitude=?, gps_longitude=?,
                         updated_at=?
                     WHERE uid=?
                     """,
@@ -3895,6 +3913,8 @@ class GlobalMediaLibrary:
                         semantic_text,
                         json.dumps(search_keywords, ensure_ascii=False),
                         semantic_version,
+                        refreshed_bundle.get("gps_latitude"),
+                        refreshed_bundle.get("gps_longitude"),
                         now,
                         uid,
                     ),
@@ -3957,8 +3977,9 @@ class GlobalMediaLibrary:
                 duration, size_bytes, resolution, width, height, fps, codec,
                 quality_score, scene_description, mood, objects_json,
                 analysis_json, semantic_json, semantic_text, keywords_json, semantic_version,
+                gps_latitude, gps_longitude,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(uid) DO UPDATE SET
                 sha256=excluded.sha256,
                 phash=COALESCE(excluded.phash, assets.phash),
@@ -3981,6 +4002,8 @@ class GlobalMediaLibrary:
                 semantic_text=excluded.semantic_text,
                 keywords_json=excluded.keywords_json,
                 semantic_version=excluded.semantic_version,
+                gps_latitude=excluded.gps_latitude,
+                gps_longitude=excluded.gps_longitude,
                 updated_at=excluded.updated_at
             """,
             (
@@ -4006,6 +4029,8 @@ class GlobalMediaLibrary:
                 analysis_bundle["semantic_text"],
                 json.dumps(analysis_bundle["search_keywords"], ensure_ascii=False),
                 analysis_bundle["semantic_version"],
+                analysis_bundle.get("gps_latitude"),
+                analysis_bundle.get("gps_longitude"),
                 created_at,
                 now,
             ),
@@ -5511,7 +5536,8 @@ class GlobalMediaLibrary:
             f"""
             SELECT uid, filename, sha256, size_bytes, primary_path, source_type, duration, resolution,
                    quality_score, scene_description, mood, objects_json,
-                   semantic_json, semantic_text, keywords_json, updated_at
+                   semantic_json, semantic_text, keywords_json, updated_at,
+                   gps_latitude, gps_longitude
             FROM assets
             WHERE uid IN ({placeholders})
             """,
@@ -5631,7 +5657,8 @@ class GlobalMediaLibrary:
             sql = """
                 SELECT uid, filename, sha256, size_bytes, primary_path, source_type, duration, resolution,
                        quality_score, scene_description, mood, objects_json,
-                       semantic_json, semantic_text, keywords_json, updated_at
+                       semantic_json, semantic_text, keywords_json, updated_at,
+                       gps_latitude, gps_longitude
                 FROM assets
             """
             if where_clause:
@@ -5696,6 +5723,7 @@ class GlobalMediaLibrary:
                     SELECT a.uid, a.filename, a.sha256, a.size_bytes, a.primary_path, a.source_type,
                            a.duration, a.resolution, a.quality_score, a.scene_description, a.mood,
                            a.objects_json, a.semantic_json, a.keywords_json, a.updated_at,
+                           a.gps_latitude, a.gps_longitude,
                            COALESCE(
                                (
                                    SELECT l.path
@@ -5750,6 +5778,8 @@ class GlobalMediaLibrary:
                             "semantic_dimensions_count": len(semantic.keys()) if isinstance(semantic, dict) else 0,
                             "semantic_dimension_names": list(semantic.keys()) if isinstance(semantic, dict) else [],
                             "updated_at": row["updated_at"],
+                            "gps_latitude": row["gps_latitude"],
+                            "gps_longitude": row["gps_longitude"],
                             "match_score": 1,
                             "keyword_score": 0,
                             "vector_score": 0.0,
@@ -5761,7 +5791,8 @@ class GlobalMediaLibrary:
             sql = """
                 SELECT uid, filename, sha256, size_bytes, primary_path, source_type, duration, resolution,
                        quality_score, scene_description, mood, objects_json,
-                       semantic_json, semantic_text, keywords_json, updated_at
+                       semantic_json, semantic_text, keywords_json, updated_at,
+                       gps_latitude, gps_longitude
                 FROM assets
             """
             if where_clause:
@@ -5842,6 +5873,8 @@ class GlobalMediaLibrary:
                         "semantic_dimensions_count": len(semantic.keys()) if isinstance(semantic, dict) else 0,
                         "semantic_dimension_names": list(semantic.keys()) if isinstance(semantic, dict) else [],
                         "updated_at": row["updated_at"],
+                        "gps_latitude": row["gps_latitude"],
+                        "gps_longitude": row["gps_longitude"],
                         "match_score": cand["match_score"],
                         "keyword_score": cand["keyword_score"],
                         "vector_score": cand["vector_score"],
@@ -5869,7 +5902,8 @@ class GlobalMediaLibrary:
                 f"""
                 SELECT uid, filename, sha256, size_bytes, primary_path, source_type, duration, resolution,
                        quality_score, scene_description, mood, objects_json,
-                       semantic_json, semantic_text, keywords_json, updated_at
+                       semantic_json, semantic_text, keywords_json, updated_at,
+                       gps_latitude, gps_longitude
                 FROM assets
                 WHERE uid IN ({placeholder})
                 """,
@@ -5911,6 +5945,8 @@ class GlobalMediaLibrary:
                     "semantic_dimensions_count": len(semantic.keys()) if isinstance(semantic, dict) else 0,
                     "semantic_dimension_names": list(semantic.keys()) if isinstance(semantic, dict) else [],
                     "updated_at": row["updated_at"],
+                    "gps_latitude": row["gps_latitude"],
+                    "gps_longitude": row["gps_longitude"],
                 }
 
             return [by_uid[uid] for uid in uids if uid in by_uid]

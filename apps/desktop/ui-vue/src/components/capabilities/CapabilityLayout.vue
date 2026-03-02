@@ -26,7 +26,7 @@
 
       <!-- 面板内容 -->
       <div class="cap-panel">
-        <CapabilityPlaceholder :tab="currentTab" />
+        <component :is="panelComponent" :key="currentTab" />
       </div>
     </div>
   </div>
@@ -37,6 +37,33 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useCapabilitiesStore } from '../../stores/capabilities.js'
 import CapabilityPlaceholder from './CapabilityPlaceholder.vue'
+import TopicLibrary from './TopicLibrary.vue'
+import TopicCopy from './TopicCopy.vue'
+import TextRoughCut from './TextRoughCut.vue'
+import ShortClip from './ShortClip.vue'
+import Refinement from './Refinement.vue'
+import AudioVoice from './AudioVoice.vue'
+import SubtitleCalibration from './SubtitleCalibration.vue'
+import ImageSemantic from './ImageSemantic.vue'
+import ArticleExpand from './ArticleExpand.vue'
+import PublishPrep from './PublishPrep.vue'
+import SocialExport from './SocialExport.vue'
+import ContentPublish from './ContentPublish.vue'
+
+const panelMap = {
+  topic_library: TopicLibrary,
+  topic_copy: TopicCopy,
+  text_rough: TextRoughCut,
+  short_clip: ShortClip,
+  refinement: Refinement,
+  audio_voice: AudioVoice,
+  subtitle_calibration: SubtitleCalibration,
+  image_semantic: ImageSemantic,
+  article_expand: ArticleExpand,
+  publish_prep: PublishPrep,
+  social_export: SocialExport,
+  content_publish: ContentPublish,
+}
 
 const route = useRoute()
 const router = useRouter()
@@ -44,6 +71,10 @@ const capStore = useCapabilitiesStore()
 
 const currentTab = computed(() => {
   return route.params.tab || capStore.activeTab || 'topic_library'
+})
+
+const panelComponent = computed(() => {
+  return panelMap[currentTab.value] || CapabilityPlaceholder
 })
 
 function selectTab(tab) {
