@@ -775,3 +775,82 @@ def test_v033_social_export_quality_enum_fallback(tmp_path):
     finally:
         server._library = old_library
         server._REQUIRE_LOCAL_API_TOKEN = old_require
+
+
+def test_v033_system_get_endpoints(tmp_path):
+    """v0.3.3: Basic GET endpoints (/api/status, /api/system/load, /api/tasks/queue) respond 200."""
+    old_library = server._library
+    old_require = server._REQUIRE_LOCAL_API_TOKEN
+    try:
+        lib = _FakeGlobalMediaLibrary()
+        lib.db_path = tmp_path / "test_system.db"
+        server._library = lib
+        server._REQUIRE_LOCAL_API_TOKEN = False
+        client = server.app.test_client()
+
+        # /api/status
+        resp = client.get("/api/status")
+        assert resp.status_code == 200
+        payload = resp.get_json()
+        assert isinstance(payload, dict)
+
+        # /api/system/load
+        resp2 = client.get("/api/system/load")
+        assert resp2.status_code == 200
+        payload2 = resp2.get_json()
+        assert payload2["ok"] is True
+        assert "system" in payload2
+        assert "task_queue" in payload2
+
+        # /api/tasks/queue
+        resp3 = client.get("/api/tasks/queue")
+        assert resp3.status_code == 200
+        payload3 = resp3.get_json()
+        assert payload3["ok"] is True
+        assert "task_queue" in payload3
+    finally:
+        server._library = old_library
+        server._REQUIRE_LOCAL_API_TOKEN = old_require
+
+
+def test_v033_library_stats_endpoint(tmp_path):
+    """v0.3.3: GET /api/library/stats returns 200."""
+    old_library = server._library
+    old_require = server._REQUIRE_LOCAL_API_TOKEN
+    try:
+        lib = _FakeGlobalMediaLibrary()
+        lib.db_path = tmp_path / "test_libstats.db"
+        server._library = lib
+        server._REQUIRE_LOCAL_API_TOKEN = False
+        client = server.app.test_client()
+
+        resp = client.get("/api/library/stats")
+        assert resp.status_code == 200
+        payload = resp.get_json()
+        assert isinstance(payload, dict)
+    finally:
+        server._library = old_library
+        server._REQUIRE_LOCAL_API_TOKEN = old_require
+
+
+def test_v033_workflows_catalog_endpoint(tmp_path):
+    """v0.3.3: GET /api/workflows/catalog returns 200 with catalog list."""
+    old_library = server._library
+    old_require = server._REQUIRE_LOCAL_API_TOKEN
+    try:
+        lib = _FakeGlobalMediaLibrary()
+        lib.db_path = tmp_path / "test_catalog.db"
+        server._library = lib
+        server._REQUIRE_LOCAL_API_TOKEN = False
+        client = server.app.test_client()
+
+        resp = client.get("/api/workflows/catalog")
+        assert resp.status_code == 200
+        payload = resp.get_json()
+        assert payload["ok"] is True
+        assert "catalog" in payload
+        assert isinstance(payload["catalog"], list)
+        assert "count" in payload
+    finally:
+        server._library = old_library
+        server._REQUIRE_LOCAL_API_TOKEN = old_require

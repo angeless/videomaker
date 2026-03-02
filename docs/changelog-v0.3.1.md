@@ -81,6 +81,38 @@ max_frames = max(total_frames * 2, int(fps * 600))
 
 回归验证：**141/141 测试通过**。
 
+## v0.3.4 测试覆盖 + 残余验证（2026-03-02）
+
+### 新增 GET 端点覆盖测试
+
+| 端点 | 涉及蓝图 | 测试 |
+|------|---------|------|
+| `GET /api/status` | `system_routes` | `test_v033_system_get_endpoints` |
+| `GET /api/system/load` | `system_routes` | 同上 |
+| `GET /api/tasks/queue` | `system_routes` | 同上 |
+| `GET /api/library/stats` | `library_routes` | `test_v033_library_stats_endpoint` |
+| `GET /api/workflows/catalog` | `workflow_routes` | `test_v033_workflows_catalog_endpoint` |
+
+### 残余输入验证补全
+
+| 文件 | 参数 | 边界 |
+|------|------|------|
+| `routes/capability_audio_voice_routes.py` | `origin/narration/bgm_volume` | 0.0–3.0 |
+| `routes/capability_audio_voice_routes.py` | `bgm_fade_out_s` | 0.0–30.0 |
+| `routes/capability_audio_voice_routes.py` | `ducking_threshold` | 0.0–1.0 |
+| `routes/capability_audio_voice_routes.py` | `ducking_ratio` | 1.0–50.0 |
+| `routes/capability_audio_voice_routes.py` | `ducking_attack/release_ms` | 0–500 / 0–2000 |
+| `routes/capability_content_publish_routes.py` | `expires_in_minutes` | 1–43200 |
+
+### 已确认完备的路由（无需修改）
+
+- `agent_task_query_routes.py`：`limit`/`offset` 已有完整边界
+- `agent_task_run_routes.py`：`max_parallel` 已有 `max(1, min(…, 8))`
+- `agent_observability_routes.py`：`limit`/`top_n` 已有完整边界
+- `library_routes.py`：`limit`/`offset`/`media_type`/`retrieval_mode` 已有完整验证
+
+回归验证：**144/144 测试通过**。
+
 ## 下一步计划
 
 参见 `docs/next_dev_plan.md` 中的 Phase 1-4 计划。当前优先项：
