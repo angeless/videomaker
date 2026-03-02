@@ -31,6 +31,19 @@
 - 回归验证：136/136 测试通过。
 - 详见 `docs/changelog-v0.3.1.md`。
 
+### v0.3.2–v0.3.5 增量（2026-03-02）
+- **v0.3.2 安全边界测试**：新增 S1-S3 安全测试（伪造 CSRF→403、不存在 job→404、缺失 token→401），验证安全守卫完备。
+- **v0.3.3 输入验证增强**：为 `capability_editing`/`idempotency`/`social_export` 路由中 10+ 个数值参数添加 try/except + 边界检查。
+- **v0.3.4 测试覆盖**：新增 5 个 GET 端点测试（status/system_load/tasks_queue/library_stats/workflows_catalog）；补全 `audio_voice` 混音参数 + `content_publish` 会话过期时间边界。
+- **v0.3.5 JSON 错误响应**：404/405/通用 HTTPException 全部改为 JSON 响应，替代 Flask 默认 HTML。
+- 回归验证：146/146 测试通过。
+- 详见 `docs/changelog-v0.3.1.md`。
+
+### v0.3.6 SQLite 连接泄漏修复（2026-03-02）
+- **SQLite 连接泄漏修复**：`job_store.py`/`migrations.py`/`topic_library.py` 全部改为显式 `conn.close()`，消除 ResourceWarning。
+- 回归验证：146/146 测试通过，0 warnings。
+- 详见 `docs/changelog-v0.3.1.md`。
+
 ## Phase 1（高优先，1-2 周）
 
 1. 真实发布引擎（替换模拟）

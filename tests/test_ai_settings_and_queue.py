@@ -515,10 +515,13 @@ def test_jobs_persisted_and_restored_from_sqlite(tmp_path):
 
         state_db = tmp_path / "app_state.db"
         assert state_db.exists()
-        with sqlite3.connect(str(state_db)) as conn:
+        conn = sqlite3.connect(str(state_db))
+        try:
             row = conn.execute("SELECT status FROM jobs WHERE job_id=?", (job_id,)).fetchone()
             assert row is not None
             assert str(row[0]) == "done"
+        finally:
+            conn.close()
 
         with server._heavy_queue_lock:
             server._jobs.clear()
@@ -546,7 +549,8 @@ def test_job_store_uses_schema_migrations(tmp_path):
 
         state_db = tmp_path / "app_state.db"
         assert state_db.exists()
-        with sqlite3.connect(str(state_db)) as conn:
+        conn = sqlite3.connect(str(state_db))
+        try:
             table_row = conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'"
             ).fetchone()
@@ -554,6 +558,8 @@ def test_job_store_uses_schema_migrations(tmp_path):
             version_row = conn.execute("SELECT MAX(version) FROM schema_migrations").fetchone()
             assert version_row is not None
             assert int(version_row[0] or 0) >= 1
+        finally:
+            conn.close()
     finally:
         server._library = old_library
         server._reset_job_store_for_tests()

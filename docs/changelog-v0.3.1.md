@@ -128,6 +128,21 @@ max_frames = max(total_frames * 2, int(fps * 600))
 
 回归验证：**146/146 测试通过**。
 
+## v0.3.6 SQLite 连接泄漏修复（2026-03-02）
+
+**问题**：Python 的 `with sqlite3.connect(...) as conn:` 语义是 commit/rollback，**不会**关闭连接。这导致测试中出现大量 `ResourceWarning: unclosed database` 警告，生产环境下也存在连接泄漏风险（文件描述符与内存不释放）。
+
+**修复**：
+
+| 文件 | 修复方式 |
+|------|---------|
+| `modules/app_api/job_store.py` | `_connect()` 改为 `@contextmanager`，`try/yield/commit + except/rollback + finally/close` |
+| `modules/app_api/migrations.py` | `with sqlite3.connect()` 改为 `conn = sqlite3.connect(); try/commit/except rollback/finally close` |
+| `modules/capabilities/topic_library.py` | 新增 `_connect()` 上下文管理器，5 个函数全部替换 |
+| `tests/test_ai_settings_and_queue.py` | 2 处测试验证查询改为 `try/finally conn.close()` |
+
+**验证**：`pytest -q -W all` → **146 passed, 0 warnings**（修复前有多个 ResourceWarning）。
+
 ## 下一步计划
 
 参见 `docs/next_dev_plan.md` 中的 Phase 1-4 计划。当前优先项：

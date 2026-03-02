@@ -1,8 +1,8 @@
-# 修复项核查 Statement（更新于 2026-02-28 22:19 EST）
+# 修复项核查 Statement（更新于 2026-03-02）
 
 说明：
 - 状态定义：`已修复` / `部分修复` / `未修复` / `N/A`。
-- 本文基于当前 `main` 工作区代码与测试结果（`125 passed`）核查。
+- 本文基于当前 `main` 工作区代码与测试结果（`146 passed`）核查。
 
 | # | 需求 | 状态 | 证据 | 缺口/备注 |
 |---|---|---|---|---|
@@ -25,11 +25,11 @@
 | 17 | 首次启动引导向导 | 已修复 | 前端新增首次引导弹层（AI Key/目录/功能概览）；`ui.onboarding_completed` 持久化 | 可继续增加分步状态与视频教程 |
 | 18 | 前端术语不友好（开发者术语多） | 部分修复 | 新增“创作者术语模式”，关键入口文案切换 | 深层模块仍有技术术语（inline/workflow 等） |
 | 19 | Capability 工作台 vs 7 步流程关系不明 | 部分修复 | 文案改为“创作工具台/连线编排”，引导中说明两者用途 | 还需更强制的场景推荐与一键切换提示 |
-| 20 | 错误信息不友好 | 部分修复 | 前端 `friendlyErrorMessage()` + 后端全局异常兜底 | 仍有部分接口返回原始技术错误 |
+| 20 | 错误信息不友好 | 部分修复 | 前端 `friendlyErrorMessage()` + 后端全局异常兜底 + v0.3.5 404/405 返回 JSON 而非 HTML | 仍有部分接口返回原始技术错误 |
 | 21 | 无认证机制（本地端口可被任意进程调用） | 部分修复 | 新增本地会话 token + CSRF 握手：`GET /api/session/bootstrap`，写请求校验 `X-VideoEditor-Token`/`X-VideoEditor-CSRF`，并校验 Origin | 仍需细粒度权限模型（按功能/角色） |
 | 22 | 命令注入风险（FFmpeg等） | 部分修复 | 主要使用参数数组/ffmpeg-python，未见明显 shell 拼接 | 仍需系统级输入白名单审计与 fuzz |
 | 23 | 无 CSRF 保护 | 已修复 | Flask `before_request` 对写请求强制 CSRF 头校验并限制本地 Origin；前端自动注入 `X-VideoEditor-CSRF` | 需后续补跨进程权限隔离策略 |
-| 24 | 无输入长度限制 | 已修复 | `app.config["MAX_CONTENT_LENGTH"]` + 413 友好提示 | 后续可按接口细化粒度限制 |
+| 24 | 无输入长度限制 | 已修复 | `app.config["MAX_CONTENT_LENGTH"]` + 413 友好提示 + v0.3.3/v0.3.4 全路由数值参数边界检查 | 已基本完备 |
 | 25 | API Key 明文存储 | 部分修复 | 新增 `modules/app_api/secure_store.py`，macOS 下优先写入系统 Keychain；`app_settings.json` 仅保存 `*_api_key_ref` 引用 | 非 macOS 或 Keychain 不可用时会降级明文（带 `secret_storage` 状态） |
 | 26 | 无审计日志 | 部分修复 | 有任务历史与观测接口 | 缺系统级审计事件流（who/when/what） |
 | 27 | 中英文混杂 | 部分修复 | 新增创作者术语模式，部分入口中文化 | 深层功能仍混杂英文枚举词 |
@@ -124,4 +124,4 @@
 
 - `node --check apps/desktop/ui/app.js` 通过
 - `python -m py_compile apps/desktop/launcher.py modules/app_api/server.py modules/app_api/job_store.py modules/app_api/migrations.py` 通过
-- `pytest -q`：`125 passed`
+- `pytest -q`：`146 passed`（v0.3.2-v0.3.5 新增 21 个测试）

@@ -23,7 +23,8 @@ def run_sqlite_migrations(db_path: Path, migrations: Iterable[SqliteMigration]) 
     path.parent.mkdir(parents=True, exist_ok=True)
     ordered: List[SqliteMigration] = sorted(list(migrations), key=lambda item: int(item.version))
 
-    with sqlite3.connect(str(path), timeout=30.0) as conn:
+    conn = sqlite3.connect(str(path), timeout=30.0)
+    try:
         conn.execute("PRAGMA busy_timeout = 30000")
         conn.execute("PRAGMA foreign_keys = ON")
         conn.execute(
@@ -51,6 +52,11 @@ def run_sqlite_migrations(db_path: Path, migrations: Iterable[SqliteMigration]) 
             applied_now.append(version)
 
         conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
     return {
         "db_path": str(path),

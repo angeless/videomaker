@@ -1,9 +1,23 @@
 """Topic library capability backed by SQLite."""
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Generator, Iterable, List, Optional
 import sqlite3
+
+
+@contextmanager
+def _connect(db_path: str) -> Generator[sqlite3.Connection, None, None]:
+    """Open a SQLite connection and guarantee it is closed on exit."""
+    conn = sqlite3.connect(db_path, timeout=30.0)
+    try:
+        yield conn
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 @dataclass
@@ -24,7 +38,7 @@ def init_topic_db(db_path: str) -> None:
     """Initialize topic library tables if missing."""
     path = Path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(path) as conn:
+    with _connect(str(path)) as conn:
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS topic_templates (
@@ -56,7 +70,7 @@ def upsert_topic(db_path: str, topic: TopicTemplate) -> None:
     """Insert or update a topic template by slug."""
     init_topic_db(db_path)
     tags_value = ",".join(sorted({t.strip().lower() for t in topic.tags if t and t.strip()}))
-    with sqlite3.connect(db_path) as conn:
+    with _connect(db_path) as conn:
         conn.execute(
             """
             INSERT INTO topic_templates (
@@ -99,7 +113,7 @@ def list_topics(
         "SELECT slug, title, category, audience, hook_style, outline_template, tags, enabled, updated_at "
         f"FROM topic_templates {where} ORDER BY updated_at DESC LIMIT ?"
     )
-    with sqlite3.connect(db_path) as conn:
+    with _connect(db_path) as conn:
         cur = conn.execute(sql, (max(int(limit), 1),))
         rows = cur.fetchall()
     return [_row_to_topic_dict(row) for row in rows]
@@ -108,7 +122,7 @@ def list_topics(
 def get_topic(db_path: str, slug: str) -> Optional[Dict]:
     """Get one topic template by slug."""
     init_topic_db(db_path)
-    with sqlite3.connect(db_path) as conn:
+    with _connect(db_path) as conn:
         cur = conn.execute(
             """
             SELECT slug, title, category, audience, hook_style, outline_template, tags, enabled, updated_at
@@ -153,7 +167,7 @@ def search_topics(
     )
     params.append(max(int(limit), 1))
 
-    with sqlite3.connect(db_path) as conn:
+    with _connect(db_path) as conn:
         cur = conn.execute(sql, tuple(params))
         rows = cur.fetchall()
     return [_row_to_topic_dict(row) for row in rows]
