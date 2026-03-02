@@ -561,6 +561,27 @@ macOS `open` 命令的 `Popen` 改为 `subprocess.run(timeout=5, check=False)`�
 
 回归验证：**173/173 测试通过，0 warnings**。
 
+## v0.3.19（2026-03-02）— subprocess 超时补全 + cv2 资源泄漏修复
+
+### subprocess 超时补全
+
+| 文件 | 行号 | 修复内容 |
+|------|------|---------|
+| `auto_render.py` | 359 | FFmpeg concat `subprocess.run()` 添加 `timeout=1500`（25 分钟上限） |
+
+### cv2.VideoCapture try/finally 防护
+
+| 文件 | 方法 | 修复内容 |
+|------|------|---------|
+| `indexer/fingerprint.py` | `extract_fingerprint()` | 帧采样循环包裹 `try/finally` 确保 `cap.release()` |
+| `indexer/semantic.py` | `extract_keyframes()` | 关键帧提取循环包裹 `try/finally` 确保 `cap.release()` |
+| `video_asset_toolkit.py` | `_compute_visual_stats()` | 视觉统计帧处理循环包裹 `try/finally` 确保 `cap.release()` |
+
+至此，`modules/` 下所有 `cv2.VideoCapture` 使用点均有 `try/finally` 防护，
+所有 `subprocess.run()`/`subprocess.Popen()` 调用均有超时参数。
+
+回归验证：**173/173 测试通过，0 warnings**。
+
 ## 下一步计划
 
 参见 `docs/next_dev_plan.md` 中的 Phase 1-4 计划。当前优先项：

@@ -135,6 +135,13 @@
 - 回归验证：173/173 测试通过，0 warnings。
 - 详见 `docs/changelog-v0.3.1.md`。
 
+### v0.3.19 subprocess 超时补全 + cv2 资源泄漏修复（2026-03-02）
+- **subprocess 超时补全**：`auto_render.py` FFmpeg concat 命令添加 `timeout=1500`。
+- **cv2 try/finally 防护**：`fingerprint.py`/`semantic.py`/`video_asset_toolkit.py` 三处 VideoCapture 帧处理循环包裹 `try/finally` 确保异常时释放。
+- 至此所有 cv2.VideoCapture 和 subprocess 调用均有安全防护。
+- 回归验证：173/173 测试通过，0 warnings。
+- 详见 `docs/changelog-v0.3.1.md`。
+
 ## Phase 1（高优先，1-2 周）
 
 1. 真实发布引擎（替换模拟）

@@ -62,25 +62,26 @@ class VideoHasher:
             raise ImportError("opencv-python 未安装")
 
         cap = cv2.VideoCapture(video_path)
-        fps = cap.get(cv2.CAP_PROP_FPS) or 30
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        duration = total_frames / fps
+        try:
+            fps = cap.get(cv2.CAP_PROP_FPS) or 30
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            duration = total_frames / fps
 
-        frame_hashes = []
-        sample_step = int(fps * sample_interval)
+            frame_hashes = []
+            sample_step = int(fps * sample_interval)
 
-        for frame_idx in range(0, total_frames, max(sample_step, 1)):
-            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
-            ret, frame = cap.read()
-            if not ret:
-                break
-            try:
-                h = VideoHasher.compute_frame_phash(frame)
-                frame_hashes.append(h)
-            except Exception:
-                pass
-
-        cap.release()
+            for frame_idx in range(0, total_frames, max(sample_step, 1)):
+                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                try:
+                    h = VideoHasher.compute_frame_phash(frame)
+                    frame_hashes.append(h)
+                except Exception:
+                    pass
+        finally:
+            cap.release()
 
         # 取中间帧作为代表哈希
         representative = frame_hashes[len(frame_hashes) // 2] if frame_hashes else ""

@@ -356,7 +356,7 @@ class FFmpegRenderer:
             ]
 
             logger.info("合并 %d 个视频片段...", len(video_list))
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=1500)
             
             if result.returncode != 0:
                 raise RuntimeError(f"合并失败: {result.stderr}")

@@ -132,17 +132,19 @@ class SemanticIndex:
             raise ImportError("opencv-python 未安装")
 
         cap = cv2.VideoCapture(video_path)
-        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        indices = [int(i * total / num_frames) for i in range(num_frames)]
+        try:
+            total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            indices = [int(i * total / num_frames) for i in range(num_frames)]
 
-        frames = []
-        for idx in indices:
-            cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
-            ret, frame = cap.read()
-            if ret:
-                from PIL import Image
-                frames.append(Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)))
-        cap.release()
+            frames = []
+            for idx in indices:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+                ret, frame = cap.read()
+                if ret:
+                    from PIL import Image
+                    frames.append(Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)))
+        finally:
+            cap.release()
         return frames
 
     def index_video(self, video_path: str, clip_duration: float = 10.0) -> List[str]:

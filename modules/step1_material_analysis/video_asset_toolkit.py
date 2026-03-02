@@ -302,64 +302,65 @@ class VideoAssetToolkit:
             self._visual_stats_cache[key] = default_stats
             return default_stats
 
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-        if total_frames <= 0:
-            total_frames = sample_frames
-        frame_indexes = sorted(set(
-            int(x) for x in np.linspace(0, max(total_frames - 1, 0), num=min(sample_frames, max(total_frames, 1)))
-        ))
-
-        brightness_list = []
-        saturation_list = []
-        color_ratio_list = []
-        edge_list = []
-        motion_list = []
-        face_hits = 0
-        prev_gray = None
-
-        for idx in frame_indexes:
-            cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
-            ok, frame = cap.read()
-            if not ok or frame is None:
-                continue
-
-            hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-            v = hsv[:, :, 2]
-            s = hsv[:, :, 1]
-            brightness_list.append(float(np.mean(v)) / 255.0)
-            saturation_list.append(float(np.mean(s)) / 255.0)
-
-            b_mean, g_mean, r_mean, _ = cv2.mean(frame)
-            total_color = max(b_mean + g_mean + r_mean, 1e-6)
-            color_ratio_list.append((
-                float(b_mean / total_color),
-                float(g_mean / total_color),
-                float(r_mean / total_color),
+        try:
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+            if total_frames <= 0:
+                total_frames = sample_frames
+            frame_indexes = sorted(set(
+                int(x) for x in np.linspace(0, max(total_frames - 1, 0), num=min(sample_frames, max(total_frames, 1)))
             ))
 
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            edges = cv2.Canny(gray, 80, 160)
-            edge_list.append(float(np.mean(edges > 0)))
+            brightness_list = []
+            saturation_list = []
+            color_ratio_list = []
+            edge_list = []
+            motion_list = []
+            face_hits = 0
+            prev_gray = None
 
-            if prev_gray is not None:
-                diff = cv2.absdiff(gray, prev_gray)
-                motion_list.append(float(np.mean(diff)))
-            prev_gray = gray
+            for idx in frame_indexes:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+                ok, frame = cap.read()
+                if not ok or frame is None:
+                    continue
 
-            if self._face_cascade is not None:
-                try:
-                    faces = self._face_cascade.detectMultiScale(
-                        gray,
-                        scaleFactor=1.1,
-                        minNeighbors=4,
-                        minSize=(30, 30),
-                    )
-                    if len(faces) > 0:
-                        face_hits += 1
-                except Exception:
-                    pass
+                hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+                v = hsv[:, :, 2]
+                s = hsv[:, :, 1]
+                brightness_list.append(float(np.mean(v)) / 255.0)
+                saturation_list.append(float(np.mean(s)) / 255.0)
 
-        cap.release()
+                b_mean, g_mean, r_mean, _ = cv2.mean(frame)
+                total_color = max(b_mean + g_mean + r_mean, 1e-6)
+                color_ratio_list.append((
+                    float(b_mean / total_color),
+                    float(g_mean / total_color),
+                    float(r_mean / total_color),
+                ))
+
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                edges = cv2.Canny(gray, 80, 160)
+                edge_list.append(float(np.mean(edges > 0)))
+
+                if prev_gray is not None:
+                    diff = cv2.absdiff(gray, prev_gray)
+                    motion_list.append(float(np.mean(diff)))
+                prev_gray = gray
+
+                if self._face_cascade is not None:
+                    try:
+                        faces = self._face_cascade.detectMultiScale(
+                            gray,
+                            scaleFactor=1.1,
+                            minNeighbors=4,
+                            minSize=(30, 30),
+                        )
+                        if len(faces) > 0:
+                            face_hits += 1
+                    except Exception:
+                        pass
+        finally:
+            cap.release()
 
         if not brightness_list:
             self._visual_stats_cache[key] = default_stats
