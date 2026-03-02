@@ -218,6 +218,23 @@ macOS `open` 命令的 `Popen` 改为 `subprocess.run(timeout=5, check=False)`�
 
 回归验证：**146/146 测试通过，0 warnings**。
 
+## v0.3.10 参数解析工具 + POST 端点测试覆盖（2026-03-02）
+
+### 新增 `param_utils.py` 共享工具
+
+新增 `modules/app_api/param_utils.py`，提供 `parse_int_param()` 和 `parse_float_param()` 两个通用参数解析函数，后续路由可逐步替换重复的 try/except 解析逻辑。
+
+### 新增 4 个测试
+
+| 测试 | 覆盖内容 |
+|------|---------|
+| `test_v0310_parse_int_param` | 8 个边界场景：正常值/None/空字符串/非数字/下限/上限/浮点字符串/int直传 |
+| `test_v0310_parse_float_param` | 6 个边界场景：正常/None/非数字/下限/上限/float直传 |
+| `test_v0310_editing_post_endpoints_require_project` | 5 个 POST + 1 个 GET 端点无项目时返回 400；refinement/plan 自动降级验证 |
+| `test_v0310_topic_library_list_inline_returns_200` | inline 模式下 topic_library GET 返回 200；project 模式无项目返回 400 |
+
+回归验证：**150/150 测试通过，0 warnings**。
+
 ## 下一步计划
 
 参见 `docs/next_dev_plan.md` 中的 Phase 1-4 计划。当前优先项：

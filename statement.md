@@ -2,7 +2,7 @@
 
 说明：
 - 状态定义：`已修复` / `部分修复` / `未修复` / `N/A`。
-- 本文基于当前 `main` 工作区代码与测试结果（`146 passed`）核查。
+- 本文基于当前 `main` 工作区代码与测试结果（`150 passed`）核查。
 
 | # | 需求 | 状态 | 证据 | 缺口/备注 |
 |---|---|---|---|---|
@@ -124,4 +124,4 @@
 
 - `node --check apps/desktop/ui/app.js` 通过
 - `python -m py_compile apps/desktop/launcher.py modules/app_api/server.py modules/app_api/job_store.py modules/app_api/migrations.py` 通过
-- `pytest -q`：`146 passed`（v0.3.2-v0.3.5 新增 21 个测试）
+- `pytest -q`：`150 passed`（v0.3.2-v0.3.5 新增 21 个测试）

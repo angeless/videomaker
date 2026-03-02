@@ -64,6 +64,12 @@
 - 回归验证：146/146 测试通过，0 warnings。
 - 详见 `docs/changelog-v0.3.1.md`。
 
+### v0.3.10 参数解析工具 + POST 端点测试覆盖（2026-03-02）
+- **新增 `param_utils.py`**：`parse_int_param()` + `parse_float_param()` 通用解析工具。
+- **新增 4 个测试**：参数工具边界 + 编辑能力端点项目依赖 + topic_library inline 模式。
+- 回归验证：150/150 测试通过，0 warnings。
+- 详见 `docs/changelog-v0.3.1.md`。
+
 ## Phase 1（高优先，1-2 周）
 
 1. 真实发布引擎（替换模拟）

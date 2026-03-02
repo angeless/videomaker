@@ -908,3 +908,112 @@ def test_v035_wrong_method_returns_json_405(tmp_path):
     finally:
         server._library = old_library
         server._REQUIRE_LOCAL_API_TOKEN = old_require
+
+
+# ============================================================
+# v0.3.10 — parse_int_param / parse_float_param 工具函数测试
+# ============================================================
+
+
+def test_v0310_parse_int_param():
+    from modules.app_api.param_utils import parse_int_param
+
+    # 正常值
+    assert parse_int_param("42", default=10, min_val=1, max_val=100) == 42
+    # None → default
+    assert parse_int_param(None, default=10, min_val=1, max_val=100) == 10
+    # 空字符串 → default
+    assert parse_int_param("", default=10, min_val=1, max_val=100) == 10
+    # 非数字 → default
+    assert parse_int_param("abc", default=10, min_val=1, max_val=100) == 10
+    # 低于下限 → min_val
+    assert parse_int_param("-5", default=10, min_val=1, max_val=100) == 1
+    # 超过上限 → max_val
+    assert parse_int_param("999", default=10, min_val=1, max_val=100) == 100
+    # float 字符串 → 转换失败回退 default
+    assert parse_int_param("3.14", default=10, min_val=1, max_val=100) == 10
+    # int 类型直接传入
+    assert parse_int_param(50, default=10, min_val=1, max_val=100) == 50
+
+
+def test_v0310_parse_float_param():
+    from modules.app_api.param_utils import parse_float_param
+
+    assert parse_float_param("3.14", default=1.0, min_val=0.0, max_val=10.0) == 3.14
+    assert parse_float_param(None, default=1.0, min_val=0.0, max_val=10.0) == 1.0
+    assert parse_float_param("abc", default=1.0, min_val=0.0, max_val=10.0) == 1.0
+    assert parse_float_param("-5.0", default=1.0, min_val=0.0, max_val=10.0) == 0.0
+    assert parse_float_param("99.9", default=1.0, min_val=0.0, max_val=10.0) == 10.0
+    assert parse_float_param(2.5, default=1.0, min_val=0.0, max_val=10.0) == 2.5
+
+
+# ============================================================
+# v0.3.10 — POST 端点测试（编辑类能力缺失项目时返回 400）
+# ============================================================
+
+
+def test_v0310_editing_post_endpoints_require_project():
+    """POST editing endpoints should return 400 when project not loaded."""
+    old_library = server._library
+    old_project = server._project_dir
+    old_require = server._REQUIRE_LOCAL_API_TOKEN
+    try:
+        lib = _FakeGlobalMediaLibrary()
+        lib.db_path = ROOT / ".tmp_v0310_editing.db"
+        server._library = lib
+        server._project_dir = None  # 确保无项目加载
+        server._REQUIRE_LOCAL_API_TOKEN = False
+        server._reset_job_store_for_tests()
+
+        client = server.app.test_client()
+
+        # Endpoints that strictly require project mode
+        strict_project_endpoints = [
+            "/api/capabilities/topic_copy/draft",
+            "/api/capabilities/text_rough_cut/plan",
+            "/api/capabilities/short_clip/plan",
+            "/api/capabilities/refinement/handoff",
+            "/api/capabilities/refinement/execute",
+        ]
+        for ep in strict_project_endpoints:
+            resp = client.post(ep, json={"input_mode": "project"})
+            assert resp.status_code == 400, f"{ep} should return 400 without project, got {resp.status_code}"
+
+        # text_rough_cut/source is GET
+        resp_get = client.get("/api/capabilities/text_rough_cut/source?input_mode=project")
+        assert resp_get.status_code == 400, f"text_rough_cut/source should return 400 without project"
+
+        # refinement/plan auto-degrades to inline mode (returns 200)
+        resp_plan = client.post("/api/capabilities/refinement/plan", json={"input_mode": "project"})
+        assert resp_plan.status_code == 200, "refinement/plan should auto-degrade to inline mode"
+    finally:
+        server._library = old_library
+        server._project_dir = old_project
+        server._REQUIRE_LOCAL_API_TOKEN = old_require
+        server._reset_job_store_for_tests()
+
+
+def test_v0310_topic_library_list_inline_returns_200():
+    """GET topic_library with input_mode=inline should return 200."""
+    old_library = server._library
+    old_require = server._REQUIRE_LOCAL_API_TOKEN
+    try:
+        lib = _FakeGlobalMediaLibrary()
+        lib.db_path = ROOT / ".tmp_v0310_topic.db"
+        server._library = lib
+        server._REQUIRE_LOCAL_API_TOKEN = False
+        server._reset_job_store_for_tests()
+
+        client = server.app.test_client()
+        resp = client.get("/api/capabilities/topic_library?input_mode=inline")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert isinstance(data, dict)
+
+        # Without project, project mode should return 400
+        resp_proj = client.get("/api/capabilities/topic_library?input_mode=project")
+        assert resp_proj.status_code == 400
+    finally:
+        server._library = old_library
+        server._REQUIRE_LOCAL_API_TOKEN = old_require
+        server._reset_job_store_for_tests()
