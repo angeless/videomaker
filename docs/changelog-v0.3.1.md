@@ -297,6 +297,35 @@ macOS `open` 命令的 `Popen` 改为 `subprocess.run(timeout=5, check=False)`�
 
 回归验证：**152/152 测试通过，0 warnings**。
 
+---
+
+## v0.3.13（2026-03-02）— 裸 float()/int() 容错收尾（全路由完成）
+
+将所有路由文件中剩余的裸 `float()`/`int()` 用户输入转换替换为
+`parse_float_param()`/`parse_int_param()`，彻底消除因非法参数类型导致的 500 崩溃。
+
+### 修复详情
+
+| 文件 | 替换数 | 参数类型 |
+|------|--------|---------|
+| `capability_text_semantic_routes.py` | 5 处 | max_images, limit, offset, length_target, title_count |
+| `capability_audio_voice_routes.py` | 9 处 | bgm_cache_max_age_days ×2, max_candidates ×2, timeout_seconds ×4, bgm_timeout_seconds |
+| `capability_content_publish_routes.py` | 1 处 | expires_in_minutes |
+| `agent_task_run_routes.py` | 3 处 | governance max_parallel ×2, step timeout_seconds |
+
+### 参数解析统一进度
+
+| 批次 | 版本 | 文件数 | 替换数 |
+|------|------|--------|--------|
+| 第一批 | v0.3.11 | 7 | 24 |
+| 第二批 | v0.3.12 | 2 | 23 |
+| **第三批** | **v0.3.13** | **4** | **18** |
+| **合计** | | **13 个路由文件** | **65 处** |
+
+至此，所有活跃路由文件中的用户输入参数解析均已迁移到共享工具函数。
+
+回归验证：**152/152 测试通过，0 warnings**。
+
 ## 下一步计划
 
 参见 `docs/next_dev_plan.md` 中的 Phase 1-4 计划。当前优先项：

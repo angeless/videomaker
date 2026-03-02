@@ -8,6 +8,7 @@ import json
 
 from flask import Blueprint, jsonify, request
 
+from modules.app_api.param_utils import parse_int_param
 from modules.step2_topic_planning.ai_client import AIClient
 
 
@@ -170,11 +171,7 @@ def create_text_semantic_capability_blueprint(
     def api_image_semantic_analyze():
         payload = request.json or {}
         input_mode = parse_capability_input_mode(payload.get("input_mode", "inline"), default="inline")
-        try:
-            max_images = int(payload.get("max_images", payload.get("limit", 1200)) or 1200)
-        except Exception:
-            max_images = 1200
-        max_images = max(1, min(max_images, 8000))
+        max_images = parse_int_param(payload.get("max_images", payload.get("limit", 1200)), default=1200, min_val=1, max_val=8000)
 
         image_paths_raw = payload.get("image_paths", payload.get("images", payload.get("paths", [])))
         if isinstance(image_paths_raw, str):
@@ -217,8 +214,8 @@ def create_text_semantic_capability_blueprint(
         result = search_images(
             query,
             library=library_getter(),
-            limit=int(payload.get("limit", 30) or 30),
-            offset=int(payload.get("offset", 0) or 0),
+            limit=parse_int_param(payload.get("limit", 30), default=30, min_val=1, max_val=500),
+            offset=parse_int_param(payload.get("offset", 0), default=0, min_val=0),
             retrieval_mode=str(payload.get("retrieval_mode", "hybrid") or "hybrid"),
         )
         if project_dir_getter() is not None and bool(payload.get("store_result", True)):
@@ -298,8 +295,8 @@ def create_text_semantic_capability_blueprint(
             source_text=source_text,
             key_points=key_points,
             tone=str(payload.get("tone", "professional") or "professional"),
-            length_target=int(payload.get("length_target", 1200) or 1200),
-            title_count=int(payload.get("title_count", 5) or 5),
+            length_target=parse_int_param(payload.get("length_target", 1200), default=1200, min_val=100, max_val=10000),
+            title_count=parse_int_param(payload.get("title_count", 5), default=5, min_val=1, max_val=20),
             text_generator=text_generator,
         )
         if project_dir_getter() is not None and bool(payload.get("store_result", True)):

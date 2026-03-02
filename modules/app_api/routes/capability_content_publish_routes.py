@@ -10,6 +10,8 @@ import uuid
 
 from flask import Blueprint, jsonify, request
 
+from modules.app_api.param_utils import parse_int_param
+
 
 def create_content_publish_capability_blueprint(
     *,
@@ -46,7 +48,7 @@ def create_content_publish_capability_blueprint(
             actor_id=str(payload.get("actor_id", "") or "").strip(),
             session_id=str(payload.get("session_id", "") or "").strip(),
             authenticated=bool(payload.get("authenticated", False)),
-            expires_in_minutes=max(1, min(int(payload.get("expires_in_minutes", 120) or 120), 43200)),
+            expires_in_minutes=parse_int_param(payload.get("expires_in_minutes", 120), default=120, min_val=1, max_val=43200),
         )
         sessions = read_content_publish_sessions() if project_dir_getter() is not None else {}
         sessions[str(session.get("session_id"))] = session

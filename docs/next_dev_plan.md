@@ -84,6 +84,13 @@
 - 回归验证：152/152 测试通过，0 warnings。
 - 详见 `docs/changelog-v0.3.1.md`。
 
+### v0.3.13 裸 float()/int() 容错收尾（2026-03-02）
+- **全路由参数解析完成**：4 个路由文件 18 处裸 `float()`/`int()` 替换为 `parse_float_param()`/`parse_int_param()`。
+- 涉及：text_semantic_routes（5）、audio_voice_routes（9）、content_publish_routes（1）、agent_task_run_routes（3）。
+- 累计 v0.3.11-v0.3.13 共 13 个路由文件 65 处统一完成，所有用户输入参数均有容错保护。
+- 回归验证：152/152 测试通过，0 warnings。
+- 详见 `docs/changelog-v0.3.1.md`。
+
 ## Phase 1（高优先，1-2 周）
 
 1. 真实发布引擎（替换模拟）

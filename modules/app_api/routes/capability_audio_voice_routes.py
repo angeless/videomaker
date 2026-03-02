@@ -10,7 +10,7 @@ import uuid
 
 from flask import Blueprint, jsonify, request
 
-from modules.app_api.param_utils import parse_float_param
+from modules.app_api.param_utils import parse_float_param, parse_int_param
 
 
 def create_audio_voice_capability_blueprint(
@@ -67,7 +67,7 @@ def create_audio_voice_capability_blueprint(
         bgm_strict_schema = bool(payload.get("bgm_strict_schema", False))
         bgm_cache_enabled = bool(payload.get("bgm_cache_enabled", True))
         bgm_force_refresh = bool(payload.get("bgm_force_refresh", False))
-        bgm_cache_max_age_days = float(payload.get("bgm_cache_max_age_days", 0) or 0)
+        bgm_cache_max_age_days = parse_float_param(payload.get("bgm_cache_max_age_days", 0), default=0.0, min_val=0.0)
         bgm_cache_max_age_seconds = max(bgm_cache_max_age_days, 0.0) * 86400.0
         ffprobe_bin = str(payload.get("ffprobe_bin", "ffprobe") or "ffprobe")
         target_duration_s = payload.get("target_duration_s", None)
@@ -106,10 +106,10 @@ def create_audio_voice_capability_blueprint(
                 target_duration_s=target_duration_s,
                 library_dirs=[str(x) for x in library_dirs],
                 ffprobe_bin=ffprobe_bin,
-                max_candidates=int(payload.get("max_candidates", 20) or 20),
+                max_candidates=parse_int_param(payload.get("max_candidates", 20), default=20, min_val=1, max_val=100),
                 api_key=api_key,
                 endpoint=endpoint,
-                timeout_seconds=float(payload.get("bgm_timeout_seconds", 45) or 45),
+                timeout_seconds=parse_float_param(payload.get("bgm_timeout_seconds", 45), default=45.0, min_val=1.0, max_val=600.0),
                 output_dir=str(output_dir) if output_dir is not None else "",
                 download_audio=bgm_download,
                 strict_schema=bgm_strict_schema,
@@ -144,7 +144,7 @@ def create_audio_voice_capability_blueprint(
         model_id = str(payload.get("model_id", "eleven_multilingual_v2") or "eleven_multilingual_v2")
         output_format = str(payload.get("output_format", "mp3_44100_128") or "mp3_44100_128")
         dry_run = bool(payload.get("dry_run", False))
-        timeout_seconds = float(payload.get("timeout_seconds", 90) or 90)
+        timeout_seconds = parse_float_param(payload.get("timeout_seconds", 90), default=90.0, min_val=1.0, max_val=600.0)
 
         from modules.capabilities.audio_voice import build_audio_capability_payload, synthesize_voiceover_segments
 
@@ -204,7 +204,7 @@ def create_audio_voice_capability_blueprint(
             return jsonify({"error": "项目未加载"}), 400
         base_dir = capability_base_dir(input_mode)
         ffmpeg_bin = str(payload.get("ffmpeg_bin", "ffmpeg") or "ffmpeg")
-        timeout_seconds = float(payload.get("timeout_seconds", 600) or 600)
+        timeout_seconds = parse_float_param(payload.get("timeout_seconds", 600), default=600.0, min_val=1.0, max_val=3600.0)
         dry_run = bool(payload.get("dry_run", False))
 
         segments = payload.get("segments")
@@ -255,7 +255,7 @@ def create_audio_voice_capability_blueprint(
         base_dir = capability_base_dir(input_mode)
         ffmpeg_bin = str(payload.get("ffmpeg_bin", "ffmpeg") or "ffmpeg")
         ffprobe_bin = str(payload.get("ffprobe_bin", "ffprobe") or "ffprobe")
-        timeout_seconds = float(payload.get("timeout_seconds", 900) or 900)
+        timeout_seconds = parse_float_param(payload.get("timeout_seconds", 900), default=900.0, min_val=1.0, max_val=7200.0)
         dry_run = bool(payload.get("dry_run", False))
         replace_master = bool(payload.get("replace_master", input_mode == "project"))
 
@@ -298,7 +298,7 @@ def create_audio_voice_capability_blueprint(
         bgm_strict_schema = bool(payload.get("bgm_strict_schema", False))
         bgm_cache_enabled = bool(payload.get("bgm_cache_enabled", True))
         bgm_force_refresh = bool(payload.get("bgm_force_refresh", False))
-        bgm_cache_max_age_days = float(payload.get("bgm_cache_max_age_days", 0) or 0)
+        bgm_cache_max_age_days = parse_float_param(payload.get("bgm_cache_max_age_days", 0), default=0.0, min_val=0.0)
         bgm_cache_max_age_seconds = max(bgm_cache_max_age_days, 0.0) * 86400.0
         bgm_audio_raw = str(payload.get("bgm_audio", "") or "").strip()
         bgm_pick = None
@@ -348,10 +348,10 @@ def create_audio_voice_capability_blueprint(
                     target_duration_s=duration_guess,
                     library_dirs=[str(x) for x in library_dirs],
                     ffprobe_bin=ffprobe_bin,
-                    max_candidates=int(payload.get("bgm_max_candidates", 20) or 20),
+                    max_candidates=parse_int_param(payload.get("bgm_max_candidates", 20), default=20, min_val=1, max_val=100),
                     api_key=bgm_api_key,
                     endpoint=bgm_endpoint,
-                    timeout_seconds=float(payload.get("bgm_timeout_seconds", 45) or 45),
+                    timeout_seconds=parse_float_param(payload.get("bgm_timeout_seconds", 45), default=45.0, min_val=1.0, max_val=600.0),
                     output_dir=str(output_dir) if output_dir is not None else "",
                     download_audio=bgm_download,
                     strict_schema=bgm_strict_schema,

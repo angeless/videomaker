@@ -11,7 +11,7 @@ import uuid
 
 from flask import Blueprint, jsonify, request
 
-from modules.app_api.param_utils import parse_int_param
+from modules.app_api.param_utils import parse_float_param, parse_int_param
 
 
 def create_agent_task_run_blueprint(
@@ -68,7 +68,7 @@ def create_agent_task_run_blueprint(
                 )
             except Exception as exc:
                 return jsonify({"error": f"治理校验失败: {exc}"}), 400
-            max_parallel = int(governance_applied.get("max_parallel", 1) or 1)
+            max_parallel = parse_int_param(governance_applied.get("max_parallel", 1), default=1, min_val=1, max_val=8)
             budget_limit = governance_applied.get("budget_limit", {}) if isinstance(governance_applied.get("budget_limit"), dict) else {}
             governance = governance_applied.get("governance", {}) if isinstance(governance_applied.get("governance"), dict) else {}
 
@@ -183,7 +183,7 @@ def create_agent_task_run_blueprint(
                 )
             except Exception as exc:
                 return jsonify({"error": f"治理校验失败: {exc}"}), 400
-            max_parallel = int(governance_applied.get("max_parallel", 1) or 1)
+            max_parallel = parse_int_param(governance_applied.get("max_parallel", 1), default=1, min_val=1, max_val=8)
             budget_limit = governance_applied.get("budget_limit", {}) if isinstance(governance_applied.get("budget_limit"), dict) else {}
             governance = governance_applied.get("governance", {}) if isinstance(governance_applied.get("governance"), dict) else {}
 
@@ -212,7 +212,7 @@ def create_agent_task_run_blueprint(
                         skill_id=skill_id,
                         input_payload=step.get("input", {}) if isinstance(step.get("input"), dict) else {},
                         retry_policy=step.get("retry_policy", {}) if isinstance(step.get("retry_policy"), dict) else {},
-                        timeout_seconds=float(step.get("timeout_seconds", 120.0) or 120.0),
+                        timeout_seconds=parse_float_param(step.get("timeout_seconds", 120.0), default=120.0, min_val=1.0, max_val=3600.0),
                         request_context=request_ctx,
                         logger=lambda msg, sid=step_id: jobs[job_id]["log"].append(f"[AgentSkillFlow:{sid}] {msg}"),
                     )
