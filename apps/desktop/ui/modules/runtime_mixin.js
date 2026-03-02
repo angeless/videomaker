@@ -415,11 +415,17 @@
 
     async waitForJob(jobId, onTick = null, timeoutMs = 60 * 60 * 1000) {
       const start = Date.now();
+      let _lastStateJson = "";
       while (Date.now() - start < timeoutMs) {
         const j = await this.api("GET", `/api/job/${jobId}`);
         if (j.error) return { status: "error", error: j.error };
+        // 仅在 state 实际变化时才调 _applyState，避免每 800ms 替换引用导致 Alpine 重绘闪烁
         if (j.state && j.state.task_queue) {
-          this._applyState(j.state);
+          const stateJson = JSON.stringify(j.state);
+          if (stateJson !== _lastStateJson) {
+            _lastStateJson = stateJson;
+            this._applyState(j.state);
+          }
         }
         if (onTick) onTick(j);
         if (j.status === "done" || j.status === "error" || j.status === "cancelled") return j;
@@ -432,13 +438,17 @@
       const data = await this.api("GET", "/api/tasks/queue");
       if (data.error) return;
       const q = (data.task_queue && typeof data.task_queue === "object") ? data.task_queue : {};
-      this.taskQueue = {
+      const next = {
         max_running: Number(q.max_running || this.taskQueue.max_running || 1),
         running_count: Number(q.running_count || 0),
         queued_count: Number(q.queued_count || 0),
         running: Array.isArray(q.running) ? q.running : [],
         queued: Array.isArray(q.queued) ? q.queued : [],
       };
+      // 仅在数据实际变化时更新，避免每 3s 无变化也触发 Alpine 重绘
+      if (JSON.stringify(next) !== JSON.stringify(this.taskQueue)) {
+        this.taskQueue = next;
+      }
     },
 
     async cancelJob(jobId) {

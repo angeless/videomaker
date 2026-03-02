@@ -145,6 +145,7 @@
         this.jobLog = [];
         this.jobProgress = 0;
         this.jobEta = { available: false, remaining_seconds: null, source: "none", confidence: 0 };
+        this._pollLastStateJson = "";
         clearInterval(this.jobTimer);
         this.jobTimer = setInterval(() => this.pollJob(), 1000);
       },
@@ -159,22 +160,32 @@
           this.jobTimer = null;
           return;
         }
-        this.jobLog = data.log || [];
+        // 仅在 log/progress/status 实际变化时才更新，减少无效重绘
+        const newLogJson = JSON.stringify(data.log || []);
+        if (newLogJson !== JSON.stringify(this.jobLog)) {
+          this.jobLog = data.log || [];
+        }
         this.jobProgress = data.progress || 0;
         this.jobStatus = data.status;
         this.jobEta = (data.eta && typeof data.eta === "object")
           ? data.eta
           : { available: false, remaining_seconds: null, source: "none", confidence: 0 };
 
+        // 仅在 state 实际变化时才调 _applyState，避免每秒替换引用导致 Alpine 重绘闪烁
         if (data.state) {
-          const savedPanel = this.activePanel;
-          this._applyState(data.state);
-          this.activePanel = savedPanel;
+          const stateJson = JSON.stringify(data.state);
+          if (stateJson !== (this._pollLastStateJson || "")) {
+            this._pollLastStateJson = stateJson;
+            const savedPanel = this.activePanel;
+            this._applyState(data.state);
+            this.activePanel = savedPanel;
+          }
         }
 
         if (data.status === "done" || data.status === "error" || data.status === "cancelled") {
           clearInterval(this.jobTimer);
           this.jobTimer = null;
+          this._pollLastStateJson = "";
           if (data.status !== "running") {
             this.jobEta = { available: false, remaining_seconds: 0, source: "finished", confidence: 1 };
           }

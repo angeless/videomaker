@@ -582,6 +582,30 @@ macOS `open` 命令的 `Popen` 改为 `subprocess.run(timeout=5, check=False)`�
 
 回归验证：**173/173 测试通过，0 warnings**。
 
+## v0.3.20（2026-03-02）— 前端轮询闪烁修复
+
+### Bug 描述
+
+分析素材时 UI 持续闪烁、进度条不动。
+
+### 根因
+
+`waitForJob` 每 800ms 轮询 `/api/job/{id}`，`_applyState()` 每次创建新的
+`steps`/`config`/`taskQueue` 引用 → Alpine.js 检测引用变化 → 整页重绘 → 闪烁。
+进度条 DOM 被销毁重建 → 视觉上看不到进度变化。
+
+### 修复
+
+在三个轮询点加入 JSON diff 守卫，仅在数据实际变化时才更新 Alpine 响应式属性：
+
+| 文件 | 修复点 | 方案 |
+|------|--------|------|
+| `runtime_mixin.js` → `waitForJob()` | `_applyState` 调用 | `JSON.stringify` diff，state 未变则跳过 |
+| `runtime_mixin.js` → `refreshTaskQueue()` | `this.taskQueue` 赋值 | `JSON.stringify` diff，taskQueue 未变则跳过 |
+| `project_workflow_mixin.js` → `pollJob()` | `_applyState` + `jobLog` | `JSON.stringify` diff，state/log 未变则跳过 |
+
+回归验证：**173/173 测试通过，0 warnings**。
+
 ## 下一步计划
 
 参见 `docs/next_dev_plan.md` 中的 Phase 1-4 计划。当前优先项：
