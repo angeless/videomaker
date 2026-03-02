@@ -8,6 +8,8 @@ from typing import Any, Callable, Dict
 
 from flask import Blueprint, jsonify
 
+from modules.app_api.param_utils import parse_str_param
+
 
 def create_job_blueprint(
     *,
@@ -45,7 +47,7 @@ def create_job_blueprint(
                         break
                     pos += 1
             job["queue_position"] = queue_position
-        status_text = str(job.get("status", "") or "").strip().lower()
+        status_text = parse_str_param(job.get("status", "")).lower()
         if status_text in {"done", "error", "cancelled", "interrupted"}:
             persist_job_snapshot(job_id, "")
         eta = estimate_job_eta(job) if isinstance(job, dict) else {}

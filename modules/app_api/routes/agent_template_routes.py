@@ -8,6 +8,8 @@ from typing import Any, Callable, Dict
 
 from flask import Blueprint, jsonify, request
 
+from modules.app_api.param_utils import parse_str_param
+
 
 def create_agent_template_blueprint(
     *,
@@ -28,9 +30,9 @@ def create_agent_template_blueprint(
         if project_dir_getter() is None:
             return jsonify({"error": "项目未加载"}), 400
         ctx = parse_request_context()
-        capability_id = str(request.args.get("capability_id", "") or "").strip()
-        scope = str(request.args.get("scope", "") or "").strip().lower()
-        actor_id = str(request.args.get("actor_id", "") or "").strip() or ctx.get("actor_id", "")
+        capability_id = parse_str_param(request.args.get("capability_id", ""))
+        scope = parse_str_param(request.args.get("scope", "")).lower()
+        actor_id = parse_str_param(request.args.get("actor_id", "")) or ctx.get("actor_id", "")
         include_system = parse_boolish(request.args.get("include_system", "true"), default=True)
         resolve = parse_boolish(request.args.get("resolve", "true"), default=True)
         templates = list_agent_templates(
@@ -61,7 +63,7 @@ def create_agent_template_blueprint(
             return jsonify({"error": "项目未加载"}), 400
         payload = request.json or {}
         ctx = parse_request_context()
-        default_scope = str(payload.get("scope", "") or "").strip().lower()
+        default_scope = parse_str_param(payload.get("scope", "")).lower()
         if not default_scope:
             default_scope = "agent" if ctx.get("actor_type") == "agent" else "project"
         try:
@@ -86,7 +88,7 @@ def create_agent_template_blueprint(
                 candidate_store["project"] = bucket
             bucket[tmpl["template_id"]] = tmpl
         else:
-            actor_id = str(tmpl.get("actor_id", "") or "").strip()
+            actor_id = parse_str_param(tmpl.get("actor_id", ""))
             if not actor_id:
                 return jsonify({"error": "agent scope 需要 actor_id"}), 400
             agent_store = candidate_store.setdefault("agent", {})
@@ -125,7 +127,7 @@ def create_agent_template_blueprint(
         tid = normalize_agent_template_id(template_id)
         if not tid:
             return jsonify({"error": "template_id 无效"}), 400
-        scope = str(request.args.get("scope", payload.get("scope", "")) or "").strip().lower()
+        scope = parse_str_param(request.args.get("scope", payload.get("scope", ""))).lower()
         if scope not in {"project", "agent", "system"}:
             return jsonify({"error": "scope 不能为空，且仅支持 project/agent/system"}), 400
         if scope == "system":
@@ -139,9 +141,9 @@ def create_agent_template_blueprint(
             deleted = bucket.pop(tid, None)
             store["project"] = bucket
         else:
-            actor_id = str(request.args.get("actor_id", payload.get("actor_id", "")) or "").strip()
+            actor_id = parse_str_param(request.args.get("actor_id", payload.get("actor_id", "")))
             if not actor_id:
-                actor_id = str(ctx.get("actor_id", "") or "").strip()
+                actor_id = parse_str_param(ctx.get("actor_id", ""))
             if not actor_id:
                 return jsonify({"error": "agent scope 删除需要 actor_id"}), 400
             agent_store = store.get("agent", {})

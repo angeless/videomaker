@@ -109,6 +109,15 @@
 - 回归验证：163/163 测试通过，0 warnings。
 - 详见 `docs/changelog-v0.3.1.md`。
 
+### v0.3.16 parse_str_param 全路由收官（2026-03-02）
+- **parse_str_param 收官**：11 个路由文件 89 处 `str(...or "").strip()` 模式归一为 `parse_str_param()`。
+- 覆盖：editing(25) + audio_voice(22) + social_export(9) + task_query(9) + task_run(7) + template(8) + skill(3) + settings(2) + legacy_project(2) + workflow(1) + job(1)。
+- 累计 v0.3.14-v0.3.16 共 13 个路由文件 134 处字符串参数解析统一完成。
+- 18 处多字典/多键回退链有意保留（text_semantic 14 + editing 2 + task_run 2）。
+- 新增 4 个测试（导入覆盖 + 零残留断言 + 使用量断言）。
+- 回归验证：167/167 测试通过，0 warnings。
+- 详见 `docs/changelog-v0.3.1.md`。
+
 ## Phase 1（高优先，1-2 周）
 
 1. 真实发布引擎（替换模拟）

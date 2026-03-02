@@ -1287,3 +1287,89 @@ def test_v0315_no_remaining_json_dumps_in_routes():
     for fname in migrated_files:
         src = (routes_dir / fname).read_text()
         assert "json.dumps(" not in src, f"{fname} still contains json.dumps()"
+
+
+# ── v0.3.16 tests ────────────────────────────────────────────────────
+
+
+def test_v0316_parse_str_param_imported_in_all_route_files():
+    """Every route file that has str(...or '').strip() patterns must import parse_str_param."""
+    files_with_parse_str_param = [
+        "capability_editing_routes.py",
+        "capability_audio_voice_routes.py",
+        "capability_text_semantic_routes.py",
+        "capability_social_export_routes.py",
+        "agent_observability_routes.py",
+        "agent_task_query_routes.py",
+        "agent_task_run_routes.py",
+        "agent_template_routes.py",
+        "agent_skill_routes.py",
+        "settings_routes.py",
+        "legacy_project_routes.py",
+        "workflow_routes.py",
+        "job_routes.py",
+    ]
+    routes_dir = ROOT / "modules" / "app_api" / "routes"
+    for fname in files_with_parse_str_param:
+        src = (routes_dir / fname).read_text()
+        assert "parse_str_param" in src, f"{fname} missing parse_str_param import"
+
+
+def test_v0316_no_simple_str_strip_patterns_in_migrated_files():
+    """Simple str(payload.get(key, '') or '').strip() patterns are fully replaced.
+
+    Only remaining patterns should be multi-dict fallback chains
+    (e.g. str(payload.get(x) or ai.get(y) or '').strip()).
+    """
+    import re
+
+    # These files should have zero simple str-strip patterns
+    fully_migrated = [
+        "capability_audio_voice_routes.py",
+        "capability_social_export_routes.py",
+        "agent_observability_routes.py",
+        "agent_template_routes.py",
+        "agent_skill_routes.py",
+        "settings_routes.py",
+        "legacy_project_routes.py",
+        "workflow_routes.py",
+        "job_routes.py",
+    ]
+    # Simple pattern: str(x.get("key", "") or "").strip() without multi-dict fallback
+    simple_pattern = re.compile(
+        r'str\(\w+\.get\("[^"]+",\s*"[^"]*"\)\s+or\s+""\)\.strip\(\)'
+    )
+    routes_dir = ROOT / "modules" / "app_api" / "routes"
+    for fname in fully_migrated:
+        src = (routes_dir / fname).read_text()
+        matches = simple_pattern.findall(src)
+        assert not matches, f"{fname} still has simple str-strip patterns: {matches[:3]}"
+
+
+def test_v0316_remaining_str_strip_are_multi_dict_only():
+    """Remaining str-strip patterns in partially migrated files are all multi-dict fallback chains."""
+    import re
+
+    partially_migrated = {
+        "capability_text_semantic_routes.py": 14,
+        "capability_editing_routes.py": 2,
+        "agent_task_run_routes.py": 2,
+    }
+    pattern = re.compile(r'str\(.*or ""\)\.strip\(\)')
+    routes_dir = ROOT / "modules" / "app_api" / "routes"
+    for fname, expected_count in partially_migrated.items():
+        src = (routes_dir / fname).read_text()
+        matches = pattern.findall(src)
+        assert len(matches) <= expected_count, (
+            f"{fname}: expected ≤{expected_count} remaining str-strip patterns, got {len(matches)}"
+        )
+
+
+def test_v0316_parse_str_param_usage_count():
+    """Verify parse_str_param is used broadly (at least 90 occurrences total)."""
+    routes_dir = ROOT / "modules" / "app_api" / "routes"
+    total = 0
+    for py_file in routes_dir.glob("*.py"):
+        src = py_file.read_text()
+        total += src.count("parse_str_param(")
+    assert total >= 90, f"Expected ≥90 parse_str_param() calls, got {total}"

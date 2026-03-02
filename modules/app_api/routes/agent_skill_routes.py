@@ -9,6 +9,8 @@ import uuid
 
 from flask import Blueprint, jsonify, request
 
+from modules.app_api.param_utils import parse_str_param
+
 
 def create_agent_skill_blueprint(
     *,
@@ -29,7 +31,7 @@ def create_agent_skill_blueprint(
     def api_agent_skills_invoke():
         payload = request.json or {}
         request_ctx = parse_request_context()
-        skill_id = str(payload.get("skill_id", "") or "").strip()
+        skill_id = parse_str_param(payload.get("skill_id", ""))
         if not skill_id:
             return jsonify({"error": "skill_id 不能为空"}), 400
 
@@ -54,8 +56,8 @@ def create_agent_skill_blueprint(
         retry_policy = normalize_skill_retry_policy(payload.get("retry_policy", {}))
         timeout_seconds = normalize_skill_timeout_seconds(payload.get("timeout_seconds", 120), default=120.0)
 
-        method = str(skill_spec.get("method", "POST") or "POST").strip().upper()
-        endpoint = str(skill_spec.get("endpoint", "") or "").strip()
+        method = parse_str_param(skill_spec.get("method", "POST"), default="POST").upper()
+        endpoint = parse_str_param(skill_spec.get("endpoint", ""))
         if not endpoint:
             return jsonify({"error": f"skill 配置缺少 endpoint: {skill_id}"}), 500
 

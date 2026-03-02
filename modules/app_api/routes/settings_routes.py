@@ -7,6 +7,8 @@ from typing import Any, Callable, Dict
 
 from flask import Blueprint, jsonify, request
 
+from modules.app_api.param_utils import parse_str_param
+
 
 def create_settings_blueprint(
     *,
@@ -36,8 +38,8 @@ def create_settings_blueprint(
                 "ok": True,
                 "auth_required": bool(require_local_token_getter()),
                 "csrf_required": bool(require_csrf_getter()),
-                "token": str(local_token_getter() or "").strip() if require_local_token_getter() else "",
-                "csrf_token": str(local_csrf_token_getter() or "").strip(),
+                "token": parse_str_param(local_token_getter()) if require_local_token_getter() else "",
+                "csrf_token": parse_str_param(local_csrf_token_getter()),
             }
         )
 

@@ -8,7 +8,7 @@ from typing import Any, Callable, Dict
 
 from flask import Blueprint, jsonify, request
 
-from modules.app_api.param_utils import parse_int_param
+from modules.app_api.param_utils import parse_int_param, parse_str_param
 
 
 def create_workflow_blueprint(
@@ -204,7 +204,7 @@ def create_workflow_blueprint(
         failed_step_ids = [
             normalize_agent_template_id(step.get("step_id", ""))
             for step in (base.get("steps", []) if isinstance(base.get("steps"), list) else [])
-            if str(step.get("status", "") or "").strip().lower() == "error"
+            if parse_str_param(step.get("status", "")).lower() == "error"
         ]
         failed_step_ids = [sid for sid in failed_step_ids if sid]
         try:

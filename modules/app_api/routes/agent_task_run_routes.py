@@ -11,7 +11,7 @@ import uuid
 
 from flask import Blueprint, jsonify, request
 
-from modules.app_api.param_utils import parse_float_param, parse_int_param
+from modules.app_api.param_utils import parse_float_param, parse_int_param, parse_str_param
 
 
 def create_agent_task_run_blueprint(
@@ -38,8 +38,8 @@ def create_agent_task_run_blueprint(
     def api_agent_tasks_plan():
         payload = request.json or {}
         request_ctx = parse_request_context()
-        mode_hint = str(payload.get("mode", "") or "").strip().lower()
-        strategy = str(payload.get("strategy", "sequential") or "sequential").strip().lower()
+        mode_hint = parse_str_param(payload.get("mode", "")).lower()
+        strategy = parse_str_param(payload.get("strategy", "sequential"), default="sequential").lower()
         task_id = str(uuid.uuid4())[:8]
         dry_run = bool(payload.get("dry_run", True))
 
@@ -99,7 +99,7 @@ def create_agent_task_run_blueprint(
                 },
             })
 
-        capability_id = str(payload.get("capability_id", "") or "").strip()
+        capability_id = parse_str_param(payload.get("capability_id", ""))
         input_payload = payload.get("input", {})
         if not capability_id:
             return jsonify({"error": "capability_id 不能为空（或使用 mode=skill_sequence + skills）"}), 400
@@ -406,12 +406,12 @@ def create_agent_task_run_blueprint(
             return jsonify({"error": "input 必须是对象"}), 400
         input_payload = apply_agent_capability_input_defaults(capability_id, input_payload)
 
-        action = str(payload.get("action", "auto") or "auto").strip().lower()
+        action = parse_str_param(payload.get("action", "auto"), default="auto").lower()
 
         primary_call_raw = task_plan.get("primary_call") if isinstance(task_plan, dict) else None
-        if isinstance(primary_call_raw, dict) and str(primary_call_raw.get("endpoint", "") or "").strip():
-            method = str(primary_call_raw.get("method", "POST") or "POST").strip().upper()
-            endpoint = str(primary_call_raw.get("endpoint", "") or "").strip()
+        if isinstance(primary_call_raw, dict) and parse_str_param(primary_call_raw.get("endpoint", "")):
+            method = parse_str_param(primary_call_raw.get("method", "POST"), default="POST").upper()
+            endpoint = parse_str_param(primary_call_raw.get("endpoint", ""))
         else:
             try:
                 resolved = resolve_agent_primary_call(capability_id=capability_id, routes=routes, action=action)

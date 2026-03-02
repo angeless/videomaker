@@ -426,9 +426,63 @@ macOS `open` 命令的 `Popen` 改为 `subprocess.run(timeout=5, check=False)`�
 
 回归验证：**163/163 测试通过，0 warnings**。
 
+## v0.3.16（2026-03-02）— parse_str_param 全路由收官
+
+### parse_str_param 迁移（收官批次）
+
+将所有路由文件中剩余的 `str(payload.get(...) or "").strip()` 模式替换为
+`parse_str_param()`，彻底消除字符串参数解析的代码重复。
+
+| 文件 | 替换数 | 典型参数 |
+|------|--------|---------|
+| `capability_editing_routes.py` | 25 处 | query, category, tags, slug, editor, title, output_dir, copy_mode |
+| `capability_audio_voice_routes.py` | 22 处 | api_key, endpoint, voice_id, output_dir, bgm_library_dir, selected_track |
+| `capability_social_export_routes.py` | 9 处 | input_video, quality, output_dir, batch_id |
+| `agent_task_run_routes.py` | 7 处 | mode_hint, strategy, capability_id, action, endpoint, method |
+| `agent_task_query_routes.py` | 9 处 | mode, strategy, dep_id, endpoint, method, new_trace_id, idempotency_key |
+| `agent_template_routes.py` | 8 处 | capability_id, scope, actor_id, default_scope |
+| `agent_skill_routes.py` | 3 处 | skill_id, method, endpoint |
+| `settings_routes.py` | 2 处 | token, csrf_token |
+| `legacy_project_routes.py` | 2 处 | message（replace_all） |
+| `workflow_routes.py` | 1 处 | step status |
+| `job_routes.py` | 1 处 | status_text |
+| 合计 | **89 处** | |
+
+注：`agent_task_query_routes.py` 在 v0.3.15 已完成首批 11 处，此处为补充扫描发现的 9 处遗漏。
+
+### 有意保留的模式（18 处）
+
+以下 18 处 `str(...or "").strip()` 为多字典/多键回退链，不适合简化为 `parse_str_param()`：
+- `capability_text_semantic_routes.py`：14 处（LLM provider/model/key 从 payload+ai_settings 双源回退）
+- `capability_editing_routes.py`：2 处（`cn_text or text` 双键回退）
+- `agent_task_run_routes.py`：2 处（`payload or task_plan` 双源回退）
+
+### parse_str_param 迁移总览
+
+| 批次 | 版本 | 文件数 | 替换数 |
+|------|------|--------|--------|
+| 首批 | v0.3.14 | 2 | 21 |
+| 第二批 | v0.3.15 | 2 | 24 |
+| **收官** | **v0.3.16** | **11** | **89** |
+| **合计** | | **13 个路由文件** | **134 处** |
+
+至此，所有活跃路由文件中的简单字符串参数解析均已迁移到 `parse_str_param()`。
+13 个路由文件全部导入 `parse_str_param`，全局使用量 ≥90 处。
+
+### 新增测试（+4）
+
+| 测试名 | 验证内容 |
+|--------|---------|
+| `test_v0316_parse_str_param_imported_in_all_route_files` | 13 个路由文件均已导入 parse_str_param |
+| `test_v0316_no_simple_str_strip_patterns_in_migrated_files` | 9 个完全迁移文件零残留简单模式 |
+| `test_v0316_remaining_str_strip_are_multi_dict_only` | 3 个部分迁移文件残留数量 ≤ 预期 |
+| `test_v0316_parse_str_param_usage_count` | 全局 parse_str_param 使用量 ≥90 |
+
+回归验证：**167/167 测试通过，0 warnings**。
+
 ## 下一步计划
 
 参见 `docs/next_dev_plan.md` 中的 Phase 1-4 计划。当前优先项：
-1. `parse_str_param` 继续扩展到 editing/social_export 等大文件（~70 处待替换）
-2. 真实发布引擎（官方平台 connector）
-3. 安全基线增强（细粒度权限 + 审计日志）
+1. 真实发布引擎（官方平台 connector）
+2. 安全基线增强（细粒度权限 + 审计日志）
+3. 前端 views + components 分层

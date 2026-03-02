@@ -10,7 +10,7 @@ import tempfile
 
 from flask import Blueprint, jsonify, request
 
-from modules.app_api.param_utils import parse_float_param, parse_int_param, write_json_result
+from modules.app_api.param_utils import parse_float_param, parse_int_param, parse_str_param, write_json_result
 
 
 def _extract_text_rough_subtitle_spans(script: Dict) -> List[Dict]:
@@ -73,9 +73,9 @@ def create_editing_capability_blueprint(
             return jsonify({"error": "项目未加载"}), 400
         from modules.capabilities.topic_library import list_topics, search_topics
 
-        query = str(request.args.get("q", payload.get("q", "")) or "").strip()
-        category = str(request.args.get("category", payload.get("category", "")) or "").strip() or None
-        tags_raw = str(request.args.get("tags", payload.get("tags", "")) or "").strip()
+        query = parse_str_param(request.args.get("q", payload.get("q", "")))
+        category = parse_str_param(request.args.get("category", payload.get("category", ""))) or None
+        tags_raw = parse_str_param(request.args.get("tags", payload.get("tags", "")))
         tags = [x.strip() for x in tags_raw.replace("，", ",").split(",") if x.strip()] if tags_raw else None
         include_disabled = parse_boolish(
             request.args.get("include_disabled", payload.get("include_disabled", "false")),
@@ -102,7 +102,7 @@ def create_editing_capability_blueprint(
             enabled = bool(item.get("enabled", True))
             if not include_disabled and not enabled:
                 continue
-            if category and str(item.get("category", "") or "").strip().lower() != category.lower():
+            if category and parse_str_param(item.get("category", "")).lower() != category.lower():
                 continue
             item_tags = item.get("tags", [])
             item_tags_norm = []
@@ -134,13 +134,13 @@ def create_editing_capability_blueprint(
         input_mode = parse_capability_input_mode(payload.get("input_mode", "project"), default="project")
         if input_mode == "project" and project_dir_getter() is None:
             return jsonify({"error": "项目未加载"}), 400
-        title = str(payload.get("title", "") or "").strip()
+        title = parse_str_param(payload.get("title", ""))
         if not title:
             return jsonify({"error": "title 不能为空"}), 400
 
         from modules.capabilities.topic_library import TopicTemplate, upsert_topic
 
-        slug = str(payload.get("slug", "") or "").strip() or slugify(title)
+        slug = parse_str_param(payload.get("slug", "")) or slugify(title)
         topic = TopicTemplate(
             slug=slug,
             title=title,
@@ -171,7 +171,7 @@ def create_editing_capability_blueprint(
         topic_items = [dict(x) for x in topics_raw if isinstance(x, dict)]
         replaced = False
         for idx, item in enumerate(topic_items):
-            if str(item.get("slug", "") or "").strip() == slug:
+            if parse_str_param(item.get("slug", "")) == slug:
                 topic_items[idx] = topic_dict
                 replaced = True
                 break
@@ -201,9 +201,9 @@ def create_editing_capability_blueprint(
         generated: List[Dict[str, Any]] = []
         for _, vdata in materials.items():
             sem = vdata.get("semantic", {}) if isinstance(vdata.get("semantic"), dict) else {}
-            setting = str(sem.get("setting", "") or "").strip() or "旅行场景"
-            activity = str(sem.get("activity", "") or "").strip() or "探索"
-            mood = str(sem.get("mood", "") or "").strip() or "真实"
+            setting = parse_str_param(sem.get("setting", "")) or "旅行场景"
+            activity = parse_str_param(sem.get("activity", "")) or "探索"
+            mood = parse_str_param(sem.get("mood", "")) or "真实"
             title = f"{setting}·{activity}高光"
             slug = slugify(f"{setting}-{activity}")
             if slug in seen:
@@ -254,7 +254,7 @@ def create_editing_capability_blueprint(
         input_mode = parse_capability_input_mode(payload.get("input_mode", "project"), default="project")
         if input_mode == "project" and project_dir_getter() is None:
             return jsonify({"error": "项目未加载"}), 400
-        slug = str(payload.get("slug", "") or "").strip()
+        slug = parse_str_param(payload.get("slug", ""))
         target_duration_s = parse_int_param(payload.get("target_duration_s", 60), default=60, min_val=1, max_val=600)
 
         from modules.capabilities.topic_library import TopicTemplate, get_topic, list_topics
@@ -275,7 +275,7 @@ def create_editing_capability_blueprint(
             if not topic_dict and isinstance(topic_pool, list):
                 if slug:
                     topic_dict = next(
-                        (x for x in topic_pool if isinstance(x, dict) and str(x.get("slug", "") or "").strip() == slug),
+                        (x for x in topic_pool if isinstance(x, dict) and parse_str_param(x.get("slug", "")) == slug),
                         None,
                     )
                 if not topic_dict:
@@ -517,7 +517,7 @@ def create_editing_capability_blueprint(
     @bp.route("/api/capabilities/refinement/connectors", methods=["GET"])
     def api_refinement_connectors():
         payload = request_json_any_method()
-        editor = str(request.args.get("editor", payload.get("editor", "")) or "").strip()
+        editor = parse_str_param(request.args.get("editor", payload.get("editor", "")))
         from modules.adapters.nle_connector import list_nle_connector_statuses
 
         statuses = list_nle_connector_statuses([editor] if editor else None)
@@ -535,8 +535,8 @@ def create_editing_capability_blueprint(
         input_mode = parse_capability_input_mode(payload.get("input_mode", "project"), default="project")
         if input_mode == "project" and project_dir_getter() is None:
             return jsonify({"error": "项目未加载"}), 400
-        editor = str(payload.get("editor", "finalcut") or "finalcut").strip().lower()
-        title = str(payload.get("title", "VideoEditer Timeline") or "VideoEditer Timeline").strip()
+        editor = parse_str_param(payload.get("editor", "finalcut"), default="finalcut").lower()
+        title = parse_str_param(payload.get("title", "VideoEditer Timeline"), default="VideoEditer Timeline")
         fps = parse_int_param(payload.get("fps", 30), default=30, min_val=1, max_val=120)
         from modules.adapters.nle_connector import get_nle_connector, normalize_nle_editor
 
@@ -547,7 +547,7 @@ def create_editing_capability_blueprint(
         if not isinstance(materials, dict) or not materials:
             return jsonify({"error": "缺少 materials.json"}), 400
 
-        output_dir_raw = str(payload.get("output_dir", "") or "").strip()
+        output_dir_raw = parse_str_param(payload.get("output_dir", ""))
         if output_dir_raw:
             out_dir = resolve_path_with_base(output_dir_raw, base_dir=capability_base_dir(input_mode))
         elif input_mode == "project" and project_dir_getter() is not None:
@@ -582,11 +582,11 @@ def create_editing_capability_blueprint(
         input_mode = parse_capability_input_mode(payload.get("input_mode", "project"), default="project")
         if input_mode == "project" and project_dir_getter() is None:
             return jsonify({"error": "项目未加载"}), 400
-        editor = str(payload.get("editor", "finalcut") or "finalcut").strip().lower()
-        title = str(payload.get("title", "VideoEditer Timeline") or "VideoEditer Timeline").strip()
+        editor = parse_str_param(payload.get("editor", "finalcut"), default="finalcut").lower()
+        title = parse_str_param(payload.get("title", "VideoEditer Timeline"), default="VideoEditer Timeline")
         fps = parse_int_param(payload.get("fps", 30), default=30, min_val=1, max_val=120)
         launch = bool(payload.get("launch", True))
-        app_name = str(payload.get("app_name", "") or "").strip()
+        app_name = parse_str_param(payload.get("app_name", ""))
         timeout_seconds = parse_float_param(payload.get("timeout_seconds", 20), default=20.0, min_val=1.0, max_val=300.0)
         from modules.adapters.nle_connector import get_nle_connector, normalize_nle_editor
 
@@ -597,7 +597,7 @@ def create_editing_capability_blueprint(
         if not isinstance(materials, dict) or not materials:
             return jsonify({"error": "缺少 materials.json"}), 400
 
-        output_dir_raw = str(payload.get("output_dir", "") or "").strip()
+        output_dir_raw = parse_str_param(payload.get("output_dir", ""))
         if output_dir_raw:
             out_dir = resolve_path_with_base(output_dir_raw, base_dir=capability_base_dir(input_mode))
         elif input_mode == "project" and project_dir_getter() is not None:
@@ -657,10 +657,10 @@ def create_editing_capability_blueprint(
         if input_mode == "project" and project_dir_getter() is None:
             return jsonify({"error": "项目未加载"}), 400
         base_dir = capability_base_dir(input_mode)
-        editor = str(payload.get("editor", "finalcut") or "finalcut").strip().lower()
-        source_video_raw = str(payload.get("source_video", "") or "").strip()
-        output_name = str(payload.get("output_name", "final.mp4") or "final.mp4").strip() or "final.mp4"
-        copy_mode = str(payload.get("copy_mode", "copy") or "copy").strip().lower()
+        editor = parse_str_param(payload.get("editor", "finalcut"), default="finalcut").lower()
+        source_video_raw = parse_str_param(payload.get("source_video", ""))
+        output_name = parse_str_param(payload.get("output_name", "final.mp4"), default="final.mp4") or "final.mp4"
+        copy_mode = parse_str_param(payload.get("copy_mode", "copy"), default="copy").lower()
         if copy_mode not in {"copy", "move"}:
             copy_mode = "copy"
 
@@ -695,7 +695,7 @@ def create_editing_capability_blueprint(
             else:
                 return jsonify({"error": "未找到可导回的视频，请手动选择 source_video"}), 404
 
-        output_dir_raw = str(payload.get("output_dir", "") or "").strip()
+        output_dir_raw = parse_str_param(payload.get("output_dir", ""))
         if output_dir_raw:
             output_dir = resolve_path_with_base(output_dir_raw, base_dir=base_dir)
         elif input_mode == "project" and project_dir_getter() is not None:

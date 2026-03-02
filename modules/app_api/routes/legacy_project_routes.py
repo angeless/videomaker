@@ -12,7 +12,7 @@ import uuid
 
 from flask import Blueprint, abort, jsonify, request, send_file
 
-from modules.app_api.param_utils import write_json_result
+from modules.app_api.param_utils import parse_str_param, write_json_result
 from modules.workflow_engine.workflow import WorkflowRunner, WorkflowState
 
 
@@ -198,7 +198,7 @@ def create_legacy_project_blueprint(
                 if not isinstance(payload, dict):
                     return
                 progress = payload.get("progress")
-                message = str(payload.get("message", "") or "").strip()
+                message = parse_str_param(payload.get("message", ""))
                 if isinstance(progress, (int, float)):
                     jobs[job_id]["progress"] = max(0, min(99, int(progress)))
                 if message:
@@ -253,7 +253,7 @@ def create_legacy_project_blueprint(
                 if not isinstance(payload, dict):
                     return
                 progress = payload.get("progress")
-                message = str(payload.get("message", "") or "").strip()
+                message = parse_str_param(payload.get("message", ""))
                 if isinstance(progress, (int, float)):
                     jobs[job_id]["progress"] = max(0, min(99, int(progress)))
                 if message:

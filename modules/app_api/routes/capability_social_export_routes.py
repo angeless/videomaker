@@ -8,7 +8,7 @@ import uuid
 
 from flask import Blueprint, jsonify, request
 
-from modules.app_api.param_utils import parse_float_param, parse_int_param, write_json_result
+from modules.app_api.param_utils import parse_float_param, parse_int_param, parse_str_param, write_json_result
 
 
 def create_social_export_capability_blueprint(
@@ -137,7 +137,7 @@ def create_social_export_capability_blueprint(
         base_dir = capability_base_dir(input_mode)
         from modules.capabilities.social_export import validate_source_for_export
 
-        input_video_raw = str(payload.get("input_video", "") or "").strip()
+        input_video_raw = parse_str_param(payload.get("input_video", ""))
         if input_video_raw:
             input_video = resolve_path_with_base(input_video_raw, base_dir=base_dir)
         else:
@@ -188,7 +188,7 @@ def create_social_export_capability_blueprint(
         base_dir = capability_base_dir(input_mode)
         from modules.capabilities.social_export import build_export_plan
 
-        input_video_raw = str(payload.get("input_video", "") or "").strip()
+        input_video_raw = parse_str_param(payload.get("input_video", ""))
         if input_video_raw:
             input_video = resolve_path_with_base(input_video_raw, base_dir=base_dir)
         else:
@@ -201,7 +201,7 @@ def create_social_export_capability_blueprint(
         if not input_video.exists():
             return jsonify({"error": f"输入视频不存在: {input_video}"}), 404
 
-        quality = str(payload.get("quality", "high") or "high").strip().lower()
+        quality = parse_str_param(payload.get("quality", "high"), default="high").lower()
         if quality not in {"low", "medium", "high", "lossless"}:
             quality = "high"
         strict_duration_limit = bool(payload.get("strict_duration_limit", True))
@@ -209,7 +209,7 @@ def create_social_export_capability_blueprint(
         platforms = parse_platforms(payload.get("platforms"))
         if not platforms:
             platforms = ["douyin", "xiaohongshu", "tiktok"]
-        output_dir_raw = str(payload.get("output_dir", "") or "").strip()
+        output_dir_raw = parse_str_param(payload.get("output_dir", ""))
         output_dir = (
             (base_dir / "output" / "social_exports")
             if not output_dir_raw
@@ -255,12 +255,12 @@ def create_social_export_capability_blueprint(
         ffmpeg_bin = str(payload.get("ffmpeg_bin", "ffmpeg") or "ffmpeg")
         ffprobe_bin = str(payload.get("ffprobe_bin", "ffprobe") or "ffprobe")
         strict_duration_limit = bool(payload.get("strict_duration_limit", True))
-        quality = str(payload.get("quality", "high") or "high").strip().lower()
+        quality = parse_str_param(payload.get("quality", "high"), default="high").lower()
         if quality not in {"low", "medium", "high", "lossless"}:
             quality = "high"
         platforms = parse_platforms(payload.get("platforms"))
-        output_dir_raw = str(payload.get("output_dir", "") or "").strip()
-        input_video_raw = str(payload.get("input_video", "") or "").strip()
+        output_dir_raw = parse_str_param(payload.get("output_dir", ""))
+        input_video_raw = parse_str_param(payload.get("input_video", ""))
         templates = coerce_social_export_overrides(payload, input_mode=input_mode)
 
         job_id = str(uuid.uuid4())[:8]
@@ -289,7 +289,7 @@ def create_social_export_capability_blueprint(
         if input_mode == "project" and project_dir_getter() is None:
             return jsonify({"error": "项目未加载"}), 400
 
-        batch_id = str(payload.get("batch_id", "") or "").strip()
+        batch_id = parse_str_param(payload.get("batch_id", ""))
         record = payload.get("batch") if isinstance(payload.get("batch"), dict) else None
         if record is None and batch_id:
             history = get_social_export_history() if input_mode == "project" else []
@@ -304,7 +304,7 @@ def create_social_export_capability_blueprint(
         base_dir = capability_base_dir(input_mode)
         input_video_raw = str(payload.get("input_video", record.get("input_video", "")) or "")
         output_dir_raw = str(payload.get("output_dir", record.get("output_dir", "")) or "")
-        quality = str(payload.get("quality", record.get("quality", "high")) or "high").strip().lower()
+        quality = parse_str_param(payload.get("quality", record.get("quality", "high")), default="high").lower()
         if quality not in {"low", "medium", "high", "lossless"}:
             quality = "high"
         strict_duration_limit = bool(payload.get("strict_duration_limit", record.get("strict_duration_limit", True)))

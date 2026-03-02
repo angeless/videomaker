@@ -113,7 +113,7 @@ def create_agent_task_query_blueprint(
                     "completion_tokens": c,
                     "estimated_cost_usd": round(cost, 8),
                 })
-            elif str(result.get("mode", "") or "").strip().lower() == "skill_sequence":
+            elif parse_str_param(result.get("mode", "")).lower() == "skill_sequence":
                 mode = "skill_sequence"
                 steps = result.get("steps", [])
                 if not isinstance(steps, list):
@@ -147,7 +147,7 @@ def create_agent_task_query_blueprint(
                         "error": str(item.get("error", "") or ""),
                         "condition": deepcopy(item.get("condition", {})) if isinstance(item.get("condition"), dict) else {},
                     })
-                strategy = str(result.get("strategy", "") or "").strip().lower()
+                strategy = parse_str_param(result.get("strategy", "")).lower()
                 for idx, node in enumerate(nodes):
                     node_id = str(node.get("node_id", "") or "")
                     condition = node.get("condition", {}) if isinstance(node.get("condition"), dict) else {}
@@ -155,7 +155,7 @@ def create_agent_task_query_blueprint(
                     depends_on = depends_on_raw if isinstance(depends_on_raw, list) else []
                     deps_added = False
                     for dep in depends_on:
-                        dep_id = str(dep or "").strip()
+                        dep_id = parse_str_param(dep)
                         if not dep_id or dep_id not in known_step_ids:
                             continue
                         edges.append({
@@ -449,8 +449,8 @@ def create_agent_task_query_blueprint(
         if not isinstance(context_overrides, dict):
             return jsonify({"error": "context_overrides 必须是对象"}), 400
 
-        endpoint = str(replay_spec.get("endpoint", "") or "").strip()
-        method = str(replay_spec.get("method", "POST") or "POST").strip().upper()
+        endpoint = parse_str_param(replay_spec.get("endpoint", ""))
+        method = parse_str_param(replay_spec.get("method", "POST"), default="POST").upper()
         if not endpoint:
             return jsonify({"error": "该任务缺少 replay 元数据（仅支持新任务）"}), 400
         if method not in {"POST", "GET"}:
@@ -461,16 +461,16 @@ def create_agent_task_query_blueprint(
         ctx = normalize_agent_replay_context(replay_spec.get("request_context", {}))
         for key in ("actor_type", "actor_id", "run_mode", "trace_id", "idempotency_key"):
             if key in context_overrides:
-                ctx[key] = str(context_overrides.get(key, "") or "").strip()[:128]
+                ctx[key] = parse_str_param(context_overrides.get(key, ""))[:128]
         ctx = normalize_agent_replay_context(ctx)
 
-        new_trace_id = str(req.get("new_trace_id", "") or "").strip()[:128]
+        new_trace_id = parse_str_param(req.get("new_trace_id", ""))[:128]
         if new_trace_id:
             ctx["trace_id"] = new_trace_id
 
         explicit_idem = None
         if "idempotency_key" in req:
-            explicit_idem = str(req.get("idempotency_key", "") or "").strip()[:128]
+            explicit_idem = parse_str_param(req.get("idempotency_key", ""))[:128]
         clear_idempotency = coerce_bool(req.get("clear_idempotency", True), default=True)
         if explicit_idem is not None:
             ctx["idempotency_key"] = explicit_idem
@@ -478,10 +478,10 @@ def create_agent_task_query_blueprint(
             ctx["idempotency_key"] = ""
 
         for key in ("actor_type", "actor_id", "run_mode", "trace_id"):
-            val = str(ctx.get(key, "") or "").strip()
+            val = parse_str_param(ctx.get(key, ""))
             if val:
                 final_payload[key] = val
-        idem_val = str(ctx.get("idempotency_key", "") or "").strip()
+        idem_val = parse_str_param(ctx.get("idempotency_key", ""))
         if idem_val:
             final_payload["idempotency_key"] = idem_val
         else:

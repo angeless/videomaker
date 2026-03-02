@@ -9,7 +9,7 @@ import uuid
 
 from flask import Blueprint, jsonify, request
 
-from modules.app_api.param_utils import parse_float_param, parse_int_param, write_json_result
+from modules.app_api.param_utils import parse_float_param, parse_int_param, parse_str_param, write_json_result
 
 
 def create_audio_voice_capability_blueprint(
@@ -60,8 +60,8 @@ def create_audio_voice_capability_blueprint(
         base_dir = capability_base_dir(input_mode)
         mood = str(payload.get("mood", "travel_story") or "travel_story")
         provider = str(payload.get("bgm_provider", "local_library") or "local_library")
-        api_key = str(payload.get("bgm_api_key", "") or "").strip()
-        endpoint = str(payload.get("bgm_endpoint", "") or "").strip()
+        api_key = parse_str_param(payload.get("bgm_api_key", ""))
+        endpoint = parse_str_param(payload.get("bgm_endpoint", ""))
         bgm_download = bool(payload.get("bgm_download", True))
         bgm_strict_schema = bool(payload.get("bgm_strict_schema", False))
         bgm_cache_enabled = bool(payload.get("bgm_cache_enabled", True))
@@ -75,21 +75,21 @@ def create_audio_voice_capability_blueprint(
         except Exception:
             target_duration_s = None
 
-        custom_dir = str(payload.get("bgm_library_dir", "") or "").strip()
+        custom_dir = parse_str_param(payload.get("bgm_library_dir", ""))
         custom_dirs = parse_str_list(payload.get("bgm_library_dirs", []))
         if input_mode == "project":
             library_dirs = default_bgm_library_dirs(custom_dir=custom_dir, custom_dirs=custom_dirs)
-            output_dir = default_bgm_output_dir(str(payload.get("bgm_output_dir", "") or "").strip())
+            output_dir = default_bgm_output_dir(parse_str_param(payload.get("bgm_output_dir", "")))
         else:
             library_dirs = []
             for raw in [custom_dir, *custom_dirs]:
-                text = str(raw or "").strip()
+                text = parse_str_param(raw)
                 if not text:
                     continue
                 resolved = resolve_path_with_base(text, base_dir=base_dir)
                 if resolved.exists() and resolved.is_dir():
                     library_dirs.append(resolved)
-            bgm_output_raw = str(payload.get("bgm_output_dir", "") or "").strip()
+            bgm_output_raw = parse_str_param(payload.get("bgm_output_dir", ""))
             output_dir = (
                 resolve_path_with_base(bgm_output_raw, base_dir=base_dir)
                 if bgm_output_raw
@@ -138,8 +138,8 @@ def create_audio_voice_capability_blueprint(
         base_dir = capability_base_dir(input_mode)
         mood = str(payload.get("mood", "travel_story") or "travel_story")
         provider = str(payload.get("provider", "elevenlabs") or "elevenlabs")
-        voice_id = str(payload.get("voice_id", "") or "").strip()
-        api_key = str(payload.get("api_key", "") or "").strip()
+        voice_id = parse_str_param(payload.get("voice_id", ""))
+        api_key = parse_str_param(payload.get("api_key", ""))
         model_id = str(payload.get("model_id", "eleven_multilingual_v2") or "eleven_multilingual_v2")
         output_format = str(payload.get("output_format", "mp3_44100_128") or "mp3_44100_128")
         dry_run = bool(payload.get("dry_run", False))
@@ -153,7 +153,7 @@ def create_audio_voice_capability_blueprint(
         if not isinstance(segments, list) or not segments:
             return jsonify({"error": "缺少可合成的字幕分段，请先完成脚本/字幕"}), 400
 
-        output_dir_raw = str(payload.get("output_dir", "") or "").strip()
+        output_dir_raw = parse_str_param(payload.get("output_dir", ""))
         output_dir = (
             (base_dir / "data" / "audio_voice" / "voiceover")
             if not output_dir_raw
@@ -215,7 +215,7 @@ def create_audio_voice_capability_blueprint(
         if not isinstance(segments, list) or not segments:
             return jsonify({"error": "缺少可用的配音分段，请先执行 /api/capabilities/audio_voice/synthesize"}), 400
 
-        output_audio_raw = str(payload.get("output_audio", "") or "").strip()
+        output_audio_raw = parse_str_param(payload.get("output_audio", ""))
         output_audio = (
             (base_dir / "data" / "audio_voice" / "narration_timeline.m4a")
             if not output_audio_raw
@@ -258,7 +258,7 @@ def create_audio_voice_capability_blueprint(
         dry_run = bool(payload.get("dry_run", False))
         replace_master = bool(payload.get("replace_master", input_mode == "project"))
 
-        input_video_raw = str(payload.get("input_video", "") or "").strip()
+        input_video_raw = parse_str_param(payload.get("input_video", ""))
         if input_video_raw:
             input_video = resolve_path_with_base(input_video_raw, base_dir=base_dir)
         else:
@@ -271,17 +271,17 @@ def create_audio_voice_capability_blueprint(
         if not input_video.exists():
             return jsonify({"error": f"输入视频不存在: {input_video}"}), 404
 
-        narration_audio_raw = str(payload.get("narration_audio", "") or "").strip()
+        narration_audio_raw = parse_str_param(payload.get("narration_audio", ""))
         if narration_audio_raw:
             narration_audio = resolve_path_with_base(narration_audio_raw, base_dir=base_dir)
         else:
             if input_mode == "project":
                 timeline_last = read_project_json("audio_voice_timeline_last.json", fallback={})
                 timeline = timeline_last.get("timeline", {}) if isinstance(timeline_last, dict) else {}
-                maybe_path = str(timeline.get("output_audio", "") or "").strip()
+                maybe_path = parse_str_param(timeline.get("output_audio", ""))
             else:
                 timeline = payload.get("timeline", {}) if isinstance(payload.get("timeline"), dict) else {}
-                maybe_path = str(timeline.get("output_audio", "") or "").strip()
+                maybe_path = parse_str_param(timeline.get("output_audio", ""))
             if maybe_path:
                 narration_audio = resolve_path_with_base(maybe_path, base_dir=base_dir)
             else:
@@ -291,15 +291,15 @@ def create_audio_voice_capability_blueprint(
 
         mood = str(payload.get("mood", "travel_story") or "travel_story")
         bgm_provider = str(payload.get("bgm_provider", "local_library") or "local_library")
-        bgm_api_key = str(payload.get("bgm_api_key", "") or "").strip()
-        bgm_endpoint = str(payload.get("bgm_endpoint", "") or "").strip()
+        bgm_api_key = parse_str_param(payload.get("bgm_api_key", ""))
+        bgm_endpoint = parse_str_param(payload.get("bgm_endpoint", ""))
         bgm_download = bool(payload.get("bgm_download", True))
         bgm_strict_schema = bool(payload.get("bgm_strict_schema", False))
         bgm_cache_enabled = bool(payload.get("bgm_cache_enabled", True))
         bgm_force_refresh = bool(payload.get("bgm_force_refresh", False))
         bgm_cache_max_age_days = parse_float_param(payload.get("bgm_cache_max_age_days", 0), default=0.0, min_val=0.0)
         bgm_cache_max_age_seconds = max(bgm_cache_max_age_days, 0.0) * 86400.0
-        bgm_audio_raw = str(payload.get("bgm_audio", "") or "").strip()
+        bgm_audio_raw = parse_str_param(payload.get("bgm_audio", ""))
         bgm_pick = None
         bgm_audio = ""
         if bgm_audio_raw:
@@ -320,21 +320,21 @@ def create_audio_voice_capability_blueprint(
                     )
                 except Exception:
                     duration_guess = None
-            custom_dir = str(payload.get("bgm_library_dir", "") or "").strip()
+            custom_dir = parse_str_param(payload.get("bgm_library_dir", ""))
             custom_dirs = parse_str_list(payload.get("bgm_library_dirs", []))
             if input_mode == "project":
                 library_dirs = default_bgm_library_dirs(custom_dir=custom_dir, custom_dirs=custom_dirs)
-                output_dir = default_bgm_output_dir(str(payload.get("bgm_output_dir", "") or "").strip())
+                output_dir = default_bgm_output_dir(parse_str_param(payload.get("bgm_output_dir", "")))
             else:
                 library_dirs = []
                 for raw in [custom_dir, *custom_dirs]:
-                    text = str(raw or "").strip()
+                    text = parse_str_param(raw)
                     if not text:
                         continue
                     resolved = resolve_path_with_base(text, base_dir=base_dir)
                     if resolved.exists() and resolved.is_dir():
                         library_dirs.append(resolved)
-                bgm_output_raw = str(payload.get("bgm_output_dir", "") or "").strip()
+                bgm_output_raw = parse_str_param(payload.get("bgm_output_dir", ""))
                 output_dir = (
                     resolve_path_with_base(bgm_output_raw, base_dir=base_dir)
                     if bgm_output_raw
@@ -360,15 +360,15 @@ def create_audio_voice_capability_blueprint(
                 )
             except Exception as exc:
                 return jsonify({"error": f"自动配乐失败: {exc}"}), 400
-            maybe_track = str(bgm_pick.get("selected_track", "") or "").strip() if isinstance(bgm_pick, dict) else ""
+            maybe_track = parse_str_param(bgm_pick.get("selected_track", "")) if isinstance(bgm_pick, dict) else ""
             if maybe_track:
                 bgm_audio = maybe_track
             elif isinstance(bgm_pick, dict):
-                maybe_url = str(bgm_pick.get("selected_url", "") or "").strip()
+                maybe_url = parse_str_param(bgm_pick.get("selected_url", ""))
                 if maybe_url:
                     bgm_audio = maybe_url
 
-        output_video_raw = str(payload.get("output_video", "") or "").strip()
+        output_video_raw = parse_str_param(payload.get("output_video", ""))
         if replace_master:
             output_video = base_dir / "output" / "final.mp4"
         elif output_video_raw:
