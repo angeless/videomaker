@@ -33,7 +33,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useCapabilitiesStore } from '../../stores/capabilities.js'
 import CapabilityPlaceholder from './CapabilityPlaceholder.vue'
@@ -72,6 +72,11 @@ const capStore = useCapabilitiesStore()
 const currentTab = computed(() => {
   return route.params.tab || capStore.activeTab || 'topic_library'
 })
+
+// 保持 store.activeTab 与路由参数同步
+watch(() => route.params.tab, (tab) => {
+  if (tab) capStore.activeTab = tab
+}, { immediate: true })
 
 const panelComponent = computed(() => {
   return panelMap[currentTab.value] || CapabilityPlaceholder
