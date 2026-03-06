@@ -56,61 +56,76 @@ GDOWN_FOLDER_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.102 Safari/537.36"
 )
-SEMANTIC_SCHEMA_VERSION = "2.10"
+SEMANTIC_SCHEMA_VERSION = "3.0"
 EMBEDDING_SCHEMA_VERSION = "1.0"
 DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
 VECTOR_RRF_K = 60
-TAG_CATEGORIES = ("objects", "actions", "scene", "mood", "concepts", "style", "use_cases")
+
+# ── 25-category taxonomy ──
+TAG_CATEGORIES = (
+    "objects", "actions", "scene", "mood", "concepts", "style", "use_cases",
+    "materials_textures", "architecture_style", "food_cuisine", "animal_species",
+    "vehicle_transport", "clothing_fashion", "body_language", "spatial_relations",
+    "cultural_elements", "brand_product", "audio_mood", "color_palette",
+    "composition", "nature_landscape", "weather_atmosphere", "social_context",
+    "industry_domain", "narrative_technique",
+)
+
+TAG_TAXONOMY = {
+    "objects":              {"parent": None,      "limit": 30, "zh": "物体"},
+    "actions":              {"parent": None,      "limit": 25, "zh": "动作"},
+    "scene":                {"parent": None,      "limit": 30, "zh": "场景"},
+    "mood":                 {"parent": None,      "limit": 20, "zh": "氛围"},
+    "concepts":             {"parent": None,      "limit": 30, "zh": "概念"},
+    "style":                {"parent": None,      "limit": 25, "zh": "风格"},
+    "use_cases":            {"parent": None,      "limit": 30, "zh": "用途"},
+    "materials_textures":   {"parent": "objects",  "limit": 40, "zh": "材质纹理"},
+    "architecture_style":   {"parent": "scene",    "limit": 30, "zh": "建筑风格"},
+    "food_cuisine":         {"parent": "objects",  "limit": 30, "zh": "美食类型"},
+    "animal_species":       {"parent": "objects",  "limit": 30, "zh": "动物种类"},
+    "vehicle_transport":    {"parent": "objects",  "limit": 25, "zh": "交通工具"},
+    "clothing_fashion":     {"parent": "objects",  "limit": 25, "zh": "服饰时尚"},
+    "body_language":        {"parent": "actions",  "limit": 25, "zh": "身体语言"},
+    "spatial_relations":    {"parent": "scene",    "limit": 20, "zh": "空间关系"},
+    "cultural_elements":    {"parent": "concepts", "limit": 30, "zh": "文化元素"},
+    "brand_product":        {"parent": "concepts", "limit": 25, "zh": "品牌产品"},
+    "audio_mood":           {"parent": "mood",     "limit": 20, "zh": "音频氛围"},
+    "color_palette":        {"parent": "style",    "limit": 25, "zh": "色彩搭配"},
+    "composition":          {"parent": "style",    "limit": 20, "zh": "构图方式"},
+    "nature_landscape":     {"parent": "scene",    "limit": 30, "zh": "自然景观"},
+    "weather_atmosphere":   {"parent": "scene",    "limit": 20, "zh": "天气氛围"},
+    "social_context":       {"parent": "concepts", "limit": 25, "zh": "社交语境"},
+    "industry_domain":      {"parent": "use_cases","limit": 30, "zh": "行业领域"},
+    "narrative_technique":  {"parent": "style",    "limit": 20, "zh": "叙事手法"},
+}
+
 GENERIC_TAG_TERMS = {
     "video", "footage", "clip", "scene", "person", "people", "thing", "background",
     "素材", "视频", "镜头", "片段", "人物", "人群", "东西", "背景",
     "unknown", "general", "内容", "content", "activity", "活动",
     "hook", "main shot", "开场钩子", "主镜头",
 }
+
+# ── 62 semantic dimension fields ──
 SEMANTIC_DIMENSIONS = [
-    "scene_description",
-    "mood",
-    "primary_subject",
-    "secondary_subjects",
-    "content_type",
-    "activity",
-    "action_intensity",
-    "setting",
-    "location_type",
-    "time_of_day",
-    "season",
-    "weather",
-    "camera_movement",
-    "camera_platform",
-    "shot_type",
-    "framing",
-    "perspective",
-    "visual_style",
-    "color_tone",
-    "lighting_condition",
-    "narrative_role",
-    "clip_purpose",
-    "emotion_intensity",
-    "people_presence",
-    "quality_tier",
-    "duration_bucket",
-    "aspect_ratio_bucket",
-    "orientation",
-    "stability_level",
-    "dominant_color",
-    "brightness_level",
-    "saturation_level",
-    "motion_level",
-    "texture_complexity",
-    "face_presence_level",
-    "use_cases",
-    "audience_intent",
-    "business_tags",
-    "topics",
-    "search_keywords",
-    "structured_tags",
-    "search_facets",
-    "index_layers",
+    # original 43
+    "scene_description", "mood", "primary_subject", "secondary_subjects",
+    "content_type", "activity", "action_intensity", "setting", "location_type",
+    "time_of_day", "season", "weather", "camera_movement", "camera_platform",
+    "shot_type", "framing", "perspective", "visual_style", "color_tone",
+    "lighting_condition", "narrative_role", "clip_purpose", "emotion_intensity",
+    "people_presence", "quality_tier", "duration_bucket", "aspect_ratio_bucket",
+    "orientation", "stability_level", "dominant_color", "brightness_level",
+    "saturation_level", "motion_level", "texture_complexity", "face_presence_level",
+    "use_cases", "audience_intent", "business_tags", "topics", "search_keywords",
+    "structured_tags", "search_facets", "index_layers",
+    # new 19 dimension fields for expanded taxonomy
+    "material_type", "texture_detail", "architecture_style_field",
+    "food_type", "animal_species_field", "vehicle_type", "clothing_type",
+    "body_language_cues", "spatial_layout", "cultural_context", "brand_hints",
+    "audio_character", "color_palette_type", "composition_technique",
+    "nature_subtype", "weather_detail", "social_setting", "industry_context",
+    "narrative_device",
 ]
 
 
@@ -211,6 +226,20 @@ class GlobalMediaLibrary:
                 CREATE INDEX IF NOT EXISTS idx_asset_embeddings_updated ON asset_embeddings(updated_at);
                 """
             )
+
+            # FTS5 full-text search index
+            try:
+                conn.execute(
+                    """
+                    CREATE VIRTUAL TABLE IF NOT EXISTS assets_fts
+                    USING fts5(uid UNINDEXED, semantic_text,
+                               content='assets', content_rowid='rowid',
+                               tokenize='unicode61')
+                    """
+                )
+            except Exception:
+                pass  # FTS5 may not be available in all SQLite builds
+
             self._ensure_assets_columns(conn)
             self._backfill_semantic_columns(conn)
 
@@ -298,6 +327,17 @@ class GlobalMediaLibrary:
             """,
             payload,
         )
+
+        # Update FTS5 index
+        try:
+            for sem_json, sem_text, kw_json, ver, ts, uid in payload:
+                conn.execute(
+                    "INSERT OR REPLACE INTO assets_fts(rowid, uid, semantic_text) "
+                    "SELECT rowid, uid, ? FROM assets WHERE uid=?",
+                    (sem_text, uid),
+                )
+        except Exception:
+            pass  # FTS5 may not be available
 
     # ------------------------------------------------------------------
     # Helpers
@@ -481,6 +521,85 @@ class GlobalMediaLibrary:
             return False
         return bool(str(os.environ.get("OPENAI_API_KEY", "")).strip())
 
+    # ------------------------------------------------------------------
+    # Thumbnail generation
+
+    def _thumbnail_dir(self) -> Path:
+        return self.db_path.parent / "thumbnails"
+
+    def thumbnail_path(self, uid: str) -> Optional[str]:
+        """Return the absolute path to a thumbnail if it exists, else None."""
+        if not uid:
+            return None
+        p = self._thumbnail_dir() / uid[:2] / f"{uid}.jpg"
+        return str(p) if p.exists() else None
+
+    def _generate_thumbnail(self, uid: str, file_path: Path, asset_kind: str = "video") -> bool:
+        """Generate a 320px JPEG thumbnail for an asset. Returns True on success."""
+        if cv2 is None:
+            return False
+        try:
+            thumb_dir = self._thumbnail_dir() / uid[:2]
+            thumb_dir.mkdir(parents=True, exist_ok=True)
+            out_path = thumb_dir / f"{uid}.jpg"
+            if out_path.exists():
+                return True
+
+            frame = None
+            if asset_kind == "image" or self._is_image_file(file_path):
+                frame = cv2.imread(str(file_path))
+            else:
+                cap = cv2.VideoCapture(str(file_path))
+                if not cap.isOpened():
+                    cap.release()
+                    return False
+                try:
+                    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+                    target = int(max(total - 1, 0) * 0.35) if total > 0 else 0
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, target)
+                    ok, frame = cap.read()
+                    if not ok or frame is None:
+                        return False
+                finally:
+                    cap.release()
+
+            if frame is None:
+                return False
+            h, w = frame.shape[:2]
+            if max(h, w) > 320:
+                scale = 320.0 / max(h, w)
+                frame = cv2.resize(frame, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+            cv2.imwrite(str(out_path), frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+            return out_path.exists()
+        except Exception:
+            return False
+
+    def generate_missing_thumbnails(self, progress_cb=None) -> Dict[str, int]:
+        """Generate thumbnails for all assets that don't have one yet."""
+        stats = {"generated": 0, "skipped": 0, "failed": 0}
+        with self._connect() as conn:
+            rows = conn.execute("SELECT uid, primary_path, filename FROM assets").fetchall()
+        for i, row in enumerate(rows):
+            uid = row["uid"]
+            if self.thumbnail_path(uid):
+                stats["skipped"] += 1
+                continue
+            fpath = Path(row["primary_path"] or "")
+            if not fpath.exists():
+                stats["failed"] += 1
+                continue
+            kind = self._infer_asset_kind(row["filename"], str(fpath))
+            if self._generate_thumbnail(uid, fpath, kind):
+                stats["generated"] += 1
+            else:
+                stats["failed"] += 1
+            if progress_cb and len(rows) > 0:
+                progress_cb(int((i + 1) * 100 / len(rows)))
+        return stats
+
+    # ------------------------------------------------------------------
+    # Keyframe extraction (data URLs for LLM vision)
+
     @staticmethod
     def _extract_keyframe_data_urls(
         path: Path,
@@ -608,7 +727,7 @@ class GlobalMediaLibrary:
         return {
             "tags": {
                 cat: {"zh": [], "en": [], "confidence": 0.0}
-                for cat in TAG_CATEGORIES
+                for cat in TAG_TAXONOMY
             },
             "quality_checks": {
                 "generic_terms_removed": True,
@@ -622,115 +741,308 @@ class GlobalMediaLibrary:
     def _seed_concept_library() -> Dict[str, List[tuple[str, str]]]:
         return {
             "concepts": [
-                ("生活方式", "lifestyle"),
-                ("自由", "freedom"),
-                ("成就", "achievement"),
-                ("自律", "discipline"),
-                ("松弛感", "relaxed vibe"),
-                ("治愈", "healing"),
-                ("孤独", "loneliness"),
-                ("连接", "connection"),
-                ("成长", "growth"),
-                ("焦虑", "anxiety"),
-                ("逃离", "escape"),
-                ("仪式感", "ritual"),
-                ("高效", "productivity"),
-                ("极简", "minimalism"),
-                ("都市感", "urban"),
-                ("自然疗愈", "nature therapy"),
-                ("数字游民", "digital nomad"),
-                ("远程工作", "remote work"),
-                ("探索", "exploration"),
-                ("归属感", "belonging"),
-                ("亲密", "intimacy"),
-                ("健康", "wellness"),
+                ("生活方式", "lifestyle"), ("自由", "freedom"), ("成就", "achievement"),
+                ("自律", "discipline"), ("松弛感", "relaxed vibe"), ("治愈", "healing"),
+                ("孤独", "loneliness"), ("连接", "connection"), ("成长", "growth"),
+                ("焦虑", "anxiety"), ("逃离", "escape"), ("仪式感", "ritual"),
+                ("高效", "productivity"), ("极简", "minimalism"), ("都市感", "urban"),
+                ("自然疗愈", "nature therapy"), ("数字游民", "digital nomad"),
+                ("远程工作", "remote work"), ("探索", "exploration"), ("归属感", "belonging"),
+                ("亲密", "intimacy"), ("健康", "wellness"), ("怀旧", "nostalgia"),
+                ("创造力", "creativity"), ("可持续", "sustainability"), ("平衡", "balance"),
             ],
             "use_cases": [
-                ("旅行vlog", "travel vlog"),
-                ("城市宣传", "city promo"),
-                ("酒店民宿", "hotel/airbnb"),
-                ("咖啡品牌", "coffee brand"),
-                ("健身瑜伽", "fitness/yoga"),
-                ("心理疗愈", "mental health"),
-                ("创业职场", "startup/career"),
-                ("纪录片", "doc style"),
-                ("广告片", "commercial"),
-                ("社媒短视频", "social short"),
+                ("旅行vlog", "travel vlog"), ("城市宣传", "city promo"),
+                ("酒店民宿", "hotel/airbnb"), ("咖啡品牌", "coffee brand"),
+                ("健身瑜伽", "fitness/yoga"), ("心理疗愈", "mental health"),
+                ("创业职场", "startup/career"), ("纪录片", "doc style"),
+                ("广告片", "commercial"), ("社媒短视频", "social short"),
+                ("教育培训", "education"), ("产品评测", "product review"),
+                ("婚礼活动", "wedding"), ("音乐MV", "music video"),
+                ("房产展示", "real estate"), ("企业宣传", "corporate"),
             ],
             "mood": [
-                ("治愈", "healing"),
-                ("宁静", "calm"),
-                ("活力", "energetic"),
-                ("史诗感", "epic"),
-                ("孤独", "lonely"),
-                ("温暖", "warm"),
-                ("紧张", "tense"),
-                ("轻松", "relaxed"),
+                ("治愈", "healing"), ("宁静", "calm"), ("活力", "energetic"),
+                ("史诗感", "epic"), ("孤独", "lonely"), ("温暖", "warm"),
+                ("紧张", "tense"), ("轻松", "relaxed"), ("忧郁", "melancholic"),
+                ("欢快", "joyful"), ("神秘", "mysterious"), ("浪漫", "romantic"),
+                ("庄严", "solemn"), ("激昂", "passionate"), ("慵懒", "lazy"),
             ],
             "style": [
-                ("电影感", "cinematic"),
-                ("纪实", "documentary"),
-                ("vlog", "vlog"),
-                ("广告感", "commercial style"),
-                ("手持纪实", "handheld doc"),
-                ("航拍", "aerial"),
-                ("夜景氛围", "night aesthetic"),
-                ("极简", "minimal"),
+                ("电影感", "cinematic"), ("纪实", "documentary"), ("vlog", "vlog"),
+                ("广告感", "commercial style"), ("手持纪实", "handheld doc"),
+                ("航拍", "aerial"), ("夜景氛围", "night aesthetic"), ("极简", "minimal"),
+                ("复古", "retro"), ("赛博朋克", "cyberpunk"), ("水墨风", "ink wash"),
+                ("胶片感", "film grain"), ("高饱和", "high saturation"),
+                ("低饱和", "desaturated"), ("延时", "timelapse"),
+            ],
+            "objects": [
+                ("建筑", "building"), ("桥梁", "bridge"), ("植物", "plant"),
+                ("花朵", "flower"), ("手机", "phone"), ("电脑", "computer"),
+                ("书籍", "book"), ("灯光", "light"), ("镜子", "mirror"),
+                ("窗户", "window"), ("门", "door"), ("杯子", "cup"),
+                ("家具", "furniture"), ("乐器", "instrument"), ("画作", "painting"),
+            ],
+            "actions": [
+                ("行走", "walking"), ("奔跑", "running"), ("跳跃", "jumping"),
+                ("游泳", "swimming"), ("骑行", "cycling"), ("烹饪", "cooking"),
+                ("阅读", "reading"), ("写作", "writing"), ("舞蹈", "dancing"),
+                ("拍照", "photographing"), ("交谈", "chatting"), ("拥抱", "hugging"),
+                ("冥想", "meditating"), ("攀登", "climbing"), ("驾驶", "driving"),
+            ],
+            "scene": [
+                ("街道", "street"), ("咖啡馆", "cafe"), ("图书馆", "library"),
+                ("公园", "park"), ("海边", "seaside"), ("山顶", "summit"),
+                ("市集", "market"), ("车站", "station"), ("机场", "airport"),
+                ("教室", "classroom"), ("办公室", "office"), ("厨房", "kitchen"),
+                ("卧室", "bedroom"), ("阳台", "balcony"), ("屋顶", "rooftop"),
+            ],
+            "materials_textures": [
+                ("木质", "wood"), ("金属", "metal"), ("玻璃", "glass"),
+                ("石材", "stone"), ("混凝土", "concrete"), ("皮革", "leather"),
+                ("丝绸", "silk"), ("棉麻", "linen"), ("陶瓷", "ceramic"),
+                ("竹子", "bamboo"), ("纸张", "paper"), ("砖块", "brick"),
+                ("大理石", "marble"), ("铁锈", "rust"), ("毛绒", "plush"),
+            ],
+            "architecture_style": [
+                ("哥特式", "gothic"), ("巴洛克", "baroque"), ("现代主义", "modernist"),
+                ("中式传统", "chinese traditional"), ("日式和风", "japanese style"),
+                ("地中海", "mediterranean"), ("工业风", "industrial"),
+                ("包豪斯", "bauhaus"), ("新古典", "neoclassical"),
+                ("后现代", "postmodern"), ("装饰艺术", "art deco"),
+                ("极简建筑", "minimalist architecture"),
+            ],
+            "food_cuisine": [
+                ("中餐", "chinese food"), ("日料", "japanese food"),
+                ("西餐", "western food"), ("甜点", "dessert"), ("咖啡", "coffee"),
+                ("茶", "tea"), ("鸡尾酒", "cocktail"), ("烧烤", "barbecue"),
+                ("面包", "bread"), ("沙拉", "salad"), ("火锅", "hotpot"),
+                ("寿司", "sushi"), ("披萨", "pizza"), ("冰淇淋", "ice cream"),
+            ],
+            "animal_species": [
+                ("猫", "cat"), ("狗", "dog"), ("鸟类", "bird"),
+                ("鱼类", "fish"), ("蝴蝶", "butterfly"), ("马", "horse"),
+                ("海豚", "dolphin"), ("鹿", "deer"), ("兔子", "rabbit"),
+                ("松鼠", "squirrel"), ("海鸥", "seagull"), ("蜜蜂", "bee"),
+            ],
+            "vehicle_transport": [
+                ("汽车", "car"), ("自行车", "bicycle"), ("摩托车", "motorcycle"),
+                ("火车", "train"), ("飞机", "airplane"), ("船", "boat"),
+                ("电车", "tram"), ("缆车", "cable car"), ("帆船", "sailboat"),
+                ("滑板", "skateboard"),
+            ],
+            "clothing_fashion": [
+                ("西装", "suit"), ("连衣裙", "dress"), ("运动装", "sportswear"),
+                ("汉服", "hanfu"), ("和服", "kimono"), ("牛仔", "denim"),
+                ("配饰", "accessories"), ("帽子", "hat"), ("围巾", "scarf"),
+                ("运动鞋", "sneakers"),
+            ],
+            "body_language": [
+                ("微笑", "smiling"), ("思考", "thinking"), ("指向", "pointing"),
+                ("鼓掌", "clapping"), ("挥手", "waving"), ("叉腰", "hands on hips"),
+                ("俯身", "leaning"), ("仰望", "looking up"), ("低头", "head down"),
+                ("双臂交叉", "arms crossed"),
+            ],
+            "spatial_relations": [
+                ("前景", "foreground"), ("背景", "background"), ("左侧", "left side"),
+                ("右侧", "right side"), ("中心", "center"), ("边缘", "edge"),
+                ("对称", "symmetry"), ("引导线", "leading line"),
+            ],
+            "cultural_elements": [
+                ("节日", "festival"), ("传统", "tradition"), ("宗教", "religion"),
+                ("民俗", "folklore"), ("书法", "calligraphy"), ("手工艺", "craft"),
+                ("庙会", "temple fair"), ("婚俗", "wedding customs"),
+                ("茶道", "tea ceremony"), ("花道", "ikebana"),
+                ("舞龙", "dragon dance"), ("灯笼", "lantern"),
+            ],
+            "brand_product": [
+                ("科技产品", "tech product"), ("美妆", "beauty/cosmetics"),
+                ("时装", "fashion brand"), ("运动品牌", "sports brand"),
+                ("家居", "home brand"), ("汽车品牌", "auto brand"),
+                ("奢侈品", "luxury"), ("快消品", "FMCG"),
+                ("母婴", "baby/maternity"), ("宠物用品", "pet products"),
+            ],
+            "audio_mood": [
+                ("轻音乐", "light music"), ("电子乐", "electronic"),
+                ("古典", "classical"), ("爵士", "jazz"), ("环境音", "ambient"),
+                ("节奏感", "rhythmic"), ("人声清唱", "a cappella"),
+                ("自然声", "nature sounds"), ("白噪音", "white noise"),
+            ],
+            "color_palette": [
+                ("暖色调", "warm tones"), ("冷色调", "cool tones"),
+                ("莫兰迪", "morandi"), ("撞色", "color blocking"),
+                ("黑白", "monochrome"), ("渐变", "gradient"),
+                ("高对比", "high contrast"), ("柔和", "soft palette"),
+                ("金色", "golden"), ("蓝调", "blue tones"),
+            ],
+            "composition": [
+                ("三分法", "rule of thirds"), ("居中", "centered"),
+                ("对角线", "diagonal"), ("框中框", "frame within frame"),
+                ("留白", "negative space"), ("黄金螺旋", "golden spiral"),
+                ("俯拍", "overhead"), ("仰拍", "low angle"),
+            ],
+            "nature_landscape": [
+                ("山脉", "mountains"), ("湖泊", "lake"), ("河流", "river"),
+                ("瀑布", "waterfall"), ("沙漠", "desert"), ("草原", "grassland"),
+                ("冰川", "glacier"), ("珊瑚礁", "coral reef"), ("峡谷", "canyon"),
+                ("火山", "volcano"), ("湿地", "wetland"), ("洞穴", "cave"),
+            ],
+            "weather_atmosphere": [
+                ("晴天", "sunny"), ("多云", "cloudy"), ("雨天", "rainy"),
+                ("雪天", "snowy"), ("雾", "foggy"), ("彩虹", "rainbow"),
+                ("暴风雨", "storm"), ("星空", "starry"), ("极光", "aurora"),
+            ],
+            "social_context": [
+                ("独处", "solitude"), ("约会", "date"), ("家庭", "family"),
+                ("朋友聚会", "friends gathering"), ("团队", "team"),
+                ("派对", "party"), ("会议", "meeting"), ("社区", "community"),
+                ("仪式", "ceremony"), ("游行", "parade"),
+            ],
+            "industry_domain": [
+                ("科技", "technology"), ("医疗", "healthcare"), ("教育", "education"),
+                ("金融", "finance"), ("零售", "retail"), ("餐饮", "food service"),
+                ("房地产", "real estate"), ("旅游", "tourism"),
+                ("制造业", "manufacturing"), ("创意产业", "creative industry"),
+                ("体育", "sports"), ("娱乐", "entertainment"),
+            ],
+            "narrative_technique": [
+                ("蒙太奇", "montage"), ("平行叙事", "parallel narrative"),
+                ("倒叙", "flashback"), ("悬念", "suspense"),
+                ("象征", "symbolism"), ("隐喻", "metaphor"),
+                ("对比", "contrast"), ("重复", "repetition"),
             ],
         }
 
     @staticmethod
     def _bilingual_term_map() -> Dict[str, str]:
         pairs = [
-            ("教堂", "church"),
-            ("大教堂", "cathedral"),
-            ("礼拜堂", "chapel"),
-            ("哥特式", "gothic"),
-            ("桥梁", "bridge"),
-            ("铁桥", "iron bridge"),
-            ("钢桥", "steel bridge"),
-            ("城堡", "castle"),
-            ("寺庙", "temple"),
-            ("修道院", "monastery"),
-            ("建筑", "architecture"),
-            ("地标", "landmark"),
-            ("城市", "city"),
-            ("街道", "street"),
-            ("山地", "mountain"),
-            ("海边", "beach"),
-            ("森林", "forest"),
-            ("树木", "tree"),
-            ("自然", "nature"),
-            ("风景", "landscape"),
-            ("天空", "sky"),
-            ("水域", "water"),
-            ("雪景", "snow"),
-            ("日落", "sunset"),
-            ("夜景", "night"),
-            ("航拍", "aerial"),
-            ("手持", "handheld"),
-            ("固定机位", "static"),
-            ("特写", "close-up"),
-            ("远景", "wide shot"),
-            ("治愈", "healing"),
-            ("松弛感", "relaxed vibe"),
-            ("探索", "exploration"),
-            ("旅行vlog", "travel vlog"),
-            ("旅行vlog", "travel_vlog"),
-            ("城市宣传", "city promo"),
-            ("纪录片", "doc style"),
-            ("广告片", "commercial"),
-            ("动作混剪", "action_montage"),
-            ("地标故事", "landmark_story"),
-            ("氛围空镜", "atmospheric_broll"),
-            ("主镜头", "hero_shot"),
-            ("叙事镜头", "storytelling_clip"),
-            ("人物", "person"),
-            ("人群", "people"),
-            ("车辆", "vehicle"),
-            ("活动", "activity"),
-            ("室外", "outdoor"),
-            ("室内", "indoor"),
+            # landmark / place
+            ("教堂", "church"), ("大教堂", "cathedral"), ("礼拜堂", "chapel"),
+            ("桥梁", "bridge"), ("铁桥", "iron bridge"), ("钢桥", "steel bridge"),
+            ("城堡", "castle"), ("寺庙", "temple"), ("修道院", "monastery"),
+            ("建筑", "architecture"), ("地标", "landmark"), ("城市", "city"),
+            ("街道", "street"), ("山地", "mountain"), ("海边", "beach"),
+            ("森林", "forest"), ("树木", "tree"), ("自然", "nature"),
+            ("风景", "landscape"), ("天空", "sky"), ("水域", "water"),
+            ("雪景", "snow"), ("日落", "sunset"), ("夜景", "night"),
+            ("咖啡馆", "cafe"), ("公园", "park"), ("广场", "plaza"),
+            ("屋顶", "rooftop"), ("小巷", "alley"), ("市中心", "downtown"),
+            ("天际线", "skyline"), ("老城区", "old town"),
+            # camera / style
+            ("航拍", "aerial"), ("手持", "handheld"), ("固定机位", "static"),
+            ("特写", "close-up"), ("远景", "wide shot"), ("延时", "timelapse"),
+            ("复古", "retro"), ("赛博朋克", "cyberpunk"), ("胶片感", "film grain"),
+            ("水墨风", "ink wash"), ("高饱和", "high saturation"), ("低饱和", "desaturated"),
+            # mood / concept
+            ("治愈", "healing"), ("松弛感", "relaxed vibe"), ("探索", "exploration"),
+            ("怀旧", "nostalgia"), ("创造力", "creativity"), ("可持续", "sustainability"),
+            ("平衡", "balance"), ("忧郁", "melancholic"), ("欢快", "joyful"),
+            ("神秘", "mysterious"), ("浪漫", "romantic"), ("庄严", "solemn"),
+            ("激昂", "passionate"), ("慵懒", "lazy"),
+            # use case
+            ("旅行vlog", "travel vlog"), ("旅行vlog", "travel_vlog"),
+            ("城市宣传", "city promo"), ("纪录片", "doc style"),
+            ("广告片", "commercial"), ("教育培训", "education"),
+            ("产品评测", "product review"), ("婚礼活动", "wedding"),
+            ("音乐MV", "music video"), ("房产展示", "real estate"),
+            ("企业宣传", "corporate"), ("社媒短视频", "social short"),
+            # action
+            ("动作混剪", "action_montage"), ("地标故事", "landmark_story"),
+            ("氛围空镜", "atmospheric_broll"), ("主镜头", "hero_shot"),
+            ("叙事镜头", "storytelling_clip"), ("人物", "person"),
+            ("人群", "people"), ("车辆", "vehicle"), ("活动", "activity"),
+            ("室外", "outdoor"), ("室内", "indoor"),
+            ("行走", "walking"), ("奔跑", "running"), ("跳跃", "jumping"),
+            ("游泳", "swimming"), ("骑行", "cycling"), ("烹饪", "cooking"),
+            ("阅读", "reading"), ("写作", "writing"), ("舞蹈", "dancing"),
+            ("拍照", "photographing"), ("交谈", "chatting"), ("拥抱", "hugging"),
+            ("冥想", "meditating"), ("攀登", "climbing"), ("驾驶", "driving"),
+            # material
+            ("木质", "wood"), ("金属", "metal"), ("玻璃", "glass"),
+            ("石材", "stone"), ("混凝土", "concrete"), ("皮革", "leather"),
+            ("丝绸", "silk"), ("棉麻", "linen"), ("陶瓷", "ceramic"),
+            ("竹子", "bamboo"), ("纸张", "paper"), ("砖块", "brick"),
+            ("大理石", "marble"), ("铁锈", "rust"), ("毛绒", "plush"),
+            # architecture
+            ("哥特式", "gothic"), ("巴洛克", "baroque"), ("现代主义", "modernist"),
+            ("中式传统", "chinese traditional"), ("日式和风", "japanese style"),
+            ("地中海", "mediterranean"), ("工业风", "industrial"),
+            ("包豪斯", "bauhaus"), ("新古典", "neoclassical"),
+            ("后现代", "postmodern"), ("装饰艺术", "art deco"),
+            # food
+            ("中餐", "chinese food"), ("日料", "japanese food"),
+            ("西餐", "western food"), ("甜点", "dessert"), ("咖啡", "coffee"),
+            ("茶", "tea"), ("鸡尾酒", "cocktail"), ("烧烤", "barbecue"),
+            ("面包", "bread"), ("沙拉", "salad"), ("火锅", "hotpot"),
+            ("寿司", "sushi"), ("披萨", "pizza"), ("冰淇淋", "ice cream"),
+            # animal
+            ("猫", "cat"), ("狗", "dog"), ("鸟类", "bird"),
+            ("鱼类", "fish"), ("蝴蝶", "butterfly"), ("马", "horse"),
+            ("海豚", "dolphin"), ("鹿", "deer"), ("兔子", "rabbit"),
+            ("海鸥", "seagull"), ("蜜蜂", "bee"), ("松鼠", "squirrel"),
+            # vehicle
+            ("汽车", "car"), ("自行车", "bicycle"), ("摩托车", "motorcycle"),
+            ("火车", "train"), ("飞机", "airplane"), ("船", "boat"),
+            ("电车", "tram"), ("缆车", "cable car"), ("帆船", "sailboat"),
+            ("滑板", "skateboard"),
+            # clothing
+            ("西装", "suit"), ("连衣裙", "dress"), ("运动装", "sportswear"),
+            ("汉服", "hanfu"), ("和服", "kimono"), ("牛仔", "denim"),
+            ("配饰", "accessories"), ("帽子", "hat"), ("围巾", "scarf"),
+            ("运动鞋", "sneakers"),
+            # body language
+            ("微笑", "smiling"), ("思考", "thinking"), ("指向", "pointing"),
+            ("鼓掌", "clapping"), ("挥手", "waving"), ("叉腰", "hands on hips"),
+            ("俯身", "leaning"), ("仰望", "looking up"), ("低头", "head down"),
+            ("双臂交叉", "arms crossed"),
+            # cultural
+            ("节日", "festival"), ("传统", "tradition"), ("宗教", "religion"),
+            ("民俗", "folklore"), ("书法", "calligraphy"), ("手工艺", "craft"),
+            ("庙会", "temple fair"), ("婚俗", "wedding customs"),
+            ("茶道", "tea ceremony"), ("花道", "ikebana"),
+            ("舞龙", "dragon dance"), ("灯笼", "lantern"),
+            # brand / product
+            ("科技产品", "tech product"), ("美妆", "beauty/cosmetics"),
+            ("时装", "fashion brand"), ("运动品牌", "sports brand"),
+            ("家居", "home brand"), ("奢侈品", "luxury"), ("快消品", "FMCG"),
+            # audio
+            ("轻音乐", "light music"), ("电子乐", "electronic"),
+            ("古典", "classical"), ("爵士", "jazz"), ("环境音", "ambient"),
+            ("节奏感", "rhythmic"), ("自然声", "nature sounds"),
+            # color palette
+            ("暖色调", "warm tones"), ("冷色调", "cool tones"),
+            ("莫兰迪", "morandi"), ("撞色", "color blocking"),
+            ("黑白", "monochrome"), ("渐变", "gradient"),
+            ("高对比", "high contrast"), ("柔和", "soft palette"),
+            # composition
+            ("三分法", "rule of thirds"), ("居中", "centered"),
+            ("对角线", "diagonal"), ("框中框", "frame within frame"),
+            ("留白", "negative space"), ("黄金螺旋", "golden spiral"),
+            ("俯拍", "overhead"), ("仰拍", "low angle"),
+            # nature
+            ("山脉", "mountains"), ("湖泊", "lake"), ("河流", "river"),
+            ("瀑布", "waterfall"), ("沙漠", "desert"), ("草原", "grassland"),
+            ("冰川", "glacier"), ("珊瑚礁", "coral reef"), ("峡谷", "canyon"),
+            ("火山", "volcano"), ("湿地", "wetland"), ("洞穴", "cave"),
+            # weather
+            ("晴天", "sunny"), ("多云", "cloudy"), ("雨天", "rainy"),
+            ("雪天", "snowy"), ("雾", "foggy"), ("彩虹", "rainbow"),
+            ("暴风雨", "storm"), ("星空", "starry"), ("极光", "aurora"),
+            # social
+            ("独处", "solitude"), ("约会", "date"), ("家庭", "family"),
+            ("朋友聚会", "friends gathering"), ("团队", "team"),
+            ("派对", "party"), ("会议", "meeting"), ("社区", "community"),
+            # industry
+            ("科技", "technology"), ("医疗", "healthcare"), ("教育", "education"),
+            ("金融", "finance"), ("零售", "retail"), ("餐饮", "food service"),
+            ("房地产", "real estate"), ("旅游", "tourism"),
+            ("制造业", "manufacturing"), ("创意产业", "creative industry"),
+            ("体育", "sports"), ("娱乐", "entertainment"),
+            # narrative
+            ("蒙太奇", "montage"), ("平行叙事", "parallel narrative"),
+            ("倒叙", "flashback"), ("悬念", "suspense"),
+            ("象征", "symbolism"), ("隐喻", "metaphor"),
+            ("对比", "contrast"), ("重复", "repetition"),
         ]
         for cat_pairs in GlobalMediaLibrary._seed_concept_library().values():
             pairs.extend(cat_pairs)
@@ -1429,28 +1741,45 @@ class GlobalMediaLibrary:
                     out.append(f"{cat}:{text}")
         return self._dedupe_list(out)
 
+    @staticmethod
+    def _build_tag_schema_json() -> str:
+        """Dynamically build the JSON schema string from TAG_TAXONOMY (25 categories)."""
+        cats = {}
+        for cat in TAG_TAXONOMY:
+            cats[cat] = {"zh": [], "en": [], "confidence": 0.0}
+        schema = {
+            "tags": cats,
+            "quality_checks": {
+                "generic_terms_removed": True,
+                "duplicate_terms_removed": True,
+                "covers_literal_and_abstract": True,
+                "search_ready": True,
+            },
+        }
+        return json.dumps(schema, ensure_ascii=False)
+
     def _llm_structured_tags(self, path: Path, evidence: Dict[str, Any], draft_schema: Dict[str, Any]) -> Dict[str, Any]:
         if not self._llm_tagging_enabled():
             return {}
 
         keyframes = self._extract_keyframe_data_urls(path)
+
+        # Build category list string for prompt
+        cat_list = ", ".join(f"{c}({TAG_TAXONOMY[c]['zh']})" for c in TAG_TAXONOMY)
+        schema_json = self._build_tag_schema_json()
+
         system_prompt = (
             "You are a professional stock-media semantic tagging editor.\n"
             "Goal: produce search-optimized tags for a media asset management system.\n"
             "Do NOT describe the media. Produce tags that maximize future retrievability.\n"
             "Output JSON only and keep tags concise, lowercase, search-friendly.\n"
+            f"Tag categories (25 total): {cat_list}\n"
             "Internally expand semantic dimensions: marketing themes, storytelling arcs, industry use, "
-            "emotions, social context, season/time/weather, camera language, audio mood.\n"
-            "Return schema: "
-            "{\"tags\":{\"objects\":{\"zh\":[],\"en\":[],\"confidence\":0.0},"
-            "\"actions\":{\"zh\":[],\"en\":[],\"confidence\":0.0},"
-            "\"scene\":{\"zh\":[],\"en\":[],\"confidence\":0.0},"
-            "\"mood\":{\"zh\":[],\"en\":[],\"confidence\":0.0},"
-            "\"concepts\":{\"zh\":[],\"en\":[],\"confidence\":0.0},"
-            "\"style\":{\"zh\":[],\"en\":[],\"confidence\":0.0},"
-            "\"use_cases\":{\"zh\":[],\"en\":[],\"confidence\":0.0}},"
-            "\"quality_checks\":{\"generic_terms_removed\":true,"
-            "\"duplicate_terms_removed\":true,\"covers_literal_and_abstract\":true,\"search_ready\":true}}"
+            "emotions, social context, season/time/weather, camera language, audio mood, "
+            "materials/textures, architecture, food, animals, vehicles, clothing, body language, "
+            "spatial relations, color palette, composition, nature, narrative technique.\n"
+            "Fill relevant categories only. Skip categories with no evidence.\n"
+            f"Return schema: {schema_json}"
         )
 
         user_text = (
@@ -1462,7 +1791,7 @@ class GlobalMediaLibrary:
             "- remove weak/generic terms\n"
             "- add high-value commercial concepts\n"
             "- normalize vocabulary\n"
-            "- keep category diversity\n"
+            "- keep category diversity across all 25 categories\n"
             "- do not invent unsupported specifics\n"
             "- if Chinese evidence exists, provide both zh and en arrays"
         )
@@ -1475,18 +1804,18 @@ class GlobalMediaLibrary:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content},
             ],
-            max_tokens=1300,
+            max_tokens=2500,
             temperature=0.12,
         )
         if not primary:
             return {}
 
         refine_prompt = (
-            "You are given draft tags. Improve them:\n"
+            "You are given draft tags across 25 categories. Improve them:\n"
             "- remove weak, generic, overly broad tags\n"
             "- add missing high-value commercial concepts\n"
             "- normalize to consistent vocabulary\n"
-            "- ensure category diversity (objects/actions/scene/mood/concepts/style/use_cases)\n"
+            f"- ensure category diversity across: {cat_list}\n"
             "- keep each list compact and useful\n"
             "- do not invent specifics not supported by evidence\n"
             "Return JSON in the same schema, replacing the draft."
@@ -1505,7 +1834,7 @@ class GlobalMediaLibrary:
                     ),
                 },
             ],
-            max_tokens=1100,
+            max_tokens=2000,
             temperature=0.08,
         )
         return refined if refined else primary
@@ -1513,6 +1842,7 @@ class GlobalMediaLibrary:
     @staticmethod
     def _canonical_tag_catalog() -> Dict[str, Dict[str, str]]:
         return {
+            # landmark (10)
             "church": {"zh": "教堂", "en": "church", "class": "landmark"},
             "temple": {"zh": "寺庙", "en": "temple", "class": "landmark"},
             "mosque": {"zh": "清真寺", "en": "mosque", "class": "landmark"},
@@ -1523,6 +1853,7 @@ class GlobalMediaLibrary:
             "mountain": {"zh": "山地", "en": "mountain", "class": "landmark"},
             "beach": {"zh": "海滩", "en": "beach", "class": "landmark"},
             "forest": {"zh": "森林", "en": "forest", "class": "landmark"},
+            # place (10)
             "street": {"zh": "街道", "en": "street", "class": "place"},
             "downtown": {"zh": "市中心", "en": "downtown", "class": "place"},
             "old town": {"zh": "老城区", "en": "old town", "class": "place"},
@@ -1530,8 +1861,13 @@ class GlobalMediaLibrary:
             "plaza": {"zh": "广场", "en": "plaza", "class": "place"},
             "alley": {"zh": "小巷", "en": "alley", "class": "place"},
             "city": {"zh": "城市", "en": "city", "class": "place"},
+            "cafe": {"zh": "咖啡馆", "en": "cafe", "class": "place"},
+            "park": {"zh": "公园", "en": "park", "class": "place"},
+            "rooftop": {"zh": "屋顶", "en": "rooftop", "class": "place"},
+            # people (2)
             "person": {"zh": "人物", "en": "person", "class": "people"},
             "people": {"zh": "人群", "en": "people", "class": "people"},
+            # object (12)
             "car": {"zh": "汽车", "en": "car", "class": "object"},
             "road": {"zh": "道路", "en": "road", "class": "object"},
             "building": {"zh": "建筑", "en": "building", "class": "object"},
@@ -1540,6 +1876,11 @@ class GlobalMediaLibrary:
             "boat": {"zh": "船", "en": "boat", "class": "object"},
             "food": {"zh": "食物", "en": "food", "class": "object"},
             "snow": {"zh": "雪景", "en": "snow", "class": "object"},
+            "flower": {"zh": "花朵", "en": "flower", "class": "object"},
+            "window": {"zh": "窗户", "en": "window", "class": "object"},
+            "door": {"zh": "门", "en": "door", "class": "object"},
+            "light": {"zh": "灯光", "en": "light", "class": "object"},
+            # time (9)
             "daytime": {"zh": "白天", "en": "daytime", "class": "time"},
             "afternoon": {"zh": "下午", "en": "afternoon", "class": "time"},
             "night": {"zh": "夜晚", "en": "night", "class": "time"},
@@ -1549,6 +1890,7 @@ class GlobalMediaLibrary:
             "summer": {"zh": "夏季", "en": "summer", "class": "time"},
             "autumn": {"zh": "秋季", "en": "autumn", "class": "time"},
             "winter": {"zh": "冬季", "en": "winter", "class": "time"},
+            # action (15)
             "walking": {"zh": "行走", "en": "walking", "class": "action"},
             "running": {"zh": "奔跑", "en": "running", "class": "action"},
             "driving": {"zh": "驾驶", "en": "driving", "class": "action"},
@@ -1556,6 +1898,15 @@ class GlobalMediaLibrary:
             "hiking": {"zh": "徒步", "en": "hiking", "class": "action"},
             "skiing": {"zh": "滑雪", "en": "skiing", "class": "action"},
             "surfing": {"zh": "冲浪", "en": "surfing", "class": "action"},
+            "cooking": {"zh": "烹饪", "en": "cooking", "class": "action"},
+            "reading": {"zh": "阅读", "en": "reading", "class": "action"},
+            "dancing": {"zh": "舞蹈", "en": "dancing", "class": "action"},
+            "swimming": {"zh": "游泳", "en": "swimming", "class": "action"},
+            "cycling": {"zh": "骑行", "en": "cycling", "class": "action"},
+            "meditating": {"zh": "冥想", "en": "meditating", "class": "action"},
+            "climbing": {"zh": "攀登", "en": "climbing", "class": "action"},
+            "jumping": {"zh": "跳跃", "en": "jumping", "class": "action"},
+            # abstract / concept (14)
             "lifestyle": {"zh": "生活方式", "en": "lifestyle", "class": "abstract"},
             "travel vlog": {"zh": "旅行vlog", "en": "travel vlog", "class": "abstract"},
             "city promo": {"zh": "城市宣传", "en": "city promo", "class": "abstract"},
@@ -1566,6 +1917,144 @@ class GlobalMediaLibrary:
             "relaxed vibe": {"zh": "松弛感", "en": "relaxed vibe", "class": "abstract"},
             "cinematic": {"zh": "电影感", "en": "cinematic", "class": "abstract"},
             "documentary": {"zh": "纪录感", "en": "documentary", "class": "abstract"},
+            "nostalgia": {"zh": "怀旧", "en": "nostalgia", "class": "abstract"},
+            "sustainability": {"zh": "可持续", "en": "sustainability", "class": "abstract"},
+            "creativity": {"zh": "创造力", "en": "creativity", "class": "abstract"},
+            "balance": {"zh": "平衡", "en": "balance", "class": "abstract"},
+            # material (12)
+            "wood": {"zh": "木质", "en": "wood", "class": "material"},
+            "metal": {"zh": "金属", "en": "metal", "class": "material"},
+            "glass": {"zh": "玻璃", "en": "glass", "class": "material"},
+            "stone": {"zh": "石材", "en": "stone", "class": "material"},
+            "concrete": {"zh": "混凝土", "en": "concrete", "class": "material"},
+            "leather": {"zh": "皮革", "en": "leather", "class": "material"},
+            "silk": {"zh": "丝绸", "en": "silk", "class": "material"},
+            "ceramic": {"zh": "陶瓷", "en": "ceramic", "class": "material"},
+            "bamboo": {"zh": "竹子", "en": "bamboo", "class": "material"},
+            "marble": {"zh": "大理石", "en": "marble", "class": "material"},
+            "brick": {"zh": "砖块", "en": "brick", "class": "material"},
+            "rust": {"zh": "铁锈", "en": "rust", "class": "material"},
+            # architecture (10)
+            "gothic": {"zh": "哥特式", "en": "gothic", "class": "architecture"},
+            "baroque": {"zh": "巴洛克", "en": "baroque", "class": "architecture"},
+            "modernist": {"zh": "现代主义", "en": "modernist", "class": "architecture"},
+            "art deco": {"zh": "装饰艺术", "en": "art deco", "class": "architecture"},
+            "industrial": {"zh": "工业风", "en": "industrial", "class": "architecture"},
+            "bauhaus": {"zh": "包豪斯", "en": "bauhaus", "class": "architecture"},
+            "neoclassical": {"zh": "新古典", "en": "neoclassical", "class": "architecture"},
+            "postmodern": {"zh": "后现代", "en": "postmodern", "class": "architecture"},
+            "mediterranean": {"zh": "地中海", "en": "mediterranean", "class": "architecture"},
+            "chinese traditional": {"zh": "中式传统", "en": "chinese traditional", "class": "architecture"},
+            # food (12)
+            "chinese food": {"zh": "中餐", "en": "chinese food", "class": "food"},
+            "japanese food": {"zh": "日料", "en": "japanese food", "class": "food"},
+            "dessert": {"zh": "甜点", "en": "dessert", "class": "food"},
+            "coffee": {"zh": "咖啡", "en": "coffee", "class": "food"},
+            "tea": {"zh": "茶", "en": "tea", "class": "food"},
+            "cocktail": {"zh": "鸡尾酒", "en": "cocktail", "class": "food"},
+            "barbecue": {"zh": "烧烤", "en": "barbecue", "class": "food"},
+            "bread": {"zh": "面包", "en": "bread", "class": "food"},
+            "sushi": {"zh": "寿司", "en": "sushi", "class": "food"},
+            "pizza": {"zh": "披萨", "en": "pizza", "class": "food"},
+            "hotpot": {"zh": "火锅", "en": "hotpot", "class": "food"},
+            "ice cream": {"zh": "冰淇淋", "en": "ice cream", "class": "food"},
+            # animal (10)
+            "cat": {"zh": "猫", "en": "cat", "class": "animal"},
+            "dog": {"zh": "狗", "en": "dog", "class": "animal"},
+            "bird": {"zh": "鸟类", "en": "bird", "class": "animal"},
+            "fish": {"zh": "鱼类", "en": "fish", "class": "animal"},
+            "horse": {"zh": "马", "en": "horse", "class": "animal"},
+            "butterfly": {"zh": "蝴蝶", "en": "butterfly", "class": "animal"},
+            "dolphin": {"zh": "海豚", "en": "dolphin", "class": "animal"},
+            "deer": {"zh": "鹿", "en": "deer", "class": "animal"},
+            "rabbit": {"zh": "兔子", "en": "rabbit", "class": "animal"},
+            "seagull": {"zh": "海鸥", "en": "seagull", "class": "animal"},
+            # vehicle (8)
+            "bicycle": {"zh": "自行车", "en": "bicycle", "class": "vehicle"},
+            "motorcycle": {"zh": "摩托车", "en": "motorcycle", "class": "vehicle"},
+            "train": {"zh": "火车", "en": "train", "class": "vehicle"},
+            "airplane": {"zh": "飞机", "en": "airplane", "class": "vehicle"},
+            "tram": {"zh": "电车", "en": "tram", "class": "vehicle"},
+            "cable car": {"zh": "缆车", "en": "cable car", "class": "vehicle"},
+            "sailboat": {"zh": "帆船", "en": "sailboat", "class": "vehicle"},
+            "skateboard": {"zh": "滑板", "en": "skateboard", "class": "vehicle"},
+            # clothing (8)
+            "suit": {"zh": "西装", "en": "suit", "class": "clothing"},
+            "dress": {"zh": "连衣裙", "en": "dress", "class": "clothing"},
+            "sportswear": {"zh": "运动装", "en": "sportswear", "class": "clothing"},
+            "hanfu": {"zh": "汉服", "en": "hanfu", "class": "clothing"},
+            "kimono": {"zh": "和服", "en": "kimono", "class": "clothing"},
+            "denim": {"zh": "牛仔", "en": "denim", "class": "clothing"},
+            "hat": {"zh": "帽子", "en": "hat", "class": "clothing"},
+            "scarf": {"zh": "围巾", "en": "scarf", "class": "clothing"},
+            # body_language (8)
+            "smiling": {"zh": "微笑", "en": "smiling", "class": "body_language"},
+            "thinking": {"zh": "思考", "en": "thinking", "class": "body_language"},
+            "pointing": {"zh": "指向", "en": "pointing", "class": "body_language"},
+            "clapping": {"zh": "鼓掌", "en": "clapping", "class": "body_language"},
+            "waving": {"zh": "挥手", "en": "waving", "class": "body_language"},
+            "looking up": {"zh": "仰望", "en": "looking up", "class": "body_language"},
+            "head down": {"zh": "低头", "en": "head down", "class": "body_language"},
+            "arms crossed": {"zh": "双臂交叉", "en": "arms crossed", "class": "body_language"},
+            # nature (10)
+            "lake": {"zh": "湖泊", "en": "lake", "class": "nature"},
+            "river": {"zh": "河流", "en": "river", "class": "nature"},
+            "waterfall": {"zh": "瀑布", "en": "waterfall", "class": "nature"},
+            "desert": {"zh": "沙漠", "en": "desert", "class": "nature"},
+            "grassland": {"zh": "草原", "en": "grassland", "class": "nature"},
+            "glacier": {"zh": "冰川", "en": "glacier", "class": "nature"},
+            "canyon": {"zh": "峡谷", "en": "canyon", "class": "nature"},
+            "volcano": {"zh": "火山", "en": "volcano", "class": "nature"},
+            "wetland": {"zh": "湿地", "en": "wetland", "class": "nature"},
+            "cave": {"zh": "洞穴", "en": "cave", "class": "nature"},
+            # weather (8)
+            "sunny": {"zh": "晴天", "en": "sunny", "class": "weather"},
+            "cloudy": {"zh": "多云", "en": "cloudy", "class": "weather"},
+            "rainy": {"zh": "雨天", "en": "rainy", "class": "weather"},
+            "foggy": {"zh": "雾", "en": "foggy", "class": "weather"},
+            "rainbow": {"zh": "彩虹", "en": "rainbow", "class": "weather"},
+            "storm": {"zh": "暴风雨", "en": "storm", "class": "weather"},
+            "starry": {"zh": "星空", "en": "starry", "class": "weather"},
+            "aurora": {"zh": "极光", "en": "aurora", "class": "weather"},
+            # cultural (8)
+            "festival": {"zh": "节日", "en": "festival", "class": "cultural"},
+            "tradition": {"zh": "传统", "en": "tradition", "class": "cultural"},
+            "calligraphy": {"zh": "书法", "en": "calligraphy", "class": "cultural"},
+            "craft": {"zh": "手工艺", "en": "craft", "class": "cultural"},
+            "tea ceremony": {"zh": "茶道", "en": "tea ceremony", "class": "cultural"},
+            "lantern": {"zh": "灯笼", "en": "lantern", "class": "cultural"},
+            "dragon dance": {"zh": "舞龙", "en": "dragon dance", "class": "cultural"},
+            "temple fair": {"zh": "庙会", "en": "temple fair", "class": "cultural"},
+            # composition (6)
+            "rule of thirds": {"zh": "三分法", "en": "rule of thirds", "class": "composition"},
+            "centered": {"zh": "居中", "en": "centered", "class": "composition"},
+            "diagonal": {"zh": "对角线", "en": "diagonal", "class": "composition"},
+            "negative space": {"zh": "留白", "en": "negative space", "class": "composition"},
+            "frame within frame": {"zh": "框中框", "en": "frame within frame", "class": "composition"},
+            "leading line": {"zh": "引导线", "en": "leading line", "class": "composition"},
+            # social (6)
+            "solitude": {"zh": "独处", "en": "solitude", "class": "social"},
+            "family": {"zh": "家庭", "en": "family", "class": "social"},
+            "friends gathering": {"zh": "朋友聚会", "en": "friends gathering", "class": "social"},
+            "team": {"zh": "团队", "en": "team", "class": "social"},
+            "party": {"zh": "派对", "en": "party", "class": "social"},
+            "ceremony": {"zh": "仪式", "en": "ceremony", "class": "social"},
+            # industry (8)
+            "technology": {"zh": "科技", "en": "technology", "class": "industry"},
+            "healthcare": {"zh": "医疗", "en": "healthcare", "class": "industry"},
+            "education": {"zh": "教育", "en": "education", "class": "industry"},
+            "finance": {"zh": "金融", "en": "finance", "class": "industry"},
+            "retail": {"zh": "零售", "en": "retail", "class": "industry"},
+            "tourism": {"zh": "旅游", "en": "tourism", "class": "industry"},
+            "sports": {"zh": "体育", "en": "sports", "class": "industry"},
+            "entertainment": {"zh": "娱乐", "en": "entertainment", "class": "industry"},
+            # narrative (6)
+            "montage": {"zh": "蒙太奇", "en": "montage", "class": "narrative"},
+            "flashback": {"zh": "倒叙", "en": "flashback", "class": "narrative"},
+            "suspense": {"zh": "悬念", "en": "suspense", "class": "narrative"},
+            "symbolism": {"zh": "象征", "en": "symbolism", "class": "narrative"},
+            "metaphor": {"zh": "隐喻", "en": "metaphor", "class": "narrative"},
+            "contrast": {"zh": "对比", "en": "contrast", "class": "narrative"},
         }
 
     @staticmethod
@@ -3805,6 +4294,7 @@ class GlobalMediaLibrary:
             keywords_json=analysis_bundle["search_keywords"],
             semantic_json=analysis_bundle["semantic_json"],
         )
+        self._generate_thumbnail(uid, path, "video")
 
         return {
             "uid": uid,
@@ -4045,6 +4535,7 @@ class GlobalMediaLibrary:
             keywords_json=analysis_bundle["search_keywords"],
             semantic_json=analysis_bundle["semantic_json"],
         )
+        self._generate_thumbnail(uid, path, "image")
 
         return {
             "uid": uid,
@@ -5759,9 +6250,10 @@ class GlobalMediaLibrary:
                     semantic_keywords = self._safe_json_loads(row["keywords_json"], [])
                     if not isinstance(semantic_keywords, list):
                         semantic_keywords = []
+                    _uid = row["uid"]
                     results.append(
                         {
-                            "uid": row["uid"],
+                            "uid": _uid,
                             "filename": row["filename"],
                             "path": row["best_path"],
                             "asset_kind": self._infer_asset_kind(row["filename"], row["best_path"] or row["primary_path"]),
@@ -5780,6 +6272,7 @@ class GlobalMediaLibrary:
                             "updated_at": row["updated_at"],
                             "gps_latitude": row["gps_latitude"],
                             "gps_longitude": row["gps_longitude"],
+                            "thumbnail_url": f"/api/library/thumbnail/{_uid}" if self.thumbnail_path(_uid) else None,
                             "match_score": 1,
                             "keyword_score": 0,
                             "vector_score": 0.0,
@@ -5788,6 +6281,21 @@ class GlobalMediaLibrary:
                 return results
 
             where_clause = self._media_type_where_sql(media, alias="")
+
+            # Try FTS5 first for keyword/hybrid modes
+            fts_uids = set()
+            if mode in {"keyword", "hybrid"}:
+                try:
+                    fts_query = " OR ".join(f'"{kw}"' for kw in keywords if kw)
+                    if fts_query:
+                        fts_rows = conn.execute(
+                            "SELECT uid FROM assets_fts WHERE semantic_text MATCH ? LIMIT 2000",
+                            (fts_query,),
+                        ).fetchall()
+                        fts_uids = {r["uid"] for r in fts_rows}
+                except Exception:
+                    fts_uids = set()
+
             sql = """
                 SELECT uid, filename, sha256, size_bytes, primary_path, source_type, duration, resolution,
                        quality_score, scene_description, mood, objects_json,
@@ -5804,6 +6312,19 @@ class GlobalMediaLibrary:
             rows = conn.execute(
                 sql
             ).fetchall()
+
+            # Merge FTS hits not already in rows
+            if fts_uids:
+                existing_uids = {str(r["uid"]) for r in rows}
+                fts_missing = [uid for uid in fts_uids if uid not in existing_uids][:500]
+                if fts_missing:
+                    fts_fetched = self._fetch_assets_by_uids(conn, fts_missing)
+                    if media != "all":
+                        fts_fetched = [
+                            r for r in fts_fetched
+                            if self._infer_asset_kind(r["filename"], r["primary_path"]) == media
+                        ]
+                    rows = rows + fts_fetched
             vector_scores = self._vector_search(conn, q, top_k=1400) if mode in {"hybrid", "vector"} else {}
             if vector_scores:
                 existing_uids = {str(r["uid"]) for r in rows}
@@ -5854,9 +6375,10 @@ class GlobalMediaLibrary:
                 semantic = self._safe_json_loads(row["semantic_json"], {})
                 semantic_keywords = self._safe_json_loads(row["keywords_json"], [])
 
+                _uid = row["uid"]
                 results.append(
                     {
-                        "uid": row["uid"],
+                        "uid": _uid,
                         "filename": row["filename"],
                         "path": best_path,
                         "asset_kind": self._infer_asset_kind(row["filename"], best_path or row["primary_path"]),
@@ -5875,6 +6397,7 @@ class GlobalMediaLibrary:
                         "updated_at": row["updated_at"],
                         "gps_latitude": row["gps_latitude"],
                         "gps_longitude": row["gps_longitude"],
+                        "thumbnail_url": f"/api/library/thumbnail/{_uid}" if self.thumbnail_path(_uid) else None,
                         "match_score": cand["match_score"],
                         "keyword_score": cand["keyword_score"],
                         "vector_score": cand["vector_score"],
@@ -5947,6 +6470,7 @@ class GlobalMediaLibrary:
                     "updated_at": row["updated_at"],
                     "gps_latitude": row["gps_latitude"],
                     "gps_longitude": row["gps_longitude"],
+                    "thumbnail_url": f"/api/library/thumbnail/{row['uid']}" if self.thumbnail_path(row["uid"]) else None,
                 }
 
             return [by_uid[uid] for uid in uids if uid in by_uid]

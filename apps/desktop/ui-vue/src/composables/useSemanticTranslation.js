@@ -1,15 +1,14 @@
 /**
- * 语义标签翻译 + 去重映射
- * 解决反馈 #6：英文标签需翻译，相似词（如"美食"和"食物"）需合并
+ * 语义标签翻译 + 去重映射 (v3.0 — 400+ entries for 25-category taxonomy)
  */
 
 const translationMap = {
-  // ── 场景 ──
+  // ── 场景 / 地点 ──
   'landscape': '风景', 'scenery': '风景', 'nature': '自然',
   'urban': '城市', 'city': '城市', 'cityscape': '城市', 'skyline': '天际线',
   'indoor': '室内', 'outdoor': '户外', 'interior': '室内', 'exterior': '户外',
-  'beach': '海滩', 'ocean': '海洋', 'sea': '大海',
-  'mountain': '山', 'mountains': '山', 'hill': '山丘',
+  'beach': '海滩', 'ocean': '海洋', 'sea': '大海', 'seaside': '海边',
+  'mountain': '山', 'mountains': '山脉', 'hill': '山丘', 'summit': '山顶',
   'forest': '森林', 'tree': '树', 'trees': '树木', 'woods': '树林',
   'river': '河流', 'lake': '湖泊', 'water': '水面', 'waterfall': '瀑布',
   'garden': '花园', 'park': '公园', 'field': '田野',
@@ -19,33 +18,101 @@ const translationMap = {
   'street': '街道', 'road': '公路', 'highway': '高速公路', 'path': '小路',
   'building': '建筑', 'architecture': '建筑', 'bridge': '桥',
   'temple': '寺庙', 'church': '教堂', 'castle': '城堡',
+  'cafe': '咖啡馆', 'library': '图书馆', 'station': '车站', 'airport': '机场',
+  'market': '市集', 'classroom': '教室', 'office': '办公室',
+  'kitchen': '厨房', 'bedroom': '卧室', 'balcony': '阳台', 'rooftop': '屋顶',
+  'plaza': '广场', 'alley': '小巷', 'downtown': '市中心', 'old town': '老城区',
 
-  // ── 人物 / 活动 ──
+  // ── 人物 / 动作 ──
   'person': '人物', 'people': '人群', 'crowd': '人群',
   'man': '男性', 'woman': '女性', 'child': '儿童', 'children': '儿童',
   'face': '人脸', 'portrait': '肖像', 'selfie': '自拍',
-  'walking': '行走', 'running': '跑步', 'sitting': '坐',
+  'walking': '行走', 'running': '跑步', 'sitting': '坐', 'jumping': '跳跃',
   'dancing': '跳舞', 'singing': '唱歌', 'cooking': '烹饪',
   'eating': '用餐', 'drinking': '饮', 'shopping': '购物',
   'travel': '旅行', 'traveling': '旅行', 'traveler': '旅行者',
   'swimming': '游泳', 'driving': '驾驶', 'cycling': '骑行',
+  'reading': '阅读', 'writing': '写作', 'photographing': '拍照',
+  'chatting': '交谈', 'hugging': '拥抱', 'meditating': '冥想',
+  'climbing': '攀登', 'hiking': '徒步', 'skiing': '滑雪', 'surfing': '冲浪',
 
   // ── 美食 ──
   'food': '美食', 'cuisine': '美食', 'meal': '餐食', 'dish': '菜品',
-  'restaurant': '餐厅', 'cafe': '咖啡店', 'coffee': '咖啡',
+  'restaurant': '餐厅', 'coffee': '咖啡', 'tea': '茶',
   'fruit': '水果', 'vegetable': '蔬菜', 'meat': '肉',
   'dessert': '甜点', 'cake': '蛋糕', 'bread': '面包',
+  'chinese food': '中餐', 'japanese food': '日料', 'western food': '西餐',
+  'cocktail': '鸡尾酒', 'barbecue': '烧烤', 'salad': '沙拉',
+  'hotpot': '火锅', 'sushi': '寿司', 'pizza': '披萨', 'ice cream': '冰淇淋',
 
   // ── 动物 ──
   'animal': '动物', 'dog': '狗', 'cat': '猫', 'bird': '鸟',
   'fish': '鱼', 'horse': '马', 'pet': '宠物',
+  'butterfly': '蝴蝶', 'dolphin': '海豚', 'deer': '鹿',
+  'rabbit': '兔子', 'squirrel': '松鼠', 'seagull': '海鸥', 'bee': '蜜蜂',
+
+  // ── 交通 ──
+  'car': '汽车', 'vehicle': '车辆', 'boat': '船', 'airplane': '飞机',
+  'bicycle': '自行车', 'motorcycle': '摩托车', 'train': '火车',
+  'tram': '电车', 'cable car': '缆车', 'sailboat': '帆船', 'skateboard': '滑板',
 
   // ── 物品 ──
-  'car': '汽车', 'vehicle': '车辆', 'boat': '船', 'airplane': '飞机',
   'phone': '手机', 'computer': '电脑', 'camera': '相机',
   'book': '书', 'flower': '花', 'flowers': '花',
   'furniture': '家具', 'table': '桌子', 'chair': '椅子',
+  'light': '灯光', 'window': '窗户', 'door': '门', 'mirror': '镜子',
+  'cup': '杯子', 'instrument': '乐器', 'painting': '画作',
+
+  // ── 服饰 ──
   'clothing': '服装', 'fashion': '时尚',
+  'suit': '西装', 'dress': '连衣裙', 'sportswear': '运动装',
+  'hanfu': '汉服', 'kimono': '和服', 'denim': '牛仔',
+  'accessories': '配饰', 'hat': '帽子', 'scarf': '围巾', 'sneakers': '运动鞋',
+
+  // ── 材质 ──
+  'wood': '木质', 'metal': '金属', 'glass': '玻璃', 'stone': '石材',
+  'concrete': '混凝土', 'leather': '皮革', 'silk': '丝绸', 'linen': '棉麻',
+  'ceramic': '陶瓷', 'bamboo': '竹子', 'paper': '纸张', 'brick': '砖块',
+  'marble': '大理石', 'rust': '铁锈', 'plush': '毛绒',
+
+  // ── 建筑风格 ──
+  'gothic': '哥特式', 'baroque': '巴洛克', 'modernist': '现代主义',
+  'chinese traditional': '中式传统', 'japanese style': '日式和风',
+  'mediterranean': '地中海', 'industrial': '工业风',
+  'bauhaus': '包豪斯', 'neoclassical': '新古典',
+  'postmodern': '后现代', 'art deco': '装饰艺术',
+  'minimalist architecture': '极简建筑',
+
+  // ── 身体语言 ──
+  'smiling': '微笑', 'thinking': '思考', 'pointing': '指向',
+  'clapping': '鼓掌', 'waving': '挥手', 'hands on hips': '叉腰',
+  'leaning': '俯身', 'looking up': '仰望', 'head down': '低头',
+  'arms crossed': '双臂交叉',
+
+  // ── 色彩 ──
+  'warm tones': '暖色调', 'cool tones': '冷色调',
+  'morandi': '莫兰迪', 'color blocking': '撞色',
+  'monochrome': '黑白', 'gradient': '渐变',
+  'high contrast': '高对比', 'soft palette': '柔和',
+  'golden': '金色', 'blue tones': '蓝调',
+
+  // ── 构图 ──
+  'rule of thirds': '三分法', 'centered': '居中',
+  'diagonal': '对角线', 'frame within frame': '框中框',
+  'negative space': '留白', 'golden spiral': '黄金螺旋',
+  'overhead': '俯拍', 'low angle': '仰拍',
+  'foreground': '前景', 'background': '背景',
+  'symmetry': '对称', 'leading line': '引导线',
+
+  // ── 自然景观 ──
+  'glacier': '冰川', 'canyon': '峡谷', 'desert': '沙漠',
+  'grassland': '草原', 'coral reef': '珊瑚礁',
+  'volcano': '火山', 'wetland': '湿地', 'cave': '洞穴',
+
+  // ── 天气 ──
+  'sunny': '晴天', 'cloudy': '多云', 'rainy': '雨天', 'snowy': '雪天',
+  'foggy': '雾', 'rainbow': '彩虹', 'storm': '暴风雨',
+  'starry': '星空', 'aurora': '极光',
 
   // ── 风格 / 属性 ──
   'beautiful': '美丽', 'colorful': '色彩丰富', 'vibrant': '鲜艳',
@@ -55,23 +122,81 @@ const translationMap = {
   'aesthetic': '美学', 'artistic': '艺术',
   'romantic': '浪漫', 'dramatic': '戏剧性', 'peaceful': '宁静',
   'happy': '快乐', 'sad': '忧伤', 'funny': '有趣',
+  'cinematic': '电影感', 'documentary': '纪实', 'aerial': '航拍',
+  'retro': '复古', 'cyberpunk': '赛博朋克', 'film grain': '胶片感',
+  'timelapse': '延时', 'high saturation': '高饱和', 'desaturated': '低饱和',
+  'ink wash': '水墨风', 'minimal': '极简',
+
+  // ── 氛围 ──
+  'healing': '治愈', 'calm': '宁静', 'energetic': '活力',
+  'epic': '史诗感', 'lonely': '孤独', 'tense': '紧张', 'relaxed': '轻松',
+  'melancholic': '忧郁', 'joyful': '欢快', 'mysterious': '神秘',
+  'solemn': '庄严', 'passionate': '激昂', 'lazy': '慵懒',
+  'relaxed vibe': '松弛感',
+
+  // ── 音频 ──
+  'light music': '轻音乐', 'electronic': '电子乐',
+  'classical': '古典', 'jazz': '爵士', 'ambient': '环境音',
+  'rhythmic': '节奏感', 'nature sounds': '自然声', 'white noise': '白噪音',
+  'a cappella': '人声清唱',
+
+  // ── 文化 ──
+  'festival': '节日', 'tradition': '传统', 'religion': '宗教',
+  'folklore': '民俗', 'calligraphy': '书法', 'craft': '手工艺',
+  'temple fair': '庙会', 'tea ceremony': '茶道', 'ikebana': '花道',
+  'dragon dance': '舞龙', 'lantern': '灯笼',
+
+  // ── 品牌/产品 ──
+  'tech product': '科技产品', 'beauty/cosmetics': '美妆',
+  'fashion brand': '时装', 'sports brand': '运动品牌',
+  'home brand': '家居', 'auto brand': '汽车品牌',
+  'FMCG': '快消品', 'baby/maternity': '母婴', 'pet products': '宠物用品',
+
+  // ── 社交 ──
+  'solitude': '独处', 'date': '约会', 'family': '家庭',
+  'friends gathering': '朋友聚会', 'team': '团队',
+  'party': '派对', 'meeting': '会议', 'community': '社区',
+  'ceremony': '仪式', 'parade': '游行',
+
+  // ── 行业 ──
+  'technology': '科技', 'healthcare': '医疗', 'education': '教育',
+  'finance': '金融', 'retail': '零售', 'food service': '餐饮',
+  'real estate': '房地产', 'tourism': '旅游',
+  'manufacturing': '制造业', 'creative industry': '创意产业',
+  'sports': '体育', 'entertainment': '娱乐',
+
+  // ── 叙事 ──
+  'montage': '蒙太奇', 'parallel narrative': '平行叙事',
+  'flashback': '倒叙', 'suspense': '悬念',
+  'symbolism': '象征', 'metaphor': '隐喻',
+  'contrast': '对比', 'repetition': '重复',
+
+  // ── 概念 ──
+  'lifestyle': '生活方式', 'freedom': '自由', 'achievement': '成就',
+  'discipline': '自律', 'loneliness': '孤独', 'connection': '连接',
+  'growth': '成长', 'anxiety': '焦虑', 'escape': '逃离',
+  'ritual': '仪式感', 'productivity': '高效', 'minimalism': '极简',
+  'exploration': '探索', 'belonging': '归属感', 'intimacy': '亲密',
+  'wellness': '健康', 'nostalgia': '怀旧', 'creativity': '创造力',
+  'sustainability': '可持续', 'balance': '平衡',
+  'digital nomad': '数字游民', 'remote work': '远程工作',
+  'nature therapy': '自然疗愈',
+
+  // ── 用途 ──
+  'travel vlog': '旅行vlog', 'city promo': '城市宣传',
+  'hotel/airbnb': '酒店民宿', 'coffee brand': '咖啡品牌',
+  'fitness/yoga': '健身瑜伽', 'mental health': '心理疗愈',
+  'startup/career': '创业职场', 'doc style': '纪录片',
+  'commercial': '广告片', 'social short': '社媒短视频',
+  'product review': '产品评测', 'wedding': '婚礼活动',
+  'music video': '音乐MV', 'corporate': '企业宣传',
 }
 
 // 合并映射：相似概念指向同一个规范词
 const mergeMap = {
-  '食物': '美食',
-  '菜': '美食',
-  '餐': '美食',
-  '树木': '树',
-  '树林': '森林',
-  '人群': '人物',
+  '食物': '美食', '菜': '美食', '餐': '美食',
+  '树木': '树', '树林': '森林',
   '大海': '海洋',
-  '室内': '室内',
-  '户外': '户外',
-  '行走': '行走',
-  '城市': '城市',
-  '风景': '风景',
-  '建筑': '建筑',
   '旅行者': '旅行',
 }
 

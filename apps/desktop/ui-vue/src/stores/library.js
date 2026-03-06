@@ -22,6 +22,9 @@ export const useLibraryStore = defineStore('library', () => {
     embedding_enabled: false,
   })
 
+  // ── 视图模式 ──
+  const viewMode = ref('grid') // 'grid' | 'list'
+
   // ── 搜索 ──
   const query = ref('')
   const results = ref([])
@@ -239,6 +242,7 @@ export const useLibraryStore = defineStore('library', () => {
   return {
     // state
     stats,
+    viewMode,
     query,
     results,
     loading,

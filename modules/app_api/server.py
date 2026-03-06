@@ -269,6 +269,7 @@ app.register_blueprint(
         default_project_config=lambda extra=None: _default_project_config(extra),
         load_state=lambda path: _load_state(path),
         remember_last_project=lambda path: _remember_last_project(path),
+        recent_projects_getter=lambda: _get_recent_projects(),
         state_dict=lambda: _state_dict(),
         run_in_bg=lambda job_id, fn, *args, kind="generic", job_meta=None, **kwargs: _run_in_bg(
             job_id, fn, *args, kind=kind, job_meta=job_meta, **kwargs
@@ -1356,9 +1357,83 @@ def _remember_last_project(project_path: Path):
     if not isinstance(project_path, Path):
         return
     try:
-        _save_ui_settings({"last_project_dir": str(project_path.resolve())})
+        resolved = str(project_path.resolve())
+        _save_ui_settings({"last_project_dir": resolved})
+        # Also maintain recent_projects list
+        _add_to_recent_projects(resolved, project_path.name)
     except Exception:
         pass
+
+
+def _add_to_recent_projects(path_str: str, name: str):
+    """Maintain a recent_projects list (max 20) in settings."""
+    try:
+        settings = _read_settings()
+        recents = settings.get("recent_projects", [])
+        if not isinstance(recents, list):
+            recents = []
+        # Remove existing entry for this path
+        recents = [r for r in recents if r.get("path") != path_str]
+        # Prepend new entry
+        recents.insert(0, {
+            "path": path_str,
+            "name": name,
+            "opened_at": datetime.now().isoformat(timespec="seconds"),
+        })
+        # Trim to 20
+        recents = recents[:20]
+        settings["recent_projects"] = recents
+        _write_settings(settings)
+    except Exception:
+        pass
+
+
+def _get_recent_projects() -> List[Dict[str, Any]]:
+    """Return recent projects with status info."""
+    settings = _read_settings()
+    recents = settings.get("recent_projects", [])
+    if not isinstance(recents, list):
+        return []
+    result = []
+    for entry in recents[:20]:
+        if not isinstance(entry, dict):
+            continue
+        p = entry.get("path", "")
+        if not p:
+            continue
+        proj_path = Path(p)
+        wf_file = proj_path / "workflow.json"
+        status = "unknown"
+        current_step = 0
+        total_steps = 7
+        completed_steps = 0
+        if wf_file.exists():
+            try:
+                wf = json.loads(wf_file.read_text(encoding="utf-8"))
+                current_step = int(wf.get("current_step", 0))
+                total_steps = int(wf.get("total_steps", 7))
+                completed_steps = len(wf.get("completed_steps", []))
+                if completed_steps >= total_steps:
+                    status = "completed"
+                elif current_step > 0:
+                    status = "in_progress"
+                else:
+                    status = "draft"
+            except Exception:
+                status = "draft"
+        else:
+            status = "missing"
+        result.append({
+            "path": p,
+            "name": entry.get("name", proj_path.name),
+            "opened_at": entry.get("opened_at", ""),
+            "status": status,
+            "current_step": current_step,
+            "total_steps": total_steps,
+            "completed_steps": completed_steps,
+            "exists": proj_path.exists(),
+        })
+    return result
 
 
 _DEFAULT_PUBLISH_SETTINGS: Dict[str, Any] = {

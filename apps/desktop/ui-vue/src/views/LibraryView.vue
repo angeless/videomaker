@@ -29,6 +29,21 @@
               <option value="video">{{ labels.library.mediaType.video }}</option>
               <option value="image">{{ labels.library.mediaType.image }}</option>
             </select>
+            <!-- 视图切换 -->
+            <div class="view-toggle">
+              <button
+                class="btn btn-ghost view-btn"
+                :class="{ active: libraryStore.viewMode === 'grid' }"
+                @click="libraryStore.viewMode = 'grid'"
+                title="网格视图"
+              >⊞</button>
+              <button
+                class="btn btn-ghost view-btn"
+                :class="{ active: libraryStore.viewMode === 'list' }"
+                @click="libraryStore.viewMode = 'list'"
+                title="列表视图"
+              >☰</button>
+            </div>
             <button class="btn btn-primary" @click="libraryStore.search()">
               搜索
             </button>
@@ -54,10 +69,30 @@
           <div class="empty-state-title">{{ labels.library.empty }}</div>
           <div class="empty-state-text">{{ labels.library.emptyHint }}</div>
         </div>
-        <div v-else class="library-grid">
+
+        <!-- 网格视图 -->
+        <div v-else-if="libraryStore.viewMode === 'grid'" class="library-grid">
           <LibraryAssetCard
             v-for="asset in libraryStore.results"
-            :key="asset.asset_id || asset.file_hash"
+            :key="asset.uid"
+            :asset="asset"
+          />
+        </div>
+
+        <!-- 列表视图 -->
+        <div v-else class="library-list">
+          <div class="list-header">
+            <span class="list-h-thumb"></span>
+            <span class="list-h-name">文件名</span>
+            <span class="list-h-kind">类型</span>
+            <span class="list-h-meta">时长</span>
+            <span class="list-h-meta">分辨率</span>
+            <span class="list-h-tags">标签</span>
+            <span class="list-h-quality">质量</span>
+          </div>
+          <LibraryAssetRow
+            v-for="asset in libraryStore.results"
+            :key="asset.uid"
             :asset="asset"
           />
         </div>
@@ -79,6 +114,7 @@ import labels from '../i18n/labels.js'
 import AppNav from '../components/layout/AppNav.vue'
 import IngestPanel from '../components/library/IngestPanel.vue'
 import LibraryAssetCard from '../components/library/LibraryAssetCard.vue'
+import LibraryAssetRow from '../components/library/LibraryAssetRow.vue'
 
 const appStore = useAppStore()
 const libraryStore = useLibraryStore()
@@ -107,6 +143,26 @@ onMounted(async () => {
   align-items: center;
 }
 
+.view-toggle {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.view-btn {
+  padding: 4px 8px;
+  font-size: 14px;
+  border-radius: 0;
+  border: none;
+  min-width: 32px;
+}
+
+.view-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
 .library-stats {
   display: flex;
   gap: 8px;
@@ -119,4 +175,29 @@ onMounted(async () => {
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 12px;
 }
+
+.library-list {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.list-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--surface2);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.list-h-thumb { width: 48px; flex-shrink: 0; }
+.list-h-name { flex: 1; }
+.list-h-kind { width: 48px; flex-shrink: 0; }
+.list-h-meta { width: 60px; text-align: center; flex-shrink: 0; }
+.list-h-tags { width: 200px; flex-shrink: 0; }
+.list-h-quality { width: 30px; flex-shrink: 0; }
 </style>

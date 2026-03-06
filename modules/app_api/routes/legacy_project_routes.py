@@ -26,11 +26,16 @@ def create_legacy_project_blueprint(
     default_project_config: Callable[[Any], Dict[str, Any]],
     load_state: Callable[[Path], None],
     remember_last_project: Callable[[Path], None],
+    recent_projects_getter: Callable[[], list] = lambda: [],
     state_dict: Callable[[], Dict[str, Any]],
     run_in_bg: Callable[..., None],
     choose_path: Callable[[str], Dict[str, Any]],
 ) -> Blueprint:
     bp = Blueprint("legacy_project_api", __name__)
+
+    @bp.route("/api/project/list")
+    def api_project_list():
+        return jsonify({"ok": True, "projects": recent_projects_getter()})
 
     @bp.route("/api/init", methods=["POST"])
     def api_init():

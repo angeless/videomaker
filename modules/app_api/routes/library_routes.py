@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict
 import uuid
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_file, abort
 
 from modules.app_api.param_utils import parse_int_param
 
@@ -53,6 +53,27 @@ def create_library_blueprint(
     def _cancel_requested(job_id: str) -> bool:
         jobs = _jobs()
         return bool(jobs.get(job_id, {}).get("cancel_requested"))
+
+    @bp.route("/api/library/thumbnail/<uid>")
+    def api_library_thumbnail(uid):
+        lib = _library()
+        thumb_path = lib.thumbnail_path(uid)
+        if not thumb_path or not Path(thumb_path).exists():
+            abort(404)
+        return send_file(str(thumb_path), mimetype="image/jpeg", max_age=3600)
+
+    @bp.route("/api/library/thumbnails/generate", methods=["POST"])
+    def api_library_thumbnails_generate():
+        job_id = str(uuid.uuid4())[:8]
+
+        def _do_thumbs():
+            def _progress(pct):
+                _set_progress(job_id, pct, f"缩略图生成 {pct}%")
+            result = _library().generate_missing_thumbnails(progress_cb=_progress)
+            return {"ok": True, "result": result}
+
+        run_in_bg(job_id, _do_thumbs, kind="library_thumbnails_generate")
+        return jsonify({"ok": True, "job_id": job_id, "mode": "async"})
 
     @bp.route("/api/library/stats")
     def api_library_stats():

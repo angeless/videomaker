@@ -49,6 +49,10 @@ export const useAppStore = defineStore('app', () => {
   const uiSettingsMessage = ref('')
   const showOnboardingWizard = ref(false)
 
+  // ── 最近项目 ──
+  const recentProjects = ref([])
+  const recentProjectsLoading = ref(false)
+
   // ── 初始化/打开项目 ──
   const showInit = ref(false)
   const initMode = ref('new')
@@ -189,6 +193,16 @@ export const useAppStore = defineStore('app', () => {
     await saveUiSettings()
   }
 
+  // ── 最近项目 ──
+
+  async function loadRecentProjects() {
+    recentProjectsLoading.value = true
+    const data = await api.api('GET', '/api/project/list')
+    recentProjectsLoading.value = false
+    if (data.error) return
+    recentProjects.value = data.projects || []
+  }
+
   // ── 项目操作 ──
 
   async function createProject(videosDir_, projectDir_) {
@@ -289,6 +303,8 @@ export const useAppStore = defineStore('app', () => {
     initOpenDir,
     initLoading,
     initError,
+    recentProjects,
+    recentProjectsLoading,
     // computed
     hasProject,
     // methods
@@ -300,6 +316,7 @@ export const useAppStore = defineStore('app', () => {
     saveUiSettings,
     applyUiSettings,
     dismissOnboarding,
+    loadRecentProjects,
     createProject,
     openProject,
     pickFolder,
