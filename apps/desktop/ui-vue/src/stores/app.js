@@ -109,7 +109,7 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function refreshTaskQueue() {
-    const data = await api.api('GET', '/api/jobs/queue')
+    const data = await api.api('GET', '/api/tasks/queue')
     if (data.error) return
     const incoming = JSON.stringify(data)
     if (incoming === _lastTaskQueueJson.value) return
