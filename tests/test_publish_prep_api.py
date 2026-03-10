@@ -2,6 +2,7 @@ import json
 import sys
 import types
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -142,7 +143,13 @@ def test_publish_prep_generate_supports_project_input_mode_and_llm_fallback_warn
         encoding="utf-8",
     )
     client = server.app.test_client()
+    # Ensure no API key is available regardless of user's local settings
+    _empty_ai_settings = {
+        "provider": "openai", "ai_model": "", "embedding_model": "",
+        "ai_base_url": "", "openai_api_key": "", "anthropic_api_key": "",
+    }
     try:
+      with patch.object(server, "_load_ai_settings", return_value=_empty_ai_settings):
         gen_resp = client.post(
             "/api/capabilities/publish_prep/generate",
             json={
