@@ -58,26 +58,45 @@
           </span>
         </div>
 
-        <!-- P5-D: 自定义标签管理 -->
-        <CustomTagPanel @search-tag="onBrowseTag" />
+        <!-- 面板分组切换器 -->
+        <div class="panel-group-switcher">
+          <button
+            class="btn btn-sm"
+            :class="panelGroup === 'browse' ? 'btn-primary' : 'btn-ghost'"
+            @click="panelGroup = 'browse'"
+          >导入与浏览</button>
+          <button
+            class="btn btn-sm"
+            :class="panelGroup === 'health' ? 'btn-primary' : 'btn-ghost'"
+            @click="panelGroup = 'health'"
+          >维护</button>
+          <button
+            class="btn btn-sm"
+            :class="panelGroup === 'relink' ? 'btn-primary' : 'btn-ghost'"
+            @click="panelGroup = 'relink'"
+          >工程修复</button>
+        </div>
 
-        <!-- 搜索分析面板 -->
-        <SearchAnalyticsPanel @search-query="onBrowseTag" />
+        <!-- 组: 导入与浏览 (默认) -->
+        <template v-if="panelGroup === 'browse'">
+          <IngestPanel ref="ingestRef" />
+          <TagBrowser @search-tag="onBrowseTag" />
+          <SearchAnalyticsPanel @search-query="onBrowseTag" />
+          <CustomTagPanel @search-tag="onBrowseTag" />
+        </template>
 
-        <!-- 素材库健康仪表盘 -->
-        <LibraryHealthPanel />
+        <!-- 组: 维护 -->
+        <template v-if="panelGroup === 'health'">
+          <LibraryHealthPanel />
+          <DuplicateGroupsPanel />
+          <LocationHealthPanel2 />
+        </template>
 
-        <!-- P4-4: 标签浏览入口 -->
-        <TagBrowser @search-tag="onBrowseTag" />
-
-        <!-- 导入面板 -->
-        <IngestPanel />
-
-        <!-- v0.7 Phase B: 重复 / 路径 / Relink -->
-        <DuplicateGroupsPanel />
-        <LocationHealthPanel2 />
-        <RelinkReportPanel />
-        <ProjectRelinkPanel @search-library="onSearchFromRelink" />
+        <!-- 组: 工程修复 -->
+        <template v-if="panelGroup === 'relink'">
+          <RelinkReportPanel />
+          <ProjectRelinkPanel @search-library="onSearchFromRelink" />
+        </template>
 
         <!-- 素材列表 -->
         <div v-if="libraryStore.loading" class="empty-state">
@@ -87,6 +106,10 @@
           <div class="empty-state-icon">📁</div>
           <div class="empty-state-title">{{ labels.library.empty }}</div>
           <div class="empty-state-text">{{ labels.library.emptyHint }}</div>
+          <div v-if="isLibraryEmpty" class="empty-state-actions">
+            <button class="btn btn-primary" @click="scrollToIngest">导入素材</button>
+            <router-link to="/settings" class="btn btn-ghost">配置 AI</router-link>
+          </div>
         </div>
 
         <!-- 网格视图 -->
@@ -136,7 +159,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, nextTick, onMounted } from 'vue'
 import { useAppStore } from '../stores/app.js'
 import { useLibraryStore } from '../stores/library.js'
 import labels from '../i18n/labels.js'
@@ -158,10 +181,19 @@ import ProjectRelinkPanel from '../components/library/ProjectRelinkPanel.vue'
 const appStore = useAppStore()
 const libraryStore = useLibraryStore()
 
+// Panel group switcher — local ref, resets to 'browse' on each visit
+const panelGroup = ref('browse')
+
+// IngestPanel ref for programmatic expand + scroll
+const ingestRef = ref(null)
+
 // Evidence panel state
 const evidenceVisible = ref(false)
 const evidenceAssetId = ref('')
 const evidenceFilename = ref('')
+
+// Empty library detection
+const isLibraryEmpty = computed(() => libraryStore.stats.total_assets === 0)
 
 function openEvidence({ assetId, filename }) {
   evidenceAssetId.value = assetId
@@ -188,6 +220,16 @@ function onSearchFromRelink(assetName) {
 function onFeedbackDone(detail) {
   // After feedback (confirm/reject/add), refresh search results to reflect score changes
   libraryStore.search()
+}
+
+function scrollToIngest() {
+  panelGroup.value = 'browse'
+  nextTick(() => {
+    if (ingestRef.value) {
+      ingestRef.value.expand()
+      ingestRef.value.scrollIntoView({ behavior: 'smooth' })
+    }
+  })
 }
 
 onMounted(async () => {
@@ -243,6 +285,19 @@ onMounted(async () => {
   font-size: 11px;
   padding: 2px 8px;
   border-radius: 6px;
+}
+
+.panel-group-switcher {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.empty-state-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  justify-content: center;
 }
 
 .library-grid {
