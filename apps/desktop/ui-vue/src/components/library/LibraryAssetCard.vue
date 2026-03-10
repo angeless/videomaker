@@ -25,6 +25,22 @@
         📍 {{ displayLocation }}
       </div>
 
+      <!-- P4-2: search match info (when search results) -->
+      <div v-if="matchedTags.length > 0" class="match-section">
+        <div class="match-tags">
+          <span
+            v-for="mt in matchedTags"
+            :key="mt"
+            class="match-tag"
+            @click.stop="$emit('show-evidence', { assetId: asset.uid, filename: asset.filename })"
+            title="点击查看解释"
+          >{{ mt }}</span>
+        </div>
+        <div v-if="matchSources.length > 0" class="match-sources">
+          <span v-for="src in matchSources" :key="src" class="match-source">{{ sourceLabel(src) }}</span>
+        </div>
+      </div>
+
       <!-- 语义标签 — 按类展示 -->
       <div v-if="categorizedTags.length > 0" class="tag-section">
         <div v-for="cat in visibleCategories" :key="cat.category" class="tag-category">
@@ -39,6 +55,7 @@
           {{ showAll ? '收起' : `+${categorizedTags.length - 2} ${labels.library.moreTags}` }}
         </span>
       </div>
+
       <!-- fallback: flat tags -->
       <div v-else-if="translatedTags.length > 0" class="tag-group" style="margin-top: 6px">
         <span v-for="tag in visibleTags" :key="tag" class="tag">{{ tag }}</span>
@@ -63,6 +80,8 @@ import labels from '../../i18n/labels.js'
 const props = defineProps({
   asset: { type: Object, required: true },
 })
+
+defineEmits(['show-evidence'])
 
 const showAll = ref(false)
 const maxVisible = 5
@@ -131,8 +150,29 @@ const visibleTags = computed(() => {
   return translatedTags.value.slice(0, maxVisible)
 })
 
+// Phase 3/4: matched tags from search match_info
+const matchedTags = computed(() => {
+  const info = props.asset.match_info
+  if (!info || typeof info !== 'object') return []
+  return info.matched_tags || []
+})
+
+const matchSources = computed(() => {
+  const info = props.asset.match_info
+  if (!info || typeof info !== 'object') return []
+  return info.match_sources || []
+})
+
+function sourceLabel(src) {
+  const map = {
+    tag: '标签',
+    fts: '关键词',
+    embedding: '语义',
+  }
+  return map[src] || src
+}
+
 const displayLocation = computed(() => {
-  // Direct lat/lng from backend
   const lat = props.asset.gps_latitude
   const lng = props.asset.gps_longitude
   if (lat && lng) return `${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)}`
@@ -230,6 +270,47 @@ function formatDuration(seconds) {
   border-radius: 3px;
 }
 
+/* P4-2: match section */
+.match-section {
+  margin-top: 6px;
+}
+
+.match-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.match-tag {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 3px;
+  background: rgba(76, 175, 80, 0.15);
+  color: #4caf50;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.match-tag:hover {
+  background: rgba(76, 175, 80, 0.3);
+}
+
+.match-sources {
+  display: flex;
+  gap: 4px;
+  margin-top: 3px;
+}
+
+.match-source {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted);
+}
+
+/* Tags */
 .tag-section {
   margin-top: 6px;
 }

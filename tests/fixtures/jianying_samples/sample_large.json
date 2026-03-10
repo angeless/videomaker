@@ -1,0 +1,585 @@
+{
+  "materials": {
+    "videos": [
+      {
+        "id": "F2918E5F-310A-4D94-9EAE-604CC9DC3C6E",
+        "path": "materials/video/IMG_2483.MOV"
+      },
+      {
+        "id": "E7CA7FA0-344E-4756-B302-8AAA62DDEF51",
+        "path": "materials/video/IMG_2477.MOV"
+      },
+      {
+        "id": "4B9EEB08-5BE2-4C90-9B54-D7C504E69AE5",
+        "path": "materials/video/IMG_3263.MOV"
+      },
+      {
+        "id": "3AF3DB5D-5E5F-4325-82A3-20A966DD3234",
+        "path": "materials/video/VID_20240105_005143_186.mp4"
+      },
+      {
+        "id": "FD7A97EB-7A3D-41C5-8DD5-0A2D33E2BE9D",
+        "path": "materials/video/001_WC-EditVideo_1.MP4"
+      },
+      {
+        "id": "CF857AF9-1B02-442E-AE0C-BFB3986DACC1",
+        "path": "materials/video/IMG_20240107_192523_383.jpg"
+      },
+      {
+        "id": "D9D59435-7511-41FC-A4AD-E54CBF0EBD21",
+        "path": "materials/video/IMG_7029.JPG"
+      },
+      {
+        "id": "A9A04F95-4579-4C7D-B8DC-FCC20D9A2C61",
+        "path": "materials/video/IMG_7032.JPG"
+      },
+      {
+        "id": "D495EA56-BC45-4698-9319-B4E1E0855BD3",
+        "path": "materials/video/IMG_2107.JPG"
+      },
+      {
+        "id": "97E68808-7890-4496-BD8A-8C26AD446479",
+        "path": "materials/video/IMG_2136.JPG"
+      },
+      {
+        "id": "F2F87C54-338A-40BB-8388-E8D1BF8130FE",
+        "path": "materials/video/IMG_2055.JPG"
+      },
+      {
+        "id": "96B0242C-3052-42B2-B6DB-5064DC30CFDC",
+        "path": "materials/video/IMG_2329.JPG"
+      },
+      {
+        "id": "6C16B302-A7D0-487F-AC63-3F593D0F746D",
+        "path": "materials/video/IMG_1512.JPG"
+      },
+      {
+        "id": "BC29EB4D-13F1-4663-B60E-EF247C2F4031",
+        "path": "materials/video/IMG_2207.JPG"
+      },
+      {
+        "id": "98952864-5CBF-45C0-A235-445F2FFFB655",
+        "path": "materials/video/IMG_2032.JPG"
+      },
+      {
+        "id": "AD6E3768-C8FA-41C9-8FF0-B692E657C1BC",
+        "path": "materials/video/VID_20240104_160129_155.mp4"
+      },
+      {
+        "id": "9F707081-71DF-41B9-86CA-675081C5CA8D",
+        "path": "materials/video/VID_20240104_155847_154.mp4"
+      },
+      {
+        "id": "871A75F3-0A58-4644-BFD8-C4816019AB50",
+        "path": "materials/video/IMG_3207.MOV"
+      },
+      {
+        "id": "25532A06-F23C-4797-A07A-AB53769EC728",
+        "path": "materials/video/VID_20240104_154809_151.mp4"
+      },
+      {
+        "id": "C0716704-F293-4BA8-BC9F-258DF7CECDFE",
+        "path": "materials/video/VID_20240107_185550_353.mp4"
+      },
+      {
+        "id": "3B743C0D-CE3B-437C-A104-975221B5A363",
+        "path": "materials/video/IMG_2056.MOV"
+      },
+      {
+        "id": "5FA6A309-2D3E-419A-8D57-027A6ADB8823",
+        "path": "materials/video/IMG_2064.MOV"
+      },
+      {
+        "id": "1FF54E04-CEF6-4750-86AE-830100D150E0",
+        "path": "materials/video/IMG_2335.MOV"
+      },
+      {
+        "id": "FE0B4A7C-8C9F-47C6-8148-6EA7096D3016",
+        "path": "materials/video/VID_20240107_170735_316.mp4"
+      },
+      {
+        "id": "2C42E40D-CF64-440D-9C4D-2F3199DDD842",
+        "path": "materials/video/IMG_2058.MOV"
+      },
+      {
+        "id": "4ADC7583-8E2E-4A5B-B792-ADAED1CE1BE9",
+        "path": "materials/video/IMG_1689.MOV"
+      },
+      {
+        "id": "A5E00D79-70CD-4EFB-B15A-4B3F79048E32",
+        "path": "materials/video/VID_20240105_163512_207.mp4"
+      },
+      {
+        "id": "F05A9104-64EB-44D4-8E65-6A54EFF0939E",
+        "path": "materials/video/IMG_1690.MOV"
+      },
+      {
+        "id": "D656788F-64E0-4E61-865C-D936D73BDE47",
+        "path": "materials/video/IMG_1686.MOV"
+      },
+      {
+        "id": "30E374B7-C2A4-4547-A2A7-015534D05113",
+        "path": "materials/video/IMG_1677.MOV"
+      },
+      {
+        "id": "F1D748F1-F1D8-405E-84AC-1DC29C968734",
+        "path": "materials/video/IMG_1580.MOV"
+      },
+      {
+        "id": "4D17D617-CF2A-4993-99C3-CF303843A088",
+        "path": "materials/video/VID_20240105_153509_198.mp4"
+      },
+      {
+        "id": "3D903C3A-467B-47EE-8C5F-E274048BA882",
+        "path": "materials/video/VID_20240105_153154_197.mp4"
+      },
+      {
+        "id": "BF52AD17-D6B3-458B-B8E5-ABE743AB6172",
+        "path": "materials/video/IMG_1663.MOV"
+      },
+      {
+        "id": "9157C767-9AA8-4880-A0D7-7ED4E569C876",
+        "path": "materials/video/IMG_1694.MOV"
+      },
+      {
+        "id": "84E13CFC-89D5-455E-8889-1E6614584EDD",
+        "path": "materials/video/IMG_1698.MOV"
+      },
+      {
+        "id": "6468FD6E-5FC5-4470-81F0-4F74E52C4CD5",
+        "path": "materials/video/IMG_1738.MOV"
+      },
+      {
+        "id": "AFE81A63-3E40-4F69-AEF0-DDE1515C1139",
+        "path": "materials/video/IMG_1704.MOV"
+      },
+      {
+        "id": "0A50ED78-F03F-43FF-8A42-655C5CDA309A",
+        "path": "materials/video/在捷里别尔卡.mp4"
+      },
+      {
+        "id": "DBC4DD57-4B20-4AAC-AE5F-60726C9859C5",
+        "path": "materials/video/IMG_1890.MOV"
+      },
+      {
+        "id": "21E73227-8186-4F62-BCFF-EEE015036D0D",
+        "path": "materials/video/IMG_1756.MOV"
+      },
+      {
+        "id": "AB2F6BCA-CDA6-491C-BB92-D0D7E363069D",
+        "path": "materials/video/IMG_1761.MOV"
+      },
+      {
+        "id": "28C2AD3F-6B68-4FAF-B8CA-EF1F49258750",
+        "path": "materials/video/IMG_1911.MOV"
+      },
+      {
+        "id": "E361C491-076A-4738-B7E8-7FC8F143C0A7",
+        "path": "materials/video/IMG_1799.MOV"
+      },
+      {
+        "id": "09DD427D-E712-4751-8FA1-EA9DD5C36F42",
+        "path": "materials/video/IMG_1877.MOV"
+      },
+      {
+        "id": "C5BD896A-894B-4563-9D45-8C4B2AEF4898",
+        "path": "materials/video/VID_20240105_170621_217.mp4"
+      },
+      {
+        "id": "94DC3817-823F-43B5-BDFC-54961AEB1A7C",
+        "path": "materials/video/VID_20240105_170556_216.mp4"
+      },
+      {
+        "id": "83694D7D-67D8-4217-96A9-1D3450FD5F0F",
+        "path": "materials/video/VID_20240105_173312_241.mp4"
+      },
+      {
+        "id": "639FB26A-3921-4E12-966E-72B1B4585567",
+        "path": "materials/video/VID_20240105_172710_239.mp4"
+      },
+      {
+        "id": "07904645-EDC2-4EC3-8E10-80018BD32FE0",
+        "path": "materials/video/VID_20240105_174430_244.mp4"
+      },
+      {
+        "id": "083E4967-AB2E-44A0-95D4-18DA468CA1BF",
+        "path": "materials/video/IMG_1942.MOV"
+      },
+      {
+        "id": "91ABF71E-724C-4FC1-8BB6-B936C7C60B86",
+        "path": "materials/video/IMG_2007.MOV"
+      },
+      {
+        "id": "0B80C0A8-A0E9-4666-9630-B5E26DF225C2",
+        "path": "materials/video/IMG_1937.MOV"
+      },
+      {
+        "id": "F2A20B97-7243-4928-B11E-A54E1828DFC8",
+        "path": "materials/video/IMG_1960.MOV"
+      },
+      {
+        "id": "E77B83BF-8A33-433C-AFEE-20F62A60718B",
+        "path": "materials/video/VID_20240105_174353_243.mp4"
+      },
+      {
+        "id": "32ADEB65-D5A9-4A27-A900-97C854DB6805",
+        "path": "materials/video/VID_20240105_174554_245.mp4"
+      },
+      {
+        "id": "B3077E02-156D-49AC-92F5-B93A903E1348",
+        "path": "materials/video/VID_20240105_182812_267.mp4"
+      },
+      {
+        "id": "F51ECEBE-4762-4A9B-865F-B660852DD8B3",
+        "path": "materials/video/VID_20240105_181403_261.mp4"
+      },
+      {
+        "id": "5B16B411-84E9-453D-A870-9BF480B29C95",
+        "path": "materials/video/VID_20240105_185531_271.mp4"
+      },
+      {
+        "id": "E2AB99AE-0AAC-414F-82F0-6C992F122B19",
+        "path": "materials/video/VID_20240105_203159_277.mp4"
+      },
+      {
+        "id": "F5591C68-7828-4304-92BB-80012B32862A",
+        "path": "materials/video/VID_20240105_203242_278.mp4"
+      },
+      {
+        "id": "6B7DD6E4-A068-4842-B2F5-81D92A9FD735",
+        "path": "materials/video/VID_20240105_204954_288.mp4"
+      },
+      {
+        "id": "F85BF250-E7C6-4BCC-9BE7-FBD64BE0D28F",
+        "path": "materials/video/IMG_2034.MOV"
+      },
+      {
+        "id": "761846EF-163B-4BA9-A226-F5C166386D6C",
+        "path": "materials/video/VID_20240105_210808_290.mp4"
+      },
+      {
+        "id": "2C31B699-1F9B-4C76-97F3-A440A984DE5C",
+        "path": "materials/video/雪橇.mp4"
+      },
+      {
+        "id": "97D9E9F2-F475-47B0-A67C-3CEE7CC8AEDF",
+        "path": "materials/video/VID_20240105_211735_292.mp4"
+      },
+      {
+        "id": "CE188FA6-7B86-4DD2-B71E-F5D3A3D63EFB",
+        "path": "materials/video/IMG_2050.MOV"
+      },
+      {
+        "id": "3F88F159-00D3-4859-BB10-F5E65E0DAB8D",
+        "path": "materials/video/荡秋千.mp4"
+      },
+      {
+        "id": "2F033833-A624-4E96-9690-CE8D94D75535",
+        "path": "materials/video/IMG_2038.MOV"
+      },
+      {
+        "id": "79ACE7B0-6691-4978-922B-0773B909F465",
+        "path": "materials/video/VID_20240104_224923_173.mp4"
+      },
+      {
+        "id": "511927D4-7CE0-41A4-9F09-14E2A1950E27",
+        "path": "materials/video/VID_20240107_192332_378.mp4"
+      },
+      {
+        "id": "B316D12F-D6FD-41E7-87B6-52CFE6E8B32D",
+        "path": "materials/video/VID_20240104_233733_180.mp4"
+      },
+      {
+        "id": "3FFD515F-4273-4ECC-969D-9484196649BF",
+        "path": "materials/video/VID_20240104_203843_157.mp4"
+      },
+      {
+        "id": "D0B5E887-682A-4AE3-8F17-7232B8853BEC",
+        "path": "materials/video/VID_20240107_182251_335.mp4"
+      },
+      {
+        "id": "62A801C5-7478-4590-8029-CD7989B67D2A",
+        "path": "materials/video/VID_20240107_183009_342.mp4"
+      },
+      {
+        "id": "609492F0-4C43-4CA2-95DB-D228E2831890",
+        "path": "materials/video/VID_20240107_183719_344_副本.mp4"
+      },
+      {
+        "id": "CBBFAC45-1B55-4F52-98FA-B2C8BA26A5C0",
+        "path": "materials/video/VID_20240107_183142_343-1.mp4"
+      },
+      {
+        "id": "F9F9D1E3-F70B-4C03-9AE3-33BFF94F5800",
+        "path": "materials/video/VID_20240107_183142_343-2.mp4"
+      },
+      {
+        "id": "90F4155A-78E1-4A62-8E0F-285AA0E53C38",
+        "path": "materials/video/VID_20240106_173343_303.mp4"
+      },
+      {
+        "id": "85CC65AA-8832-4CD7-A0EE-4D805A0CE59C",
+        "path": "materials/video/VID_20240105_005131_185.mp4"
+      },
+      {
+        "id": "3FC8C428-A261-4907-BDAE-EC756E904DB1",
+        "path": "materials/video/IMG_2417.MOV"
+      },
+      {
+        "id": "9D24DDA5-B15D-4AC7-9343-D18FF4DD6363",
+        "path": "materials/video/VID_20240104_235221_181.mp4"
+      },
+      {
+        "id": "B708F1A4-35B0-4F68-A9D8-DAF19B67C571",
+        "path": "materials/video/圣诞集市+大土豆习惯有雪了.mp4"
+      },
+      {
+        "id": "EE279B38-8016-495D-A47B-93ABE903D416",
+        "path": "materials/video/VID_20240104_235553_183.mp4"
+      },
+      {
+        "id": "22A68F24-01B8-44F9-94CF-C54BFC0AF8A7",
+        "path": "materials/video/IMG_2200.MOV"
+      },
+      {
+        "id": "1AB8406D-885E-4BE8-8346-4B106D22E5CA",
+        "path": "materials/video/IMG_2201.MOV"
+      },
+      {
+        "id": "D7F55A78-98BF-49A2-B028-FDA16A54DC99",
+        "path": "materials/video/24286_raw.MP4"
+      },
+      {
+        "id": "21677B51-2174-4E42-9383-CE0D1CA689CC",
+        "path": "materials/video/IMG_2438.MOV"
+      },
+      {
+        "id": "4C29DB71-8C70-4B00-B092-E816E1AE481B",
+        "path": "materials/video/VID_20240107_175525_317.mp4"
+      },
+      {
+        "id": "77A20DE8-2899-4FAD-8665-567577BA0676",
+        "path": "materials/video/VID_20240107_180056_318_副本.mp4"
+      },
+      {
+        "id": "DA698684-3E6D-484F-A97A-04B309E8135E",
+        "path": "materials/video/VID_20240107_180056_318.mp4"
+      },
+      {
+        "id": "A16A9236-EB5E-49C9-8852-CBFE49D1F5DD",
+        "path": "materials/video/VID_20240105_005617_188.mp4"
+      },
+      {
+        "id": "826B6467-4548-40C1-995E-25DBD6810311",
+        "path": "materials/video/VID_20240105_010942_191最北麦当劳.mp4"
+      },
+      {
+        "id": "95170B5F-8810-4068-980B-240B75C28754",
+        "path": "materials/video/VID_20240107_190443_359.mp4"
+      },
+      {
+        "id": "F20DDBAE-C9C0-4698-9BD3-D8C1097FA5B9",
+        "path": "materials/video/VID_20240108_010733_389.mp4"
+      },
+      {
+        "id": "7A295C99-272D-4D9D-BED1-67094D05CD57",
+        "path": "materials/video/VID_20240107_181435_329.mp4"
+      },
+      {
+        "id": "A2474601-506F-4C0A-B6D6-377EFB370205",
+        "path": "materials/video/VID_20240106_174611_306.mp4"
+      },
+      {
+        "id": "6932EC5D-63C4-4A71-AB81-9FE4774E4DE4",
+        "path": "materials/video/VID_20240106_172211_300.mp4"
+      },
+      {
+        "id": "5C1911F0-F3CD-4C2F-8164-11A7D370F69E",
+        "path": "materials/video/VID_20240107_190032_356.mp4"
+      },
+      {
+        "id": "91F9BDCC-BA2C-424D-B4C3-7848A20F572D",
+        "path": "materials/video/VID_20240108_014603_395.mp4"
+      },
+      {
+        "id": "C08F370D-C154-4643-8546-BE0B5E410AF5",
+        "path": "materials/video/VID_20240105_152000_194.mp4"
+      },
+      {
+        "id": "D77E8F3B-C946-480B-8AB3-535917186E31",
+        "path": "materials/video/IMG_1913.MOV"
+      },
+      {
+        "id": "458C12E2-CD07-4502-B3D7-9BC052BC60F5",
+        "path": "materials/video/IMG_1795.MOV"
+      },
+      {
+        "id": "370F8A2C-624A-4975-B107-D595E9FED36D",
+        "path": "materials/video/IMG_1790.JPG"
+      }
+    ],
+    "audios": [
+      {
+        "id": "9DA24A29-371F-42D0-BAAB-D2B6DA2CC4F0",
+        "path": "materials/audio/ce92eda91f2bf9aab564d214036b2857.mp3"
+      },
+      {
+        "id": "35CD61A8-2FB3-4908-823B-8AD8C776CC38",
+        "path": "audio_record/录音12_1737718431960.aac"
+      },
+      {
+        "id": "82BC4B3B-9CD9-4730-8053-13994B5FA254",
+        "path": "audio_record/录音3_1737646730342.aac"
+      },
+      {
+        "id": "5125521C-51A3-4A05-8A87-CC84F1A2A7EC",
+        "path": "audio_record/录音13_1737720159139.aac"
+      },
+      {
+        "id": "527EA494-CD7C-427A-81B0-CEE237BC6997",
+        "path": "audio_record/录音14_1737720368068.aac"
+      },
+      {
+        "id": "FDE7EC54-012B-48F8-9633-982A53A40C87",
+        "path": "audio_record/录音15_1737720427489.aac"
+      },
+      {
+        "id": "A437BA04-BB58-4D7C-921D-54B9F7140928",
+        "path": "audio_record/录音8_1737691282252.aac"
+      },
+      {
+        "id": "6E7B05B3-0556-4290-B088-26F5719A632A",
+        "path": "audio_record/录音10_1737691449199.aac"
+      },
+      {
+        "id": "1632746D-EE77-4914-A254-EB4785F1BCD1",
+        "path": "audio_record/录音18_1737720977910.aac"
+      },
+      {
+        "id": "03164D3F-F8E3-40FF-B5B1-F50A9B267525",
+        "path": "audio_record/录音17_1737720933464.aac"
+      },
+      {
+        "id": "1DC833B7-55AB-4C48-B3ED-C998F604B445",
+        "path": "audio_record/录音19_1737721161149.aac"
+      },
+      {
+        "id": "430723BC-6C55-45A0-87E0-03AC4AC0FFCD",
+        "path": "audio_record/录音53_1737732272208.aac"
+      },
+      {
+        "id": "684E6C32-A5F1-4DF3-859E-A5E3EB76B06A",
+        "path": "audio_record/录音21_1737721576952.aac"
+      },
+      {
+        "id": "A64F9E3B-63DD-4C49-A741-19DA5412779E",
+        "path": "audio_record/录音22_1737721789521.aac"
+      },
+      {
+        "id": "49C0AB78-5041-40A7-85B1-143F2BB843EA",
+        "path": "audio_record/录音27_1737722045370.aac"
+      },
+      {
+        "id": "BE5CF096-9083-4109-A1CC-A19B58935A92",
+        "path": "audio_record/录音28_1737722427944.aac"
+      },
+      {
+        "id": "27688517-41D2-47E6-863E-59F66B0C3BE9",
+        "path": "audio_record/录音31_1737722938311.aac"
+      },
+      {
+        "id": "954011CE-3083-405F-9664-C0C961279C6F",
+        "path": "audio_record/录音54_1737732747659.aac"
+      },
+      {
+        "id": "5A6DBA62-5DF8-457C-8238-033CB1E95A19",
+        "path": "audio_record/录音33_1737724110248.aac"
+      },
+      {
+        "id": "100128AD-76CB-46FA-A8B6-C0CEFA1DB39E",
+        "path": "audio_record/录音55_1737732835344.aac"
+      },
+      {
+        "id": "5A0FA4FF-EBE8-4254-B7DA-B560F8E5268D",
+        "path": "audio_record/录音57_1737732928226.aac"
+      },
+      {
+        "id": "55098158-9FC5-4B5A-8939-DD83D951D8E1",
+        "path": "audio_record/录音56_1737732898394.aac"
+      },
+      {
+        "id": "36A5E423-DCD7-490A-BDD1-5FEFBC3BE8F2",
+        "path": "audio_record/录音36_1737724822955.aac"
+      },
+      {
+        "id": "81183EB0-E3DE-4A1C-8461-9B13F27178BC",
+        "path": "audio_record/录音59_1737733090539.aac"
+      },
+      {
+        "id": "815A3764-0420-47F7-AC71-91521D3C0CAA",
+        "path": "audio_record/录音61_1737733368058.aac"
+      },
+      {
+        "id": "656FF540-BBB9-4501-BAE4-780DC00DA51E",
+        "path": "audio_record/录音41_1737728518139.aac"
+      },
+      {
+        "id": "A1568A84-291C-4B81-BD6B-71A75EA09440",
+        "path": "audio_record/录音43_1737728578382.aac"
+      },
+      {
+        "id": "FDA08F2A-108D-463C-845A-51B1C22B707F",
+        "path": "audio_record/录音45_1737728644999.aac"
+      },
+      {
+        "id": "D5B4D377-4D10-4E4C-8ECA-F1915F9FDD77",
+        "path": "audio_record/录音47_1737728937322.aac"
+      },
+      {
+        "id": "760FD706-D60C-4CF7-A79B-7FA388ACD217",
+        "path": "audio_record/录音48_1737728989850.aac"
+      },
+      {
+        "id": "F899221D-7471-4C2F-9C5C-5C95FA34CBF6",
+        "path": "audio_record/录音49_1737729022517.aac"
+      },
+      {
+        "id": "25239394-91FC-4A89-A393-3F152186BEF7",
+        "path": "audio_record/录音50_1737729192410.aac"
+      },
+      {
+        "id": "37C28A61-0799-49DE-99D8-D250424A558C",
+        "path": "audio_record/录音37_1737725577749.aac"
+      },
+      {
+        "id": "138960A5-302D-4AC0-BF86-B3B7A4CC3E86",
+        "path": "audio_record/录音51_1737729544910.aac"
+      },
+      {
+        "id": "FD35E1B9-6E42-4B63-B617-4197045D88FD",
+        "path": "audio_record/录音11_1737691598655.aac"
+      },
+      {
+        "id": "C76018A4-FE80-42C2-A1FD-E32EC72A5EF9",
+        "path": "audio_record/录音38_1737727754711.aac"
+      },
+      {
+        "id": "698E9DFD-170C-40E6-852F-E1F807E922B7",
+        "path": "audio_record/录音39_1737727765803.aac"
+      },
+      {
+        "id": "D5112B41-A2EB-4684-BE1F-045BC3886672",
+        "path": "audio_record/录音62_1737733754994.aac"
+      },
+      {
+        "id": "825ABE91-45DE-4EF0-B16B-CFD62CEA5529",
+        "path": "audio_record/录音64_1737733877726.aac"
+      },
+      {
+        "id": "0778155F-4BE7-467E-9A3C-AB1C005BB6AA",
+        "path": "audio_record/录音66_1737733965253.aac"
+      }
+    ]
+  },
+  "tracks": []
+}

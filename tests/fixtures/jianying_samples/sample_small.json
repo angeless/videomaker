@@ -1,0 +1,232 @@
+{
+  "materials": {
+    "videos": [
+      {
+        "id": "6601AA6F-D26D-47F1-A051-9B389011833F",
+        "path": "materials/video/IMG_4998.mov"
+      },
+      {
+        "id": "0594B4A4-FDA1-4796-BD56-D2B83DDBBD0C",
+        "path": "materials/video/beauty_1699623366306.MOV"
+      },
+      {
+        "id": "034B0A77-0DDC-48BB-AF8E-849FC31363B7",
+        "path": "materials/video/IMG_5003.mov"
+      },
+      {
+        "id": "FCB68DD3-1EDE-4518-9F64-409311FBD3B7",
+        "path": "materials/video/IMG_5006.MOV"
+      },
+      {
+        "id": "0703F59B-E880-4AB2-9E22-D8A8D43AAD74",
+        "path": "materials/video/IMG_5012.MOV"
+      },
+      {
+        "id": "6F037D25-9252-4EC0-9362-68E8A43F5F6C",
+        "path": "materials/video/IMG_5011.MOV"
+      },
+      {
+        "id": "0E9B176C-367C-4A1C-8292-160222E3A155",
+        "path": "materials/video/IMG_5009.MOV"
+      },
+      {
+        "id": "FF812CDD-91D1-4824-9688-C3B9AE991E98",
+        "path": "materials/video/IMG_5013.MOV"
+      },
+      {
+        "id": "A46905A9-696D-4A5E-B595-476F19D8743A",
+        "path": "materials/video/IMG_5018.MOV"
+      },
+      {
+        "id": "82355F55-154A-4030-B4D3-361C46133184",
+        "path": "materials/video/IMG_5114.MOV"
+      },
+      {
+        "id": "9FB785DD-7618-47F6-B374-2356C1CFCEF1",
+        "path": "materials/video/IMG_5121.MOV"
+      },
+      {
+        "id": "5472C46E-AA5B-4AC4-86D5-A89C71B801E5",
+        "path": "materials/video/IMG_5019.MOV"
+      },
+      {
+        "id": "E6F9349C-D418-4BFA-BBEE-9F8CFCB04678",
+        "path": "materials/video/1070_raw.MP4"
+      },
+      {
+        "id": "5AD6735D-6FBD-47DE-8BA5-F4F872CBECB2",
+        "path": "materials/video/IMG_5020.MOV"
+      },
+      {
+        "id": "C0D5C96D-66A8-4CC5-AAF1-0A9E171AAB82",
+        "path": "materials/video/IMG_5050.MOV"
+      },
+      {
+        "id": "521F3D12-9AC4-4D11-86E9-FA150593CFA8",
+        "path": "materials/video/IMG_5049.MOV"
+      },
+      {
+        "id": "91192334-FDE7-4130-9E7A-9B75A8FF3D4C",
+        "path": "materials/video/IMG_5059.MOV"
+      },
+      {
+        "id": "134F4FED-7AC6-444C-B889-C7E1508D48C4",
+        "path": "materials/video/IMG_5069.MOV"
+      },
+      {
+        "id": "0F9C7CE8-D588-4BAE-BA40-5A6EA1C0D684",
+        "path": "materials/video/IMG_5074.MOV"
+      },
+      {
+        "id": "7E296E2D-9E30-4B70-93E8-A521FADF5C1E",
+        "path": "materials/video/IMG_5088.MOV"
+      },
+      {
+        "id": "B90FC232-DB72-4867-B78D-6463469619F1",
+        "path": "materials/video/IMG_5089.MOV"
+      },
+      {
+        "id": "C9D3ACB7-CC0C-436D-B9F7-4608993CA6A3",
+        "path": "materials/video/IMG_5090.MOV"
+      },
+      {
+        "id": "9091FBD6-FDFC-4794-AC36-5053C0DBB556",
+        "path": "materials/video/IMG_5091.MOV"
+      },
+      {
+        "id": "4D781EB0-4E7A-4AE8-BF16-8FBD6AE983ED",
+        "path": "materials/video/IMG_5111.MOV"
+      },
+      {
+        "id": "853BF0EC-2636-488A-A3DC-E612BEA5F202",
+        "path": "materials/video/IMG_5110.MOV"
+      },
+      {
+        "id": "B54DFD7A-D574-4275-9476-CF7AD13B663F",
+        "path": "materials/video/IMG_5095.MOV"
+      },
+      {
+        "id": "34650DD6-91A3-40E8-B22F-83948C59013C",
+        "path": "materials/video/IMG_5104.MOV"
+      },
+      {
+        "id": "58639EEB-A2A6-41E3-94C2-67DD0C6E3910",
+        "path": "materials/video/IMG_5101.MOV"
+      },
+      {
+        "id": "CFE56158-18DD-4077-9116-A17EC8D7EE97",
+        "path": "materials/video/IMG_5102.MOV"
+      },
+      {
+        "id": "6ED4F80F-36B7-43E2-9899-08240629EC38",
+        "path": "materials/video/IMG_5053.MOV"
+      },
+      {
+        "id": "743F820A-B67C-483D-A6AD-FB860DB06DDA",
+        "path": "materials/video/IMG_4896.MOV"
+      },
+      {
+        "id": "EA495937-11F1-4536-B9DF-0AA371F6D381",
+        "path": "materials/video/IMG_5140.MOV"
+      },
+      {
+        "id": "88E8B101-FCE6-4BAC-9572-533DA94DEF51",
+        "path": "materials/video/IMG_5144.MOV"
+      },
+      {
+        "id": "509F9764-E90B-4B51-BD94-20B3683495B3",
+        "path": "materials/video/IMG_5145.MOV"
+      },
+      {
+        "id": "E8FB3AA5-FDD7-4AD6-858C-8BE497AA5032",
+        "path": "materials/video/IMG_5146.MOV"
+      },
+      {
+        "id": "C9BE1632-DA24-4884-BBB6-29EB20610EE8",
+        "path": "materials/video/IMG_5151.MOV"
+      },
+      {
+        "id": "1B04CD9E-E0CA-4E3F-B94C-2D845BFD3347",
+        "path": "materials/video/IMG_5150.MOV"
+      },
+      {
+        "id": "DA3D08A6-FFB8-46B6-9FD7-48B68555154D",
+        "path": "materials/video/IMG_5155.MOV"
+      },
+      {
+        "id": "E86481DE-D0ED-4EE3-94BF-3B694F95C008",
+        "path": "materials/video/IMG_5158.MOV"
+      },
+      {
+        "id": "FBD3BD42-A8DE-46D7-85AB-93A8E7DAE628",
+        "path": "materials/video/IMG_5159.MOV"
+      },
+      {
+        "id": "DAA3FB4D-DB5B-40D3-8603-0391F3998D18",
+        "path": "materials/video/IMG_5161.MOV"
+      },
+      {
+        "id": "D36738BC-9D7E-416C-8952-93C52A5A5C95",
+        "path": "materials/video/IMG_5163.MOV"
+      },
+      {
+        "id": "B3306405-EF8E-4A44-85C0-0757C27A6988",
+        "path": "materials/video/IMG_5166.MOV"
+      },
+      {
+        "id": "065F3728-6D0A-4AEF-9AD9-0A00A739342E",
+        "path": "materials/video/IMG_5172.MOV"
+      },
+      {
+        "id": "746ADCC6-EBF1-4B72-86F5-6A9A7A22B7A4",
+        "path": "materials/video/IMG_5176.MOV"
+      },
+      {
+        "id": "48769CD6-0EE8-4C2A-A82F-8FA3AF355A5E",
+        "path": "materials/video/IMG_5177.MOV"
+      },
+      {
+        "id": "E05C4135-11F8-49D7-B2F3-BE02DEFEF28D",
+        "path": "materials/video/IMG_5179.MOV"
+      },
+      {
+        "id": "CA214225-F78A-4202-9A7E-F676C2FD8C3E",
+        "path": "materials/video/IMG_5182.MOV"
+      },
+      {
+        "id": "D2669410-DA73-4E80-8314-5CA1C123D54E",
+        "path": "materials/video/IMG_5183.MOV"
+      },
+      {
+        "id": "7AA81AE8-43AA-4671-B1D3-67A4737928C2",
+        "path": "materials/video/IMG_5186.MOV"
+      },
+      {
+        "id": "8FBBFDE6-49F7-42CA-BE0E-F940BEFA45C0",
+        "path": "materials/video/IMG_5190.MOV"
+      },
+      {
+        "id": "2507FE8C-1600-4348-AB87-5B3FBA8F8EC3",
+        "path": "materials/video/IMG_5192.MOV"
+      },
+      {
+        "id": "DF7F2E5B-2C9E-4A5B-9F1A-1A785803FBE0",
+        "path": "materials/video/IMG_5196.MOV"
+      },
+      {
+        "id": "D99780DB-CDDC-4CED-BD9B-8D5F08C263C0",
+        "path": "materials/video/IMG_5198.MOV"
+      },
+      {
+        "id": "30457700-D280-4C05-8A50-423E10267818",
+        "path": "materials/video/IMG_5199.MOV"
+      },
+      {
+        "id": "2AA35A2F-9BCE-4F5D-839B-E81177CA11A6",
+        "path": "materials/video/IMG_5200.mov"
+      }
+    ],
+    "audios": []
+  },
+  "tracks": []
+}

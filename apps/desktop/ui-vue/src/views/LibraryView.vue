@@ -10,14 +10,12 @@
       <div class="content-narrow">
         <!-- 搜索栏 -->
         <div class="library-toolbar">
-          <div class="search-box">
-            <input
-              v-model="libraryStore.query"
-              class="form-input"
-              :placeholder="labels.library.search"
-              @keyup.enter="libraryStore.search()"
-            />
-          </div>
+          <SearchAutocomplete
+            v-model="libraryStore.query"
+            :placeholder="labels.library.search"
+            @search="libraryStore.search()"
+            @select-tag="onSelectTag"
+          />
           <div class="toolbar-controls">
             <select v-model="libraryStore.searchMode" class="form-select" style="width: 120px">
               <option value="hybrid">{{ labels.library.searchMode.hybrid }}</option>
@@ -55,10 +53,31 @@
           <span class="badge badge-info">{{ labels.library.totalAssets }}：{{ libraryStore.stats.total_assets }}</span>
           <span v-if="libraryStore.stats.video_assets" class="badge badge-info">视频 {{ libraryStore.stats.video_assets }}</span>
           <span v-if="libraryStore.stats.image_assets" class="badge badge-info">图片 {{ libraryStore.stats.image_assets }}</span>
+          <span v-if="libraryStore.totalMatches > 0 && libraryStore.query" class="badge badge-accent">
+            命中 {{ libraryStore.totalMatches }}
+          </span>
         </div>
+
+        <!-- P5-D: 自定义标签管理 -->
+        <CustomTagPanel @search-tag="onBrowseTag" />
+
+        <!-- 搜索分析面板 -->
+        <SearchAnalyticsPanel @search-query="onBrowseTag" />
+
+        <!-- 素材库健康仪表盘 -->
+        <LibraryHealthPanel />
+
+        <!-- P4-4: 标签浏览入口 -->
+        <TagBrowser @search-tag="onBrowseTag" />
 
         <!-- 导入面板 -->
         <IngestPanel />
+
+        <!-- v0.7 Phase B: 重复 / 路径 / Relink -->
+        <DuplicateGroupsPanel />
+        <LocationHealthPanel2 />
+        <RelinkReportPanel />
+        <ProjectRelinkPanel @search-library="onSearchFromRelink" />
 
         <!-- 素材列表 -->
         <div v-if="libraryStore.loading" class="empty-state">
@@ -76,6 +95,7 @@
             v-for="asset in libraryStore.results"
             :key="asset.uid"
             :asset="asset"
+            @show-evidence="openEvidence"
           />
         </div>
 
@@ -104,10 +124,19 @@
       </div>
     </div>
   </div>
+
+  <!-- P4-3: 证据链面板 -->
+  <EvidencePanel
+    :visible="evidenceVisible"
+    :asset-id="evidenceAssetId"
+    :asset-filename="evidenceFilename"
+    @close="evidenceVisible = false"
+    @feedback-done="onFeedbackDone"
+  />
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useAppStore } from '../stores/app.js'
 import { useLibraryStore } from '../stores/library.js'
 import labels from '../i18n/labels.js'
@@ -115,9 +144,51 @@ import AppNav from '../components/layout/AppNav.vue'
 import IngestPanel from '../components/library/IngestPanel.vue'
 import LibraryAssetCard from '../components/library/LibraryAssetCard.vue'
 import LibraryAssetRow from '../components/library/LibraryAssetRow.vue'
+import SearchAutocomplete from '../components/library/SearchAutocomplete.vue'
+import EvidencePanel from '../components/library/EvidencePanel.vue'
+import TagBrowser from '../components/library/TagBrowser.vue'
+import CustomTagPanel from '../components/library/CustomTagPanel.vue'
+import SearchAnalyticsPanel from '../components/library/SearchAnalyticsPanel.vue'
+import LibraryHealthPanel from '../components/library/LibraryHealthPanel.vue'
+import DuplicateGroupsPanel from '../components/library/DuplicateGroupsPanel.vue'
+import LocationHealthPanel2 from '../components/library/LocationHealthPanel2.vue'
+import RelinkReportPanel from '../components/library/RelinkReportPanel.vue'
+import ProjectRelinkPanel from '../components/library/ProjectRelinkPanel.vue'
 
 const appStore = useAppStore()
 const libraryStore = useLibraryStore()
+
+// Evidence panel state
+const evidenceVisible = ref(false)
+const evidenceAssetId = ref('')
+const evidenceFilename = ref('')
+
+function openEvidence({ assetId, filename }) {
+  evidenceAssetId.value = assetId
+  evidenceFilename.value = filename
+  evidenceVisible.value = true
+}
+
+function onSelectTag(item) {
+  // Tag selected from autocomplete — search triggers via @search event
+}
+
+function onBrowseTag(tagName) {
+  libraryStore.query = tagName
+  libraryStore.search()
+}
+
+// D-1: Jump from relink missing item → library search (one-way, hard rule #6)
+function onSearchFromRelink(assetName) {
+  const stem = assetName.replace(/\.[^.]+$/, '')
+  libraryStore.query = stem
+  libraryStore.search()
+}
+
+function onFeedbackDone(detail) {
+  // After feedback (confirm/reject/add), refresh search results to reflect score changes
+  libraryStore.search()
+}
 
 onMounted(async () => {
   await libraryStore.loadStats()
@@ -131,10 +202,6 @@ onMounted(async () => {
   gap: 12px;
   align-items: center;
   margin-bottom: 16px;
-}
-
-.search-box {
-  flex: 1;
 }
 
 .toolbar-controls {
@@ -168,6 +235,14 @@ onMounted(async () => {
   gap: 8px;
   margin-bottom: 16px;
   flex-wrap: wrap;
+}
+
+.badge-accent {
+  background: rgba(90, 141, 238, 0.15);
+  color: var(--accent);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 6px;
 }
 
 .library-grid {

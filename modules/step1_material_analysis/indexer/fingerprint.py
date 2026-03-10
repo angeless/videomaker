@@ -109,6 +109,33 @@ class VideoHasher:
         """判断两个哈希是否相似（汉明距离 <= threshold）"""
         return VideoHasher.hamming_distance(hash1, hash2) <= threshold
 
+    @staticmethod
+    def simhash_aggregate(hex_hashes: List[str]) -> str:
+        """
+        将多个等长十六进制哈希聚合为单一 SimHash。
+
+        算法：按 bit 位投票——某 bit 位在超过半数的哈希中为 1，则结果该位为 1。
+        结果是一个与输入等长的十六进制字符串，代表所有帧的整体内容指纹。
+
+        对转码/压缩鲁棒：单个帧哈希的微小变化不影响多数投票结果。
+        """
+        if not hex_hashes:
+            return ""
+        bit_len = len(hex_hashes[0]) * 4  # 每个十六进制字符 = 4 bits
+        # 初始化 bit 位计数器
+        counts = [0] * bit_len
+        for h in hex_hashes:
+            val = int(h, 16)
+            for i in range(bit_len):
+                if val & (1 << (bit_len - 1 - i)):
+                    counts[i] += 1
+        threshold = len(hex_hashes) / 2
+        result_bits = []
+        for c in counts:
+            result_bits.append("1" if c > threshold else "0")
+        result_int = int("".join(result_bits), 2)
+        return format(result_int, 'x').zfill(len(hex_hashes[0]))
+
 
 class FingerprintDB:
     """
