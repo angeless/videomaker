@@ -1,0 +1,20 @@
+{
+  "materials": {
+    "videos": [
+      {
+        "id": "mat_v1",
+        "path": "/old/moved/sunset_beach.mp4"
+      },
+      {
+        "id": "mat_v2",
+        "path": "/old/moved/city_timelapse.mp4"
+      },
+      {
+        "id": "mat_v3",
+        "path": "/missing/deleted_clip.mp4"
+      }
+    ],
+    "audios": []
+  },
+  "tracks": []
+}
