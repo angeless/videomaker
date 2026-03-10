@@ -47,6 +47,64 @@ def lib():
     with gml._connect() as conn:
         now = gml._now()
 
+        # ── Self-contained tag + category seed ──
+        # Do NOT rely on external seed files (_SEED_DATA_DIR).
+        # Insert the minimal categories and tags this test needs.
+        _test_categories = [
+            ("场景", "scene", 1),
+            ("地点", "place", 2),
+            ("物品", "object", 3),
+            ("动物", "animal", 4),
+            ("视觉风格", "visual_style", 5),
+            ("动作", "action", 6),
+            ("时间与环境", "time_environment", 7),
+            ("交通与建筑", "infrastructure", 8),
+        ]
+        cat_id_map = {}  # category_code → category_id
+        for cat_name, cat_code, sort_order in _test_categories:
+            conn.execute(
+                "INSERT OR IGNORE INTO tag_category (category_name, category_code, sort_order) VALUES (?, ?, ?)",
+                (cat_name, cat_code, sort_order),
+            )
+            cid = conn.execute(
+                "SELECT category_id FROM tag_category WHERE category_code = ?",
+                (cat_code,),
+            ).fetchone()[0]
+            cat_id_map[cat_code] = cid
+
+        _test_tags = [
+            # (tag_name, category_code, semantic_slot)
+            ("厨房", "place", "scene"), ("做饭", "action", "action"),
+            ("海边", "place", "scene"), ("日落", "time_environment", "time"),
+            ("夜景", "scene", "scene"), ("城市", "place", "scene"),
+            ("航拍", "visual_style", "style"), ("猫", "animal", "object"),
+            ("电影", "visual_style", "style"),
+        ]
+        tag_id_map = {}  # tag_name → tag_id
+        for tag_name, cat_code, sem_slot in _test_tags:
+            tag_code = f"test_{tag_name}"
+            conn.execute(
+                """INSERT OR IGNORE INTO tag
+                   (tag_name, normalized_name, tag_code, category_id,
+                    semantic_slot, is_active, source_type)
+                   VALUES (?, ?, ?, ?, ?, 1, 'test_seed')""",
+                (tag_name, tag_name, tag_code, cat_id_map[cat_code], sem_slot),
+            )
+            tid = conn.execute(
+                "SELECT tag_id FROM tag WHERE tag_name = ? AND is_active = 1",
+                (tag_name,),
+            ).fetchone()[0]
+            tag_id_map[tag_name] = tid
+
+        # Insert alias: 海滩 → 海边
+        conn.execute(
+            """INSERT OR IGNORE INTO tag_alias
+               (tag_id, alias_name, normalized_alias, source_type)
+               VALUES (?, '海滩', '海滩', 'test_seed')""",
+            (tag_id_map["海边"],),
+        )
+
+        # ── Assets ──
         assets = [
             ("uid_kitchen", "kitchen_cooking.mp4", "sha_kitchen", "厨房做饭场景，温馨家庭料理",
              "厨房 做饭 锅 灶台 温馨 室内 料理 家庭"),
@@ -73,7 +131,7 @@ def lib():
                  15.0, "1920x1080", 85, desc, sem_text, now, now),
             )
 
-        # Map assets to tags
+        # ── Map assets to tags (using self-contained tag_id_map) ──
         tag_mappings = {
             "uid_kitchen": [("厨房", 0.92), ("做饭", 0.85)],
             "uid_beach": [("海边", 0.90), ("日落", 0.80)],
@@ -85,11 +143,8 @@ def lib():
 
         for uid, tag_list in tag_mappings.items():
             for tag_name, score in tag_list:
-                row = conn.execute(
-                    "SELECT tag_id FROM tag WHERE tag_name = ? AND is_active = 1",
-                    (tag_name,),
-                ).fetchone()
-                if not row:
+                tid = tag_id_map.get(tag_name)
+                if not tid:
                     continue
                 band = "high" if score >= 0.80 else "medium"
                 conn.execute(
@@ -99,7 +154,7 @@ def lib():
                         confidence_band, source_summary, decision_reason,
                         created_at, updated_at)
                        VALUES (?,?,'asset',1, ?,?,0,?, ?,'test','[]',?,?)""",
-                    (uid, row[0], score, score, score, band, now, now),
+                    (uid, tid, score, score, score, band, now, now),
                 )
                 # Also add evidence
                 conn.execute(
@@ -107,7 +162,7 @@ def lib():
                        (asset_id, tag_id, semantic_slot, source_kind, source_model,
                         raw_value, base_score, weighted_score, created_at)
                        VALUES (?,?,?,?,?,?,?,?,?)""",
-                    (uid, row[0], "scene", "llm", "test", tag_name, score, score, now),
+                    (uid, tid, "scene", "llm", "test", tag_name, score, score, now),
                 )
 
         conn.commit()

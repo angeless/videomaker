@@ -39,6 +39,48 @@ def lib():
     with gml._connect() as conn:
         now = gml._now()
 
+        # ── Self-contained tag + category seed ──
+        # Do NOT rely on external seed files (_SEED_DATA_DIR).
+        _test_categories = [
+            ("地点", "place", 1),
+            ("动作", "action", 2),
+            ("动物", "animal", 3),
+        ]
+        cat_id_map = {}
+        for cat_name, cat_code, sort_order in _test_categories:
+            conn.execute(
+                "INSERT OR IGNORE INTO tag_category (category_name, category_code, sort_order) VALUES (?, ?, ?)",
+                (cat_name, cat_code, sort_order),
+            )
+            cid = conn.execute(
+                "SELECT category_id FROM tag_category WHERE category_code = ?",
+                (cat_code,),
+            ).fetchone()[0]
+            cat_id_map[cat_code] = cid
+
+        _test_tags = [
+            # (tag_name, category_code, semantic_slot)
+            ("厨房", "place", "scene"),
+            ("做饭", "action", "action"),
+            ("海边", "place", "scene"),
+            ("猫", "animal", "object"),
+        ]
+        tag_id_map = {}
+        for tag_name, cat_code, sem_slot in _test_tags:
+            tag_code = f"test_{tag_name}"
+            conn.execute(
+                """INSERT OR IGNORE INTO tag
+                   (tag_name, normalized_name, tag_code, category_id,
+                    semantic_slot, is_active, source_type)
+                   VALUES (?, ?, ?, ?, ?, 1, 'test_seed')""",
+                (tag_name, tag_name, tag_code, cat_id_map[cat_code], sem_slot),
+            )
+            tid = conn.execute(
+                "SELECT tag_id FROM tag WHERE tag_name = ? AND is_active = 1",
+                (tag_name,),
+            ).fetchone()[0]
+            tag_id_map[tag_name] = tid
+
         # Create test assets
         assets = [
             ("uid_ss_kitchen", "kitchen_ss.mp4", "sha_ssk", "厨房做饭",
@@ -69,11 +111,8 @@ def lib():
 
         for uid, tag_list in tag_mappings.items():
             for tag_name, score in tag_list:
-                row = conn.execute(
-                    "SELECT tag_id FROM tag WHERE tag_name = ? AND is_active = 1",
-                    (tag_name,),
-                ).fetchone()
-                if not row:
+                tid = tag_id_map.get(tag_name)
+                if not tid:
                     continue
                 band = "high" if score >= 0.80 else "medium"
                 conn.execute(
@@ -83,7 +122,7 @@ def lib():
                         confidence_band, source_summary, decision_reason,
                         created_at, updated_at)
                        VALUES (?,?,'asset',1, ?,?,0,?, ?,'test','[]',?,?)""",
-                    (uid, row[0], score, score, score, band, now, now),
+                    (uid, tid, score, score, score, band, now, now),
                 )
 
         conn.commit()
@@ -473,6 +512,32 @@ def classify_lib():
     lib = GlobalMediaLibrary.__new__(GlobalMediaLibrary)
     lib.db_path = db_path
     lib._init_db()
+
+    # ── Self-contained tag + category seed ──
+    with lib._connect() as conn:
+        _classify_categories = [
+            ("地点", "place", 1),
+            ("美食烹饪", "food_cooking", 2),
+            ("户外", "outdoor", 3),
+            ("自然", "nature", 4),
+        ]
+        for cat_name, cat_code, sort_order in _classify_categories:
+            conn.execute(
+                "INSERT OR IGNORE INTO tag_category (category_name, category_code, sort_order) VALUES (?, ?, ?)",
+                (cat_name, cat_code, sort_order),
+            )
+        place_cid = conn.execute(
+            "SELECT category_id FROM tag_category WHERE category_code = 'place'"
+        ).fetchone()[0]
+        conn.execute(
+            """INSERT OR IGNORE INTO tag
+               (tag_name, normalized_name, tag_code, category_id,
+                semantic_slot, is_active, source_type)
+               VALUES ('厨房', '厨房', 'test_厨房', ?, 'scene', 1, 'test_seed')""",
+            (place_cid,),
+        )
+        conn.commit()
+
     # Seed candidates of various types
     with lib._connect() as conn:
         # Noise candidates
@@ -494,18 +559,13 @@ def classify_lib():
                 occurrence_count, asset_count, review_status)
                VALUES ('IMG_1307', 'img_1307', 'search', 'search_query', 2, 0, 'pending')""",
         )
-        # Near-match candidate (substring of existing tag)
-        # First check if there's a tag with "厨房" to test alias merge
-        tag_row = conn.execute(
-            "SELECT tag_id, tag_name FROM tag WHERE normalized_name = '厨房' LIMIT 1"
-        ).fetchone()
-        if tag_row:
-            conn.execute(
-                """INSERT INTO learning_candidate
-                   (candidate_text, normalized_text, category_hint, source_kind,
-                    occurrence_count, asset_count, review_status)
-                   VALUES ('大厨房', '大厨房', 'food_cooking', 'llm', 10, 3, 'pending')""",
-            )
+        # Near-match candidate (substring of existing tag "厨房")
+        conn.execute(
+            """INSERT INTO learning_candidate
+               (candidate_text, normalized_text, category_hint, source_kind,
+                occurrence_count, asset_count, review_status)
+               VALUES ('大厨房', '大厨房', 'food_cooking', 'llm', 10, 3, 'pending')""",
+        )
         # Normal review candidate (no special pattern)
         conn.execute(
             """INSERT INTO learning_candidate
@@ -615,20 +675,48 @@ def promote_lib():
     lib._init_db()
 
     with lib._connect() as conn:
+        # ── Self-contained tag + category seed ──
+        # Insert the categories and tag that promotion tests depend on.
+        _promote_categories = [
+            ("地点", "place", 1),
+            ("动作", "action", 2),
+            ("美食", "food_cuisine", 3),
+            ("美食烹饪", "food_cooking", 4),
+            ("场景", "scene", 5),
+            ("户外", "outdoor", 6),
+        ]
+        for cat_name, cat_code, sort_order in _promote_categories:
+            conn.execute(
+                "INSERT OR IGNORE INTO tag_category (category_name, category_code, sort_order) VALUES (?, ?, ?)",
+                (cat_name, cat_code, sort_order),
+            )
+
+        # Insert the "厨房" tag needed for alias merge test
+        place_cid = conn.execute(
+            "SELECT category_id FROM tag_category WHERE category_code = 'place'"
+        ).fetchone()[0]
+        conn.execute(
+            """INSERT OR IGNORE INTO tag
+               (tag_name, normalized_name, tag_code, category_id,
+                semantic_slot, is_active, source_type)
+               VALUES ('厨房', '厨房', 'test_厨房', ?, 'scene', 1, 'test_seed')""",
+            (place_cid,),
+        )
+        conn.commit()
+
         # 1. Alias merge candidate: "大厨房" → should merge to "厨房"
         tag_row = conn.execute(
             "SELECT tag_id FROM tag WHERE normalized_name = '厨房' LIMIT 1"
         ).fetchone()
-        if tag_row:
-            cooccur = json.dumps({"merge_target_tag_id": tag_row[0], "merge_target_name": "厨房", "similarity": 0.67})
-            conn.execute(
-                """INSERT INTO learning_candidate
-                   (candidate_text, normalized_text, category_hint, source_kind,
-                    occurrence_count, asset_count, suggested_action, cooccur_json, review_status)
-                   VALUES ('大厨房', '大厨房', 'food_cooking', 'llm', 10, 3,
-                           'merge_to_alias', ?, 'pending')""",
-                (cooccur,),
-            )
+        cooccur = json.dumps({"merge_target_tag_id": tag_row[0], "merge_target_name": "厨房", "similarity": 0.67})
+        conn.execute(
+            """INSERT INTO learning_candidate
+               (candidate_text, normalized_text, category_hint, source_kind,
+                occurrence_count, asset_count, suggested_action, cooccur_json, review_status)
+               VALUES ('大厨房', '大厨房', 'food_cooking', 'llm', 10, 3,
+                       'merge_to_alias', ?, 'pending')""",
+            (cooccur,),
+        )
 
         # 2. Upgrade candidate: "星空咖啡" → should become new tag
         conn.execute(
