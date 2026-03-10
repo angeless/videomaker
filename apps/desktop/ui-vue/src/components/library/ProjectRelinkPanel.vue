@@ -381,7 +381,7 @@ function formatTime(ts) {
   <div class="prp-panel">
     <div class="prp-header" @click="expanded = !expanded">
       <span class="prp-chevron">{{ expanded ? '▾' : '▸' }}</span>
-      <span class="prp-title">工程素材 Relink</span>
+      <span class="prp-title">工程素材修复</span>
       <span v-if="summary && summary.changed_refs" class="badge badge-accent" style="margin-left:6px">
         {{ summary.changed_refs }} 可恢复
       </span>
@@ -390,6 +390,7 @@ function formatTime(ts) {
     </div>
 
     <div v-if="expanded" class="prp-body">
+      <div class="prp-subtitle">分析剪辑工程中的失效素材引用，并恢复到素材库中的可用路径</div>
       <!-- Validation warning -->
       <div v-if="store.projectRelinkValidation && !store.projectRelinkValidation.valid" class="prp-validation-warn">
         ⚠️ {{ (store.projectRelinkValidation.errors || []).join('; ') }}
@@ -922,6 +923,13 @@ function formatTime(ts) {
 .prp-chevron { font-size: 12px; opacity: 0.6; width: 14px; }
 .prp-title { flex: 1; }
 .prp-body { padding: 0 14px 14px; }
+
+.prp-subtitle {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
 
 .prp-validation-warn {
   padding: 6px 10px;

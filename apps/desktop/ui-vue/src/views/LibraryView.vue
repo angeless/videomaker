@@ -76,6 +76,9 @@
             @click="panelGroup = 'relink'"
           >工程修复</button>
         </div>
+        <div v-if="isLibraryEmpty" class="panel-group-hint">
+          首次使用：先导入素材，再搜索或浏览。需要修复剪辑工程请切换到「工程修复」。
+        </div>
 
         <!-- 组: 导入与浏览 (默认) -->
         <template v-if="panelGroup === 'browse'">
@@ -290,7 +293,14 @@ onMounted(async () => {
 .panel-group-switcher {
   display: flex;
   gap: 4px;
+  margin-bottom: 4px;
+}
+
+.panel-group-hint {
+  font-size: 11px;
+  color: var(--muted);
   margin-bottom: 12px;
+  line-height: 1.4;
 }
 
 .empty-state-actions {
