@@ -10,6 +10,7 @@
 - `capability-decomposition-v1.md`：按产品能力拆分（选题库/文案/粗剪/快剪/精剪/导出/配音）
 - `capabilities-api.md`：能力模块 API（可独立调用各能力）
 - `agent-usability-roadmap-v1.md`：Agent 易用性路线图（在人用流程不变前提下扩展 Agent API / 模板 / Skill 编排）
+- `changelog-stability-security-ux.md`：2026-03-01 稳定性/安全性/UX 优化记录（P0 subprocess timeout + P1 安全 + P2 功能，共修改11个文件）
 
 执行建议：
 1. 先读 `module-index.md`

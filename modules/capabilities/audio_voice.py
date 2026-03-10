@@ -437,6 +437,36 @@ def _is_cache_file_fresh(path: Path, max_age_seconds: float) -> bool:
         return False
 
 
+def _validate_remote_endpoint(endpoint: str) -> str:
+    """Validate that an endpoint URL is a safe external HTTPS/HTTP URL (no SSRF)."""
+    url = str(endpoint or "").strip()
+    if not url:
+        raise ValueError("endpoint URL 不能为空")
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"endpoint URL 必须使用 http 或 https 协议，当前: {parsed.scheme!r}")
+    host = (parsed.hostname or "").lower()
+    if not host:
+        raise ValueError("endpoint URL 缺少有效主机名")
+    # Block private/internal network ranges to prevent SSRF
+    _blocked = (
+        "localhost", "127.0.0.1", "0.0.0.0", "[::1]", "[::]",
+        "metadata.google.internal", "169.254.169.254",
+    )
+    if host in _blocked or host.startswith("10.") or host.startswith("192.168."):
+        raise ValueError(f"endpoint URL 不允许指向内网地址: {host}")
+    if host.startswith("172."):
+        parts = host.split(".")
+        if len(parts) >= 2:
+            try:
+                second = int(parts[1])
+                if 16 <= second <= 31:
+                    raise ValueError(f"endpoint URL 不允许指向内网地址: {host}")
+            except ValueError:
+                pass
+    return url
+
+
 def _http_json_post(
     *,
     endpoint: str,
@@ -445,6 +475,7 @@ def _http_json_post(
     timeout_seconds: float = 45.0,
 ) -> Dict:
     """POST JSON to endpoint and parse JSON response."""
+    safe_url = _validate_remote_endpoint(endpoint)
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     headers = {
         "Content-Type": "application/json",
@@ -455,7 +486,7 @@ def _http_json_post(
         headers["Authorization"] = f"Bearer {key}"
         headers["x-api-key"] = key
     req = urllib.request.Request(
-        str(endpoint).strip(),
+        safe_url,
         data=body,
         method="POST",
         headers=headers,
@@ -490,12 +521,13 @@ def _http_download_binary(
     timeout_seconds: float = 90.0,
 ) -> bytes:
     """Download binary bytes from URL."""
+    safe_url = _validate_remote_endpoint(url)
     headers = {}
     key = str(api_key or "").strip()
     if key:
         headers["Authorization"] = f"Bearer {key}"
         headers["x-api-key"] = key
-    req = urllib.request.Request(str(url).strip(), method="GET", headers=headers)
+    req = urllib.request.Request(safe_url, method="GET", headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=max(float(timeout_seconds), 1.0)) as resp:
             data = resp.read()

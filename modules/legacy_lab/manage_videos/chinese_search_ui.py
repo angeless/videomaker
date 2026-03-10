@@ -4,6 +4,7 @@
 """
 
 import json
+import sys
 from pathlib import Path
 import argparse
 from datetime import datetime
@@ -171,10 +172,13 @@ class ChineseVideoSearchUI:
         print(f"\n总计: {len(tags_list)} 个标签")
     
     def interactive_search(self):
-        """交互式搜索"""
+        """交互式搜索（仅限终端环境，非交互环境直接返回）"""
+        if not sys.stdin.isatty():
+            print("⚠️  非交互式环境，跳过 interactive_search")
+            return
         print("🎬 中文视频搜索系统")
         print("=" * 60)
-        
+
         while True:
             print("\n请选择操作:")
             print("1. 🔍 关键词搜索")
