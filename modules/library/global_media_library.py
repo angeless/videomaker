@@ -7,6 +7,7 @@ import base64
 import hashlib
 import importlib
 import json
+import logging
 import os
 import re
 import shutil
@@ -27,6 +28,8 @@ try:
     from modules.library.project_relink_adapter import get_adapter as _get_relink_adapter
 except ImportError:
     _get_relink_adapter = None
+
+_gml_logger = logging.getLogger(__name__)
 
 SCRIPT_DIR = Path(__file__).parent.resolve()
 REPO_ROOT = SCRIPT_DIR.parents[2]
@@ -2656,6 +2659,7 @@ class GlobalMediaLibrary:
         return True
 
     def _refresh_embeddings_incremental(self, conn: sqlite3.Connection, max_items: int = 12) -> int:
+        _re_t0 = time.perf_counter()
         if max_items <= 0:
             return 0
         client = self._openai_client()
@@ -2701,6 +2705,13 @@ class GlobalMediaLibrary:
                 done += 1
                 if done >= max_items:
                     break
+        _re_elapsed = (time.perf_counter() - _re_t0) * 1000
+        _gml_logger.info("[perf] refresh_embeddings: %.1fms refreshed=%d", _re_elapsed, done)
+        try:
+            from modules.app_api.services.perf_log import record as _perf_rec
+            _perf_rec("refresh_embeddings", _re_elapsed, {"refreshed": done})
+        except Exception:
+            pass
         return done
 
     def _heuristic_structured_tags(self, evidence: Dict[str, Any]) -> Dict[str, Any]:
@@ -5282,6 +5293,7 @@ class GlobalMediaLibrary:
         return self._build_semantic_bundle(path, analysis or {}, scene_text, mood_text, objects, quality_score)
 
     def _analyze_video(self, path: Path) -> Dict:
+        _av_t0 = time.perf_counter()
         toolkit = self._toolkit_instance()
         analysis = toolkit.analyze_single_video(path)
 
@@ -5374,6 +5386,13 @@ class GlobalMediaLibrary:
         gps_latitude = gps["latitude"] if isinstance(gps, dict) and gps.get("latitude") is not None else None
         gps_longitude = gps["longitude"] if isinstance(gps, dict) and gps.get("longitude") is not None else None
 
+        _av_elapsed = (time.perf_counter() - _av_t0) * 1000
+        _gml_logger.info("[perf] analyze_video: %.1fms path=%s", _av_elapsed, path.name)
+        try:
+            from modules.app_api.services.perf_log import record as _perf_rec
+            _perf_rec("analyze_video", _av_elapsed, {"path": str(path.name)})
+        except Exception:
+            pass
         return {
             "analysis": analysis,
             "duration": duration,
@@ -6183,6 +6202,7 @@ class GlobalMediaLibrary:
         progress_callback=None,
         should_cancel=None,
     ) -> Dict:
+        _ivp_t0 = time.perf_counter()
         video_list = [Path(p).resolve() for p in videos]
         result = {
             "source_type": source_type,
@@ -6243,6 +6263,15 @@ class GlobalMediaLibrary:
             except Exception:
                 pass
 
+        _ivp_elapsed = (time.perf_counter() - _ivp_t0) * 1000
+        _gml_logger.info("[perf] ingest_video_paths: %.1fms scanned=%d indexed=%d",
+                         _ivp_elapsed, result["scanned"], result["indexed"])
+        try:
+            from modules.app_api.services.perf_log import record as _perf_rec
+            _perf_rec("ingest_video_paths", _ivp_elapsed,
+                      {"scanned": result["scanned"], "indexed": result["indexed"]})
+        except Exception:
+            pass
         return result
 
     def _ingest_image_paths(
@@ -6254,6 +6283,7 @@ class GlobalMediaLibrary:
         progress_callback=None,
         should_cancel=None,
     ) -> Dict:
+        _iip_t0 = time.perf_counter()
         image_list = [Path(p).resolve() for p in images]
         result = {
             "source_type": source_type,
@@ -6312,6 +6342,15 @@ class GlobalMediaLibrary:
             except Exception:
                 pass
 
+        _iip_elapsed = (time.perf_counter() - _iip_t0) * 1000
+        _gml_logger.info("[perf] ingest_image_paths: %.1fms scanned=%d indexed=%d",
+                         _iip_elapsed, result["scanned"], result["indexed"])
+        try:
+            from modules.app_api.services.perf_log import record as _perf_rec
+            _perf_rec("ingest_image_paths", _iip_elapsed,
+                      {"scanned": result["scanned"], "indexed": result["indexed"]})
+        except Exception:
+            pass
         return result
 
     # ------------------------------------------------------------------
@@ -8241,6 +8280,11 @@ class GlobalMediaLibrary:
                     search_duration_ms=_elapsed_ms,
                 )
                 conn.commit()
+            except Exception:
+                pass
+            try:
+                from modules.app_api.services.perf_log import record as _perf_rec
+                _perf_rec("search_assets", _elapsed_ms, {"query": q, "results": len(ranked), "mode": mode})
             except Exception:
                 pass
 

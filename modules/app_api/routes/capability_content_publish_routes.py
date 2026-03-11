@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Optional
 import uuid
 
 from flask import Blueprint, jsonify, request
@@ -25,6 +25,9 @@ def create_content_publish_capability_blueprint(
     save_content_publish_history: Callable[[list], None],
     read_project_json: Callable[[str, Any], Any],
     project_data_path: Callable[[str], Any],
+    idempotency_lookup: Optional[Callable] = None,
+    idempotency_put_success: Optional[Callable] = None,
+    idempotency_make_cache_key: Optional[Callable] = None,
 ) -> Blueprint:
     bp = Blueprint("cap_content_publish_api", __name__)
 
@@ -97,7 +100,7 @@ def create_content_publish_capability_blueprint(
         if input_mode == "project" and project_dir_getter() is None:
             return jsonify({"error": "项目未加载"}), 400
 
-        from modules.capabilities.content_publish import run_publish_plan
+        from modules.capabilities.content_publish import run_publish_plan, _build_publish_idempotency_digest
 
         plan = payload.get("plan", {}) if isinstance(payload.get("plan"), dict) else {}
         if not plan:
@@ -111,14 +114,27 @@ def create_content_publish_capability_blueprint(
             session_id = str(plan.get("session", {}).get("session_id", "") if isinstance(plan.get("session"), dict) else "")
         session = sessions.get(session_id, {}) if session_id else {}
         connectors = resolve_content_publish_connectors(payload)
+        run_dry = bool(payload.get("dry_run", plan.get("dry_run", False)))
         output_root = parse_str_param(payload.get("output_root", ""))
         if not output_root and project_dir_getter() is not None:
             output_root = str((project_dir_getter() / "output" / "content_publish").resolve())
 
+        # ── idempotency guard ──
+        cache_key = None
+        if idempotency_lookup is not None and idempotency_make_cache_key is not None:
+            digest = _build_publish_idempotency_digest(plan, connectors, run_dry)
+            cache_key = idempotency_make_cache_key(
+                "/capabilities/content_publish/run",
+                {"actor_id": "", "idempotency_key": digest},
+            )
+            hit, source = idempotency_lookup(cache_key)
+            if hit is not None:
+                return jsonify({**hit.get("body", {}), "idempotency_replay": True, "idempotency_source": source})
+
         result = run_publish_plan(
             plan=plan,
             session=session,
-            dry_run=bool(payload.get("dry_run", plan.get("dry_run", False))),
+            dry_run=run_dry,
             rerun_failed_only=bool(payload.get("rerun_failed_only", False)),
             random_seed=payload.get("random_seed", 7),
             connectors=connectors,
@@ -141,16 +157,62 @@ def create_content_publish_capability_blueprint(
         if project_dir_getter() is not None:
             save_content_publish_history(history)
             write_json_result(project_data_path("content_publish_run_last.json"), run_record)
-        waiting_auth = str(result.get("status", "")).lower() == "waiting_auth"
-        return jsonify(
-            {
-                "ok": True,
-                "run": run_record,
-                "state": result.get("status"),
-                "auth_required": waiting_auth,
-                "auth_hint": "会话过期，请扫码续登后重试" if waiting_auth else "",
-            }
-        )
+
+        from modules.app_api.services.audit_log import audit as _audit
+        summary = result.get("summary", {}) if isinstance(result.get("summary"), dict) else {}
+        _audit("publish_run", "content_publish", run_record["run_id"],
+               actor=f"local:{request.remote_addr}",
+               detail={
+                   "dry_run": bool(run_dry),
+                   "connector_count": len(connectors),
+                   "posted": summary.get("posted", 0),
+                   "failed": summary.get("failed", 0),
+                   "blocked": summary.get("blocked", 0),
+               })
+
+        # ── publish_blocked 审计 ──
+        if summary.get("blocked", 0) > 0:
+            blocked_platforms = [
+                s.get("platform_id", "") for s in (result.get("steps") or [])
+                if isinstance(s, dict) and s.get("run_state") == "blocked"
+            ]
+            _audit("publish_blocked", "content_publish", run_record["run_id"],
+                   actor=f"local:{request.remote_addr}", status="blocked",
+                   detail={"platforms": blocked_platforms[:10]})
+
+        # ── publish_error 审计（逐条，detail 只保留摘要）──
+        if summary.get("failed", 0) > 0:
+            for step in (result.get("steps") or []):
+                if not isinstance(step, dict) or step.get("run_state") != "failed":
+                    continue
+                ed = step.get("error_detail", {}) if isinstance(step.get("error_detail"), dict) else {}
+                _audit("publish_error", "content_publish", run_record["run_id"],
+                       actor=f"local:{request.remote_addr}", status="error",
+                       detail={
+                           "platform": step.get("platform_id", ""),
+                           "error_class": ed.get("error_class", "unknown"),
+                           "error": str(step.get("error", ""))[:200],
+                           "dry_run": bool(run_dry),
+                       })
+
+        # ── idempotency: 只缓存明确成功的结果 ──
+        response_body = {
+            "ok": True,
+            "run": run_record,
+            "state": result.get("status"),
+            "auth_required": str(result.get("status", "")).lower() == "waiting_auth",
+            "auth_hint": "会话过期，请扫码续登后重试" if str(result.get("status", "")).lower() == "waiting_auth" else "",
+        }
+        if (
+            cache_key is not None
+            and idempotency_put_success is not None
+            and result.get("status") in ("posted", "planned")
+            and summary.get("failed", 0) == 0
+            and summary.get("blocked", 0) == 0
+        ):
+            idempotency_put_success(cache_key, status=200, body=response_body)
+
+        return jsonify(response_body)
 
     @bp.route("/api/capabilities/content_publish/rerun", methods=["POST"])
     def api_content_publish_rerun():
@@ -209,6 +271,8 @@ def create_content_publish_capability_blueprint(
         if project_dir_getter() is not None:
             save_content_publish_history(history)
             write_json_result(project_data_path("content_publish_run_last.json"), run_record)
+        from modules.app_api.services.audit_log import audit as _audit
+        _audit("publish_rerun", "content_publish", run_record["run_id"], actor=f"local:{request.remote_addr}", detail={"source_run_id": run_id, "connector_count": len(connectors)})
 
         waiting_auth = str(result.get("status", "")).lower() == "waiting_auth"
         return jsonify(

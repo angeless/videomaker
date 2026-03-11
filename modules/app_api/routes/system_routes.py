@@ -54,4 +54,76 @@ def create_system_blueprint(
             return jsonify({"error": "preflight 报告不可用"}), 500
         return jsonify({"ok": True, "preflight": report})
 
+    # ── observability endpoints ────────────────────────────────────────
+
+    @bp.route("/api/system/startup-timing", methods=["GET"])
+    def api_system_startup_timing():
+        from modules.app_api.services.startup_timing import snapshot
+        return jsonify({"ok": True, "startup": snapshot()})
+
+    @bp.route("/api/system/perf", methods=["GET"])
+    def api_system_perf():
+        from modules.app_api.services.perf_log import query_stats, recent
+        operation = str(request.args.get("operation", "") or "").strip()
+        since = str(request.args.get("since", "") or "").strip()
+        return jsonify({
+            "ok": True,
+            "stats": query_stats(operation=operation, since=since),
+            "recent": recent(limit=50),
+        })
+
+    @bp.route("/api/system/audit", methods=["GET"])
+    def api_system_audit():
+        from modules.app_api.services.audit_log import query as audit_query, count as audit_count
+        operation = str(request.args.get("operation", "") or "").strip()
+        resource_type = str(request.args.get("resource_type", "") or "").strip()
+        actor = str(request.args.get("actor", "") or "").strip()
+        since = str(request.args.get("since", "") or "").strip()
+        limit = min(int(request.args.get("limit", 200) or 200), 1000)
+        entries = audit_query(
+            operation=operation,
+            resource_type=resource_type,
+            actor=actor,
+            since=since,
+            limit=limit,
+        )
+        return jsonify({
+            "ok": True,
+            "entries": entries,
+            "count": len(entries),
+            "total": audit_count(since=since),
+            "filters": {
+                "operation": operation or None,
+                "resource_type": resource_type or None,
+                "actor": actor or None,
+                "since": since or None,
+                "limit": limit,
+            },
+        })
+
+    @bp.route("/api/system/logs/export", methods=["POST"])
+    def api_system_logs_export():
+        from modules.app_api.services.logging_service import current_log_file
+        log_file = current_log_file()
+        if not log_file or not log_file.exists():
+            return jsonify({"error": "日志文件不可用"}), 404
+        payload = request.json or {}
+        fmt = str(payload.get("format", "text")).lower()
+        tail_lines = int(payload.get("tail", 500))
+        lines = log_file.read_text(encoding="utf-8", errors="replace").splitlines()
+        picked = lines[-tail_lines:] if tail_lines > 0 else lines
+        if fmt == "json":
+            return jsonify({
+                "ok": True,
+                "lines": picked,
+                "total_lines": len(lines),
+                "log_file": str(log_file),
+            })
+        from flask import Response
+        return Response(
+            "\n".join(picked),
+            mimetype="text/plain",
+            headers={"Content-Disposition": "attachment; filename=videoeditor_session.log"},
+        )
+
     return bp

@@ -166,6 +166,20 @@ _library = GlobalMediaLibrary()
 _secret_store: SecretStore = build_secret_store(service_name="videoeditor.ai")
 _job_store: Optional[JobStore] = None
 _job_store_path: Optional[Path] = None
+
+# kind → rerun/run endpoint for recovery hints
+_RETRY_HINT_MAP: Dict[str, Optional[str]] = {
+    "social_export": "/api/capabilities/social_export/rerun",
+    "custom_workflow": "/api/workflows/runs/{run_id}/rerun",
+    "library_ingest_local": "/api/library/ingest/local",
+    "library_ingest_local_images": "/api/library/ingest/local/images",
+    "library_ingest_gdrive": "/api/library/ingest/gdrive",
+    "library_ingest_gdrive_images": "/api/library/ingest/gdrive",
+    "content_publish": "/api/capabilities/content_publish/rerun",
+    "audio_voice": None,
+    "workflow_step": None,
+}
+
 app.register_blueprint(
     create_publish_prep_blueprint(
         project_dir_getter=lambda: _project_dir,
@@ -257,6 +271,7 @@ app.register_blueprint(
         system_load_snapshot_getter=lambda: _system_load_snapshot(),
         state_dict_getter=lambda: _state_dict(),
         estimate_job_eta=lambda job: _estimate_job_eta(job),
+        retry_hint_map=_RETRY_HINT_MAP,
     )
 )
 app.register_blueprint(
@@ -292,6 +307,9 @@ app.register_blueprint(
         save_content_publish_history=lambda history: _save_content_publish_history(history),
         read_project_json=lambda filename, fallback=None: _read_project_json(filename, fallback=fallback),
         project_data_path=lambda filename: _project_data_path(filename),
+        idempotency_lookup=lambda key: _ensure_capability_idempotency_store().lookup(key),
+        idempotency_put_success=lambda key, **kw: _ensure_capability_idempotency_store().put_success(key, **kw),
+        idempotency_make_cache_key=lambda path, ctx: _ensure_capability_idempotency_store().make_cache_key(path, ctx),
     )
 )
 app.register_blueprint(
@@ -7483,6 +7501,26 @@ def _resolve_content_publish_connectors(payload: Dict[str, Any]) -> Dict[str, Di
 
 def create_app(project_dir: Optional[str] = None):
     """创建并配置 Flask app，可选预加载项目。"""
+    # Ensure logging & perf_log are initialised (no-op if launcher already did it)
+    try:
+        from modules.app_api.services.logging_service import init_logging
+        init_logging()
+    except Exception:
+        pass
+    try:
+        from modules.app_api.services.perf_log import init_perf_log as _init_pl
+        _pl_path = Path(_library.db_path).parent / "perf_log.db" if _library.db_path else None
+        if _pl_path:
+            _init_pl(_pl_path)
+    except Exception:
+        pass
+    try:
+        from modules.app_api.services.audit_log import init_audit_log as _init_al
+        _al_path = Path(_library.db_path).parent / "audit_log.db" if _library.db_path else None
+        if _al_path:
+            _init_al(_al_path)
+    except Exception:
+        pass
     try:
         _restore_jobs_from_store()
     except Exception:

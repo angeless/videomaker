@@ -127,8 +127,10 @@ def create_workflow_blueprint(
 
     @bp.route("/api/workflows/run", methods=["POST"])
     def api_workflows_run():
+        from modules.app_api.services.audit_log import audit as _audit
         payload = request.json or {}
         ctx = parse_request_context()
+        _actor = f"{ctx.get('actor_type', 'human')}:{ctx.get('actor_id', '')}"
         try:
             workflow = resolve_custom_workflow_from_payload(payload)
             ret = start_custom_workflow_run(
@@ -138,7 +140,9 @@ def create_workflow_blueprint(
                 source="api/workflows/run",
             )
         except Exception as exc:
+            _audit("run", "workflow", None, actor=_actor, status="error", detail={"error": str(exc)})
             return jsonify({"error": f"workflow 执行失败: {exc}"}), 400
+        _audit("run", "workflow", str(ret.get("run_id", "")), actor=_actor)
         ret["request_context"] = ctx
         return jsonify(ret)
 
@@ -244,7 +248,11 @@ def create_workflow_blueprint(
                 source=f"api/workflows/runs/{run_id}/rerun",
             )
         except Exception as exc:
+            from modules.app_api.services.audit_log import audit as _audit
+            _audit("rerun", "workflow", run_id, actor=f"{ctx.get('actor_type', 'human')}:{ctx.get('actor_id', '')}", status="error", detail={"error": str(exc)})
             return jsonify({"error": f"workflow 重跑失败: {exc}"}), 400
+        from modules.app_api.services.audit_log import audit as _audit
+        _audit("rerun", "workflow", str(ret.get("run_id", "")), actor=f"{ctx.get('actor_type', 'human')}:{ctx.get('actor_id', '')}", detail={"source_run_id": run_id})
         ret["source_run_id"] = run_id
         ret["rerun_context"] = deepcopy(run_payload.get("rerun_context", {}))
         ret["request_context"] = ctx
@@ -252,7 +260,9 @@ def create_workflow_blueprint(
 
     @bp.route("/api/workflows/<workflow_id>", methods=["DELETE"])
     def api_workflows_delete(workflow_id: str):
+        from modules.app_api.services.audit_log import audit as _audit
         ctx = parse_request_context()
+        _actor = f"{ctx.get('actor_type', 'human')}:{ctx.get('actor_id', '')}"
         workflow_key = normalize_agent_template_id(workflow_id)
         if not workflow_key:
             return jsonify({"error": "workflow_id 无效"}), 400
@@ -260,8 +270,10 @@ def create_workflow_blueprint(
             store = read_custom_workflow_store()
             deleted = store.pop(workflow_key, None)
             if deleted is None:
+                _audit("delete", "workflow", workflow_key, actor=_actor, status="error", detail={"error": "not found"})
                 return jsonify({"error": f"workflow 不存在: {workflow_key}"}), 404
             save_custom_workflow_store(store)
+        _audit("delete", "workflow", workflow_key, actor=_actor)
         return jsonify({"ok": True, "deleted": deleted, "request_context": ctx})
 
     return bp

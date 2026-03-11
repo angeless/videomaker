@@ -50,9 +50,11 @@ def create_settings_blueprint(
 
     @bp.route("/api/settings/ai", methods=["POST"])
     def api_save_ai_settings():
+        from modules.app_api.services.audit_log import audit as _audit
         data = request.json or {}
         ai = save_ai_settings(data)
         apply_ai_env(ai)
+        _audit("config_change", "settings", "ai", actor=f"local:{request.remote_addr}", detail={"keys_changed": sorted(data.keys())})
         return jsonify({"ok": True, **public_ai_settings(ai)})
 
     @bp.route("/api/settings/ui", methods=["GET"])
@@ -81,8 +83,10 @@ def create_settings_blueprint(
 
     @bp.route("/api/settings/publish", methods=["POST"])
     def api_save_publish_settings():
+        from modules.app_api.services.audit_log import audit as _audit
         data = request.json or {}
         settings = save_publish_settings(data)
+        _audit("config_change", "settings", "publish", actor=f"local:{request.remote_addr}", detail={"keys_changed": sorted(data.keys())})
         connectors = settings.get("connectors", {})
         if not isinstance(connectors, dict):
             connectors = {}

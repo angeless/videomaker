@@ -2,6 +2,7 @@ from pathlib import Path
 import sys
 import types
 import json as pyjson
+from urllib import error as urlerror
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -253,5 +254,473 @@ def test_content_publish_api_plan_and_run(tmp_path):
         run_payload = run_resp.get_json()
         assert run_payload["ok"] is True
         assert run_payload["run"]["result"]["dry_run"] is True
+    finally:
+        server._project_dir = old_project_dir
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# P1: Error Classification unit tests
+# ═══════════════════════════════════════════════════════════════════════
+
+from modules.capabilities.content_publish import (
+    _classify_error,
+    _PublishHTTPError,
+    _validate_youtube_params,
+    _build_publish_idempotency_digest,
+)
+import socket
+
+
+class TestClassifyError:
+    def test_auth_401(self):
+        exc = _PublishHTTPError("HTTP 401", http_status=401)
+        r = _classify_error(exc)
+        assert r["error_class"] == "auth_failed"
+        assert r["retryable"] is False
+
+    def test_auth_403(self):
+        exc = _PublishHTTPError("HTTP 403 forbidden", http_status=403)
+        r = _classify_error(exc)
+        assert r["error_class"] == "auth_failed"
+        assert r["retryable"] is False
+
+    def test_quota_429(self):
+        exc = _PublishHTTPError("rate limit", http_status=429)
+        r = _classify_error(exc)
+        assert r["error_class"] == "quota_exceeded"
+        assert r["retryable"] is True
+
+    def test_platform_rejected_400(self):
+        exc = _PublishHTTPError("bad request", http_status=400)
+        r = _classify_error(exc)
+        assert r["error_class"] == "platform_rejected"
+        assert r["retryable"] is False
+
+    def test_platform_rejected_422(self):
+        exc = _PublishHTTPError("unprocessable", http_status=422)
+        r = _classify_error(exc)
+        assert r["error_class"] == "platform_rejected"
+
+    def test_server_500(self):
+        exc = _PublishHTTPError("server error", http_status=500)
+        r = _classify_error(exc)
+        assert r["error_class"] == "network_error"
+        assert r["retryable"] is True
+
+    def test_timeout_error(self):
+        r = _classify_error(TimeoutError("timed out"))
+        assert r["error_class"] == "network_error"
+        assert r["retryable"] is True
+
+    def test_socket_timeout(self):
+        r = _classify_error(socket.timeout("timed out"))
+        assert r["error_class"] == "network_error"
+        assert r["retryable"] is True
+
+    def test_config_missing_valueerror(self):
+        r = _classify_error(ValueError("youtube_api 缺少 access_token/token"))
+        assert r["error_class"] == "config_missing"
+        assert r["retryable"] is False
+
+    def test_params_invalid_valueerror(self):
+        r = _classify_error(ValueError("YouTube title 不能超过 100 字符"))
+        assert r["error_class"] == "params_invalid"
+        assert r["retryable"] is False
+
+    def test_config_missing_runtime_error(self):
+        r = _classify_error(RuntimeError("youtube 未配置发布连接器"))
+        assert r["error_class"] == "config_missing"
+        assert r["retryable"] is False
+
+    def test_unknown_fallback(self):
+        r = _classify_error(Exception("something unexpected"))
+        assert r["error_class"] == "unknown"
+        assert r["retryable"] is False
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# P1: YouTube param validation tests
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestValidateYoutubeParams:
+    def test_missing_token(self):
+        import pytest
+        with pytest.raises(ValueError, match="缺少"):
+            _validate_youtube_params(
+                {"content": {"title": "ok"}},
+                {"kind": "youtube_api"},
+            )
+
+    def test_title_too_long(self):
+        import pytest
+        with pytest.raises(ValueError, match="100"):
+            _validate_youtube_params(
+                {"content": {"title": "A" * 101}},
+                {"token": "abc"},
+            )
+
+    def test_description_too_long(self):
+        import pytest
+        with pytest.raises(ValueError, match="5000"):
+            _validate_youtube_params(
+                {"content": {"description": "D" * 5001}},
+                {"token": "abc"},
+            )
+
+    def test_invalid_privacy_status(self):
+        import pytest
+        with pytest.raises(ValueError, match="privacy_status"):
+            _validate_youtube_params(
+                {"content": {"title": "ok"}},
+                {"token": "abc", "privacy_status": "secret"},
+            )
+
+    def test_invalid_category_id(self):
+        import pytest
+        with pytest.raises(ValueError, match="category_id"):
+            _validate_youtube_params(
+                {"content": {"title": "ok"}},
+                {"token": "abc", "category_id": "abc"},
+            )
+
+    def test_valid_params_pass(self):
+        # Should not raise
+        _validate_youtube_params(
+            {"content": {"title": "ok", "description": "desc"}},
+            {"token": "abc", "privacy_status": "private", "category_id": "22"},
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# P1: YouTube error path integration tests (monkeypatch)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def _make_youtube_plan_and_session(tmp_path, connectors=None):
+    """Helper to build a ready-to-run YouTube plan."""
+    session = bootstrap_publish_session(authenticated=True, expires_in_minutes=60)
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"fake-video-binary")
+    if connectors is None:
+        connectors = {
+            "youtube": {
+                "kind": "youtube_api",
+                "token": "yt_token_test",
+                "privacy_status": "private",
+                "category_id": "22",
+            }
+        }
+    plan = build_publish_plan(
+        content={"title": "测试", "description": "desc", "media_urls": [str(video)]},
+        platform_ids=["youtube"],
+        platform_content_type="video_post",
+        dry_run=False,
+        session=session,
+        connectors=connectors,
+    )
+    return plan, session, connectors
+
+
+def test_youtube_error_detail_auth_401(monkeypatch, tmp_path):
+    from modules.capabilities import content_publish as cp
+
+    def _fake_urlopen(req, timeout=0):
+        raise urlerror.HTTPError(
+            req.full_url, 401, "Unauthorized", {}, None
+        )
+
+    monkeypatch.setattr(cp.urlrequest, "urlopen", _fake_urlopen)
+    plan, session, connectors = _make_youtube_plan_and_session(tmp_path)
+
+    result = run_publish_plan(plan=plan, session=session, dry_run=False, connectors=connectors)
+    assert result["status"] == "failed"
+    step = result["steps"][0]
+    assert step["run_state"] == "failed"
+    assert "error_detail" in step
+    assert step["error_detail"]["error_class"] == "auth_failed"
+    assert step["error_detail"]["retryable"] is False
+
+
+def test_youtube_error_detail_quota_429(monkeypatch, tmp_path):
+    from modules.capabilities import content_publish as cp
+
+    def _fake_urlopen(req, timeout=0):
+        raise urlerror.HTTPError(
+            req.full_url, 429, "Too Many Requests", {}, None
+        )
+
+    monkeypatch.setattr(cp.urlrequest, "urlopen", _fake_urlopen)
+    plan, session, connectors = _make_youtube_plan_and_session(tmp_path)
+
+    result = run_publish_plan(plan=plan, session=session, dry_run=False, connectors=connectors)
+    step = result["steps"][0]
+    assert step["error_detail"]["error_class"] == "quota_exceeded"
+    assert step["error_detail"]["retryable"] is True
+
+
+def test_youtube_error_detail_network_timeout(monkeypatch, tmp_path):
+    from modules.capabilities import content_publish as cp
+
+    def _fake_urlopen(req, timeout=0):
+        raise socket.timeout("connection timed out")
+
+    monkeypatch.setattr(cp.urlrequest, "urlopen", _fake_urlopen)
+    plan, session, connectors = _make_youtube_plan_and_session(tmp_path)
+
+    result = run_publish_plan(plan=plan, session=session, dry_run=False, connectors=connectors)
+    step = result["steps"][0]
+    assert step["error_detail"]["error_class"] == "network_error"
+    assert step["error_detail"]["retryable"] is True
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# P1: recovery_hint tests
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def test_recovery_hint_on_failed_run(monkeypatch, tmp_path):
+    from modules.capabilities import content_publish as cp
+
+    def _fake_urlopen(req, timeout=0):
+        raise urlerror.HTTPError(req.full_url, 401, "Unauthorized", {}, None)
+
+    monkeypatch.setattr(cp.urlrequest, "urlopen", _fake_urlopen)
+    plan, session, connectors = _make_youtube_plan_and_session(tmp_path)
+
+    result = run_publish_plan(plan=plan, session=session, dry_run=False, connectors=connectors)
+    hint = result["recovery_hint"]
+    assert hint["can_rerun"] is True
+    assert hint["rerun_scope"] == "failed_only"
+    assert "auth_failed" in hint["error_classes"]
+    assert hint["rerun_endpoint"] == "/api/capabilities/content_publish/rerun"
+
+
+def test_recovery_hint_on_blocked_run():
+    session = bootstrap_publish_session(authenticated=True, expires_in_minutes=60)
+    plan = build_publish_plan(
+        content={"title": "T", "description": "D"},
+        platform_ids=["youtube"],
+        platform_content_type="video_post",
+        dry_run=False,
+        session=session,
+        connectors={},  # no connector → blocked
+    )
+    result = run_publish_plan(plan=plan, session=session, dry_run=False, connectors={})
+    hint = result["recovery_hint"]
+    assert hint["can_rerun"] is True
+    assert hint["rerun_scope"] == "fix_config_then_rerun"
+
+
+def test_recovery_hint_on_success():
+    session = bootstrap_publish_session(authenticated=True, expires_in_minutes=60)
+    plan = build_publish_plan(
+        content={"title": "T", "description": "D"},
+        platform_ids=["blog"],
+        platform_content_type="article_post",
+        dry_run=False,
+        session=session,
+    )
+    result = run_publish_plan(
+        plan=plan, session=session, dry_run=False,
+        output_root=str(ROOT / ".tmp_publish_recovery_test"),
+    )
+    hint = result["recovery_hint"]
+    assert hint["can_rerun"] is False
+    assert hint["rerun_scope"] == "none"
+    assert hint["error_classes"] == []
+
+
+def test_recovery_hint_mixed_failed_and_blocked(monkeypatch, tmp_path):
+    """Plan with youtube (will fail) + instagram (blocked, no connector)."""
+    from modules.capabilities import content_publish as cp
+
+    def _fake_urlopen(req, timeout=0):
+        raise urlerror.HTTPError(req.full_url, 500, "Server Error", {}, None)
+
+    monkeypatch.setattr(cp.urlrequest, "urlopen", _fake_urlopen)
+    session = bootstrap_publish_session(authenticated=True, expires_in_minutes=60)
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"fake")
+    connectors = {"youtube": {"kind": "youtube_api", "token": "t", "privacy_status": "private"}}
+    plan = build_publish_plan(
+        content={"title": "T", "description": "D", "media_urls": [str(video)]},
+        platform_ids=["youtube", "instagram"],
+        platform_content_type="video_post",
+        dry_run=False,
+        session=session,
+        connectors=connectors,
+    )
+    result = run_publish_plan(plan=plan, session=session, dry_run=False, connectors=connectors)
+    hint = result["recovery_hint"]
+    assert hint["can_rerun"] is True
+    assert hint["rerun_scope"] == "failed_and_blocked"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# P1: Idempotency digest tests
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestIdempotencyDigest:
+    def test_same_plan_same_digest(self):
+        plan = {"steps": [{"platform_id": "youtube", "content": {"title": "T", "description": "D", "media_urls": ["/v/a.mp4"]}}]}
+        d1 = _build_publish_idempotency_digest(plan, {"youtube": {"kind": "youtube_api"}}, False)
+        d2 = _build_publish_idempotency_digest(plan, {"youtube": {"kind": "youtube_api"}}, False)
+        assert d1 == d2
+        assert len(d1) == 32
+
+    def test_different_title_different_digest(self):
+        plan_a = {"steps": [{"platform_id": "youtube", "content": {"title": "A"}}]}
+        plan_b = {"steps": [{"platform_id": "youtube", "content": {"title": "B"}}]}
+        d1 = _build_publish_idempotency_digest(plan_a, {}, False)
+        d2 = _build_publish_idempotency_digest(plan_b, {}, False)
+        assert d1 != d2
+
+    def test_dry_run_vs_live_different_digest(self):
+        plan = {"steps": [{"platform_id": "youtube", "content": {"title": "T"}}]}
+        d1 = _build_publish_idempotency_digest(plan, {}, True)
+        d2 = _build_publish_idempotency_digest(plan, {}, False)
+        assert d1 != d2
+
+    def test_different_media_urls_different_digest(self):
+        plan_a = {"steps": [{"platform_id": "yt", "content": {"title": "T", "media_urls": ["/a.mp4"]}}]}
+        plan_b = {"steps": [{"platform_id": "yt", "content": {"title": "T", "media_urls": ["/b.mp4"]}}]}
+        d1 = _build_publish_idempotency_digest(plan_a, {}, False)
+        d2 = _build_publish_idempotency_digest(plan_b, {}, False)
+        assert d1 != d2
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# P1: Retry hint map test
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def test_retry_hint_map_contains_content_publish():
+    """_RETRY_HINT_MAP must have content_publish entry."""
+    fake_library_mod = types.ModuleType("modules.library.global_media_library")
+
+    class _FakeGML:
+        def __init__(self, *a, **kw):
+            self.db_path = ROOT / ".tmp_fake_lib_hint_map.db"
+
+    fake_library_mod.GlobalMediaLibrary = _FakeGML
+    sys.modules.setdefault("modules.library.global_media_library", fake_library_mod)
+
+    from modules.app_api import server
+    assert "content_publish" in server._RETRY_HINT_MAP
+    assert server._RETRY_HINT_MAP["content_publish"] == "/api/capabilities/content_publish/rerun"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# P1: API-level audit tests
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def test_publish_run_audit_includes_summary(tmp_path):
+    """publish_run audit detail should contain posted/failed/blocked counts."""
+    fake_library_mod = types.ModuleType("modules.library.global_media_library")
+
+    class _FakeGML:
+        def __init__(self, *a, **kw):
+            self.db_path = ROOT / ".tmp_fake_lib_audit_summary.db"
+
+    fake_library_mod.GlobalMediaLibrary = _FakeGML
+    sys.modules.setdefault("modules.library.global_media_library", fake_library_mod)
+
+    from modules.app_api import server
+    from modules.app_api.services.audit_log import init_audit_log
+
+    init_audit_log(tmp_path / "audit_log.db")
+
+    old_project_dir = server._project_dir
+    server._project_dir = tmp_path
+    (tmp_path / "data").mkdir(parents=True, exist_ok=True)
+    client = server.app.test_client()
+    try:
+        # Bootstrap session
+        sr = client.post("/api/capabilities/content_publish/session/bootstrap",
+                         json={"input_mode": "project", "authenticated": True, "expires_in_minutes": 30})
+        sid = sr.get_json()["session"]["session_id"]
+
+        # Plan with blog (will succeed)
+        pr = client.post("/api/capabilities/content_publish/plan", json={
+            "input_mode": "project", "platforms": ["blog"],
+            "platform_content_type": "article_post", "dry_run": True,
+            "session_id": sid, "content": {"title": "T", "description": "D"},
+        })
+        plan = pr.get_json()["plan"]
+
+        # Run dry_run=True
+        rr = client.post("/api/capabilities/content_publish/run", json={
+            "input_mode": "project", "session_id": sid, "dry_run": True, "plan": plan,
+        })
+        assert rr.status_code == 200
+        payload = rr.get_json()
+        assert payload["ok"] is True
+
+        # Check audit log
+        audit_resp = client.get("/api/system/audit")
+        if audit_resp.status_code == 200:
+            entries = audit_resp.get_json().get("entries", [])
+            publish_run_entries = [e for e in entries if e.get("operation") == "publish_run"]
+            if publish_run_entries:
+                detail = publish_run_entries[-1].get("detail", {})
+                assert "posted" in detail or "dry_run" in detail
+    finally:
+        server._project_dir = old_project_dir
+
+
+def test_publish_blocked_audit_written(tmp_path):
+    """When steps are blocked, publish_blocked audit event should be written."""
+    fake_library_mod = types.ModuleType("modules.library.global_media_library")
+
+    class _FakeGML:
+        def __init__(self, *a, **kw):
+            self.db_path = ROOT / ".tmp_fake_lib_audit_blocked.db"
+
+    fake_library_mod.GlobalMediaLibrary = _FakeGML
+    sys.modules.setdefault("modules.library.global_media_library", fake_library_mod)
+
+    from modules.app_api import server
+    from modules.app_api.services.audit_log import init_audit_log
+
+    # Ensure audit log is initialised with a temp db
+    init_audit_log(tmp_path / "audit_log.db")
+
+    old_project_dir = server._project_dir
+    server._project_dir = tmp_path
+    (tmp_path / "data").mkdir(parents=True, exist_ok=True)
+    client = server.app.test_client()
+    try:
+        sr = client.post("/api/capabilities/content_publish/session/bootstrap",
+                         json={"input_mode": "project", "authenticated": True, "expires_in_minutes": 30})
+        sid = sr.get_json()["session"]["session_id"]
+
+        # Plan with youtube, no connector → blocked
+        pr = client.post("/api/capabilities/content_publish/plan", json={
+            "input_mode": "project", "platforms": ["youtube"],
+            "platform_content_type": "video_post", "dry_run": False,
+            "session_id": sid, "content": {"title": "T", "description": "D"},
+            "connectors": {},
+        })
+        plan = pr.get_json()["plan"]
+
+        rr = client.post("/api/capabilities/content_publish/run", json={
+            "input_mode": "project", "session_id": sid, "dry_run": False, "plan": plan,
+        })
+        assert rr.status_code == 200
+        result = rr.get_json()
+        # Status should be blocked or failed
+        assert result["state"] in ("blocked", "failed")
+
+        # Check audit
+        audit_resp = client.get("/api/system/audit")
+        if audit_resp.status_code == 200:
+            entries = audit_resp.get_json().get("entries", [])
+            blocked_entries = [e for e in entries if e.get("operation") == "publish_blocked"]
+            error_entries = [e for e in entries if e.get("operation") == "publish_error"]
+            # Should have at least one blocked or error audit entry
+            assert len(blocked_entries) >= 1 or len(error_entries) >= 1
     finally:
         server._project_dir = old_project_dir

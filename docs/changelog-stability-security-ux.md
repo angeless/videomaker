@@ -138,6 +138,28 @@
 
 ---
 
+## P0-1：Security Audit Logging（2026-03-10）
+
+新建 `modules/app_api/services/audit_log.py`，覆盖 24 处敏感操作（delete / publish / cancel / config_change / ingest / resolve / relink）。
+- SQLite 持久化（`audit_log.db`），best-effort 写入不影响主链路
+- `GET /api/system/audit` 只读查询端点
+- 10 个测试全绿，全量回归 607 passed
+
+## P0-2：Queue Recovery UX（2026-03-10）
+
+新建 `modules/app_api/services/recovery_rules.py`，统一恢复判断服务。
+- `assess_recovery(job)` — 7 状态 × 恢复规则矩阵
+- `assess_batch_recovery(items)` — 批次分类（retryable / skipped / blocked）
+- `GET /api/job/<id>` 新增 `recovery` 字段
+- `POST /api/job/<id>/retry` — 单任务恢复建议（advice_only，不自动重跑）
+- `POST /api/jobs/batch-retry` — 批次恢复建议（advice_only，不自动重跑）
+- `retry_hint` 映射 kind → 对应 capability rerun 端点
+- 所有恢复动作接入审计日志
+- 31 个测试全绿，全量回归 638 passed
+- 文档：`docs/queue_recovery_rules.md`
+
+---
+
 ## 七、下一步计划（待实施）
 
 ### 高优先
@@ -155,6 +177,42 @@
 8. **index.html 组件化拆分**：当前 3673 行单文件
 9. **`.app` 打包**：pyinstaller 或 py2app 双击启动
 10. **CSRF 条件完善**：当前需 `_REQUIRE_CSRF_PROTECTION` + `_REQUIRE_LOCAL_API_TOKEN` 同时为真
+
+---
+
+## P0-1：Security Audit Logging（v0.3.2）
+
+**日期**：2026-03-10 | **测试**：607 passed
+
+- 新建 `services/audit_log.py`（SQLite，best-effort，线程安全）
+- 24 个审计调用点覆盖 7 个路由文件
+- `GET /api/system/audit` 查询端点
+- 10 个专属测试
+
+## P0-2：Queue Recovery UX（v0.3.3）
+
+**日期**：2026-03-10 | **测试**：638 passed
+
+- 新建 `services/recovery_rules.py`：`assess_recovery()` / `assess_batch_recovery()` / `is_terminal_status()` / `is_retryable_status()`
+- `GET /api/job/<id>` 增加 `recovery` 字段
+- `POST /api/job/<id>/retry` + `POST /api/jobs/batch-retry`（advice_only 模式）
+- `_RETRY_HINT_MAP` kind → rerun endpoint 映射
+- 31 个专属测试
+
+## P1：YouTube Publish Connector 增强（v0.3.4）
+
+**日期**：2026-03-10 | **测试**：670 passed
+
+- YouTube connector 从骨架增强为生产可用版本
+- 参数校验（pre-flight）：token / title ≤100 / description ≤5000 / privacy_status / category_id
+- 错误分类：`_classify_error()` 内部机制，7 类（auth_failed / quota_exceeded / platform_rejected / network_error / config_missing / params_invalid / unknown）
+- `_PublishHTTPError` 携带 HTTP status code，精确匹配 401/403/429/400/500
+- `run_publish_plan()` 返回 `error_detail` + `recovery_hint` 字段
+- 幂等保护：`/run` 接入 idempotency store，基于发布请求摘要 SHA256 去重，仅缓存明确成功结果
+- 审计增强：`publish_run` detail 含 posted/failed/blocked 计数，新增 `publish_blocked` + `publish_error` 事件
+- `_RETRY_HINT_MAP` 新增 `content_publish` 条目
+- 32 个新测试（error classification 12 + validation 6 + error paths 3 + recovery 4 + idempotency 4 + audit 2 + hint map 1）
+- 文档：`docs/publish_connector_youtube.md`
 
 ---
 

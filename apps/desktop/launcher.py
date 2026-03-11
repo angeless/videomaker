@@ -101,6 +101,15 @@ def main():
 
     _ensure_runtime_dependencies(auto_install=not bool(args.skip_bootstrap))
 
+    from modules.app_api.services.startup_timing import mark  # noqa: WPS433
+    mark("launcher_start")
+
+    from modules.app_api.services.logging_service import init_logging  # noqa: WPS433
+    log_dir = init_logging()
+    print(f"[launcher] log file: {log_dir / 'videoeditor.log'}")
+
+    mark("deps_checked")
+
     # 桌面运行默认开启本地 API token 防护；测试/CLI 可用环境变量覆盖。
     os.environ.setdefault("VIDEOEDITOR_REQUIRE_LOCAL_TOKEN", "1")
 
@@ -111,12 +120,14 @@ def main():
 
     port = _find_free_port(9527)
     flask_app = create_app(project_dir=args.project)
+    mark("flask_app_created")
 
     # Flask 在后台线程运行
     t = threading.Thread(
         target=_start_flask, args=(flask_app, port, debug_mode), daemon=True
     )
     t.start()
+    mark("flask_thread_started")
 
     # 等待 Flask 就绪
     url = f"http://127.0.0.1:{port}"
@@ -128,6 +139,7 @@ def main():
             break
         except Exception:
             time.sleep(0.2)
+    mark("flask_ready")
 
     # 创建 pywebview 窗口
     window = webview.create_window(
@@ -139,6 +151,8 @@ def main():
         resizable=True,
         background_color="#0f0f0f",
     )
+
+    mark("ui_window_created")
 
     # 注入 window 引用供文件对话框使用
     set_window(window)

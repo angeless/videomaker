@@ -6,10 +6,12 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
+import hashlib
 import json
 import mimetypes
 import re
 import random
+import socket
 from urllib import error as urlerror
 from urllib import request as urlrequest
 import uuid
@@ -80,6 +82,151 @@ DEFAULT_AUTOMATION = {
     "cookie_auto_refresh": False,
     "auth_refresh_mode": "qrcode",
 }
+
+
+# ── 内部错误分类 ──────────────────────────────────────────────────────
+
+_ERROR_CLASSES = frozenset({
+    "config_missing",
+    "auth_failed",
+    "params_invalid",
+    "platform_rejected",
+    "quota_exceeded",
+    "network_error",
+    "unknown",
+})
+
+
+class _PublishHTTPError(RuntimeError):
+    """携带 http_status 的发布异常，供 _classify_error 提取状态码。"""
+
+    def __init__(self, message: str, *, http_status: int = 0):
+        super().__init__(message)
+        self.http_status = http_status
+
+
+def _classify_error(exc: Exception, *, http_status: int = 0) -> dict:
+    """内部分类，返回 {error_class, retryable, action_hint}。"""
+    code = getattr(exc, "http_status", 0) or http_status
+
+    # HTTP 状态码分类
+    if code in (401, 403):
+        return {"error_class": "auth_failed", "retryable": False,
+                "action_hint": "刷新 access_token 后重试"}
+    if code == 429:
+        return {"error_class": "quota_exceeded", "retryable": True,
+                "action_hint": "等待配额恢复后重试"}
+    if code in (400, 422):
+        return {"error_class": "platform_rejected", "retryable": False,
+                "action_hint": "检查内容参数后重试"}
+    if code >= 500:
+        return {"error_class": "network_error", "retryable": True,
+                "action_hint": "可直接重试"}
+
+    # 异常类型分类 —— 同时检查 exc 本身和 __cause__ 链
+    all_exc = [exc]
+    if getattr(exc, "__cause__", None) is not None:
+        all_exc.append(exc.__cause__)
+
+    msg = str(exc).lower()
+    for e in all_exc:
+        if isinstance(e, (TimeoutError, socket.timeout)):
+            return {"error_class": "network_error", "retryable": True,
+                    "action_hint": "检查网络后重试"}
+    for e in all_exc:
+        if isinstance(e, (ConnectionError, OSError)):
+            emsg = str(e).lower()
+            if any(kw in emsg for kw in ("refused", "reset", "broken pipe", "dns", "name resolution")):
+                return {"error_class": "network_error", "retryable": True,
+                        "action_hint": "检查网络后重试"}
+    for e in all_exc:
+        if isinstance(e, urlerror.URLError):
+            reason = str(getattr(e, "reason", "")).lower()
+            if isinstance(getattr(e, "reason", None), (socket.timeout, TimeoutError)):
+                return {"error_class": "network_error", "retryable": True,
+                        "action_hint": "检查网络后重试"}
+            if any(kw in reason for kw in ("refused", "reset", "dns", "name resolution", "timed out")):
+                return {"error_class": "network_error", "retryable": True,
+                        "action_hint": "检查网络后重试"}
+
+    # 消息关键词检测（超时）
+    if any(kw in msg for kw in ("超时", "timed out", "timeout")):
+        return {"error_class": "network_error", "retryable": True,
+                "action_hint": "检查网络后重试"}
+
+    # ValueError 语义分类
+    for e in all_exc:
+        if isinstance(e, ValueError):
+            emsg = str(e).lower()
+            if any(kw in emsg for kw in ("缺少", "不能为空", "missing", "未配置")):
+                return {"error_class": "config_missing", "retryable": False,
+                        "action_hint": "补充配置后重试"}
+            return {"error_class": "params_invalid", "retryable": False,
+                    "action_hint": "修正参数后重试"}
+
+    # RuntimeError 含 "未配置" 也归为 config_missing
+    if isinstance(exc, RuntimeError) and any(kw in msg for kw in ("未配置", "缺少")):
+        return {"error_class": "config_missing", "retryable": False,
+                "action_hint": "补充配置后重试"}
+
+    return {"error_class": "unknown", "retryable": False,
+            "action_hint": "检查详情后决定"}
+
+
+def _validate_youtube_params(step: Dict[str, Any], connector: Dict[str, Any]) -> None:
+    """YouTube 发布参数校验（pre-flight），校验失败抛 ValueError。"""
+    token = str(connector.get("access_token", "") or connector.get("token", "") or "").strip()
+    if not token:
+        raise ValueError("youtube_api 缺少 access_token/token")
+
+    content = step.get("content", {}) if isinstance(step.get("content"), dict) else {}
+    title = str(content.get("title") or "").strip()
+    if title and len(title) > 100:
+        raise ValueError(f"YouTube title 不能超过 100 字符（当前 {len(title)}）")
+    description = str(content.get("description") or "").strip()
+    if description and len(description) > 5000:
+        raise ValueError(f"YouTube description 不能超过 5000 字符（当前 {len(description)}）")
+
+    privacy = str(connector.get("privacy_status", "") or "").strip().lower()
+    if privacy and privacy not in ("private", "public", "unlisted"):
+        raise ValueError(f"YouTube privacy_status 不合法: {privacy}，应为 private/public/unlisted")
+
+    cat = str(connector.get("category_id", "") or "").strip()
+    if cat and not cat.isdigit():
+        raise ValueError(f"YouTube category_id 应为数字字符串: {cat}")
+
+
+def _read_error_body(exc: urlerror.HTTPError) -> str:
+    """安全读取 HTTPError body。"""
+    try:
+        return exc.read().decode("utf-8", errors="ignore")
+    except Exception:
+        return ""
+
+
+def _build_publish_idempotency_digest(plan: Dict[str, Any], connectors: Dict[str, Any], dry_run: bool) -> str:
+    """基于发布请求摘要的稳定 hash，用作幂等 key。"""
+    steps = plan.get("steps", []) if isinstance(plan.get("steps"), list) else []
+    parts: list = []
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        content = step.get("content", {}) if isinstance(step.get("content"), dict) else {}
+        media_urls = content.get("media_urls") if isinstance(content.get("media_urls"), list) else []
+        # 纳入 media_urls 中的本地文件路径以降低同标题误撞风险
+        media_sig = ",".join(str(u) for u in media_urls)
+        pid = str(step.get("platform_id", ""))
+        conn = connectors.get(pid, {}) if isinstance(connectors, dict) else {}
+        conn_kind = str(conn.get("kind", "") if isinstance(conn, dict) else "")
+        parts.append("|".join([
+            pid,
+            str(content.get("title", "")),
+            str(content.get("description", ""))[:200],
+            media_sig,
+            conn_kind,
+        ]))
+    raw = f"dry_run={dry_run}||" + "||".join(sorted(parts))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
 
 
 def _safe_slug(text: str, fallback: str = "post") -> str:
@@ -280,6 +427,8 @@ def _publish_youtube_via_api(
     connector: Dict[str, Any],
     timeout_s: float = 120.0,
 ) -> Dict[str, Any]:
+    # Pre-flight 校验（失败抛 ValueError → _classify_error 归为 config_missing/params_invalid）
+    _validate_youtube_params(step, connector)
     source = _youtube_upload_source(step, connector)
     meta = _youtube_metadata(step, connector)
     size = int(source.stat().st_size)
@@ -301,12 +450,13 @@ def _publish_youtube_via_api(
         with urlrequest.urlopen(req_init, timeout=timeout_final) as init_resp:
             upload_url = str(init_resp.headers.get("Location", "") or "").strip()
     except urlerror.HTTPError as exc:
-        tail = ""
-        try:
-            tail = exc.read().decode("utf-8", errors="ignore")
-        except Exception:
-            tail = ""
-        raise RuntimeError(f"YouTube 初始化上传失败 HTTP {exc.code}: {_trim_text(tail or exc.reason, 220)}") from exc
+        tail = _read_error_body(exc)
+        raise _PublishHTTPError(
+            f"YouTube 初始化上传失败 HTTP {exc.code}: {_trim_text(tail or exc.reason, 220)}",
+            http_status=exc.code,
+        ) from exc
+    except (TimeoutError, socket.timeout) as exc:
+        raise _PublishHTTPError(f"YouTube 初始化上传超时: {exc}", http_status=0) from exc
     except Exception as exc:
         raise RuntimeError(f"YouTube 初始化上传失败: {exc}") from exc
 
@@ -322,12 +472,13 @@ def _publish_youtube_via_api(
             status_code = int(getattr(upload_resp, "status", 200) or 200)
             body = upload_resp.read().decode("utf-8", errors="ignore")
     except urlerror.HTTPError as exc:
-        tail = ""
-        try:
-            tail = exc.read().decode("utf-8", errors="ignore")
-        except Exception:
-            tail = ""
-        raise RuntimeError(f"YouTube 上传失败 HTTP {exc.code}: {_trim_text(tail or exc.reason, 220)}") from exc
+        tail = _read_error_body(exc)
+        raise _PublishHTTPError(
+            f"YouTube 上传失败 HTTP {exc.code}: {_trim_text(tail or exc.reason, 220)}",
+            http_status=exc.code,
+        ) from exc
+    except (TimeoutError, socket.timeout) as exc:
+        raise _PublishHTTPError(f"YouTube 上传超时: {exc}", http_status=0) from exc
     except Exception as exc:
         raise RuntimeError(f"YouTube 上传失败: {exc}") from exc
 
@@ -719,12 +870,14 @@ def run_publish_plan(
             )
         except Exception as exc:
             failed += 1
+            classification = _classify_error(exc)
             out_steps.append(
                 {
                     **item,
                     "state": "failed",
                     "run_state": "failed",
                     "error": str(exc),
+                    "error_detail": classification,
                 }
             )
             continue
@@ -737,6 +890,24 @@ def run_publish_plan(
         overall_status = "blocked"
     else:
         overall_status = "posted" if not run_dry else "planned"
+
+    # recovery_hint：可追踪、可恢复建议
+    error_classes_seen: list = []
+    has_config_or_blocked = blocked > 0
+    if failed > 0:
+        error_classes_seen = list({
+            step.get("error_detail", {}).get("error_class", "unknown")
+            for step in out_steps
+            if step.get("run_state") == "failed" and isinstance(step.get("error_detail"), dict)
+        })
+    if failed > 0 and blocked > 0:
+        rerun_scope = "failed_and_blocked"
+    elif failed > 0:
+        rerun_scope = "failed_only"
+    elif blocked > 0:
+        rerun_scope = "fix_config_then_rerun"
+    else:
+        rerun_scope = "none"
 
     return {
         "status": overall_status,
@@ -759,4 +930,10 @@ def run_publish_plan(
         },
         "steps": out_steps,
         "logs": run_logs,
+        "recovery_hint": {
+            "can_rerun": failed > 0 or blocked > 0,
+            "rerun_endpoint": "/api/capabilities/content_publish/rerun",
+            "rerun_scope": rerun_scope,
+            "error_classes": sorted(error_classes_seen) if error_classes_seen else [],
+        },
     }

@@ -174,9 +174,12 @@ def create_library_blueprint(
 
     @bp.route("/api/library/custom-tags/<int:ct_id>", methods=["DELETE"])
     def api_library_custom_tags_delete(ct_id):
+        from modules.app_api.services.audit_log import audit as _audit
         result = _library().archive_custom_tag(ct_id)
         if result.get("error"):
+            _audit("delete", "custom_tag", str(ct_id), actor=f"local:{request.remote_addr}", status="error", detail={"error": result["error"]})
             return jsonify(result), 404
+        _audit("delete", "custom_tag", str(ct_id), actor=f"local:{request.remote_addr}")
         return jsonify(result)
 
     # ── Phase 5: Feedback ──
@@ -361,6 +364,8 @@ def create_library_blueprint(
             return {"ok": True, "result": result, "stats": _library().stats()}
 
         run_in_bg(job_id, _do_local, kind="library_ingest_local")
+        from modules.app_api.services.audit_log import audit as _audit
+        _audit("ingest", "library", job_id, actor=f"local:{request.remote_addr}", detail={"source": source_path, "type": "video", "max_videos": max_videos})
         return jsonify(
             {
                 "ok": True,
@@ -465,6 +470,8 @@ def create_library_blueprint(
             return {"ok": True, "result": result, "stats": _library().stats()}
 
         run_in_bg(job_id, _do_local_images, kind="library_ingest_local_images")
+        from modules.app_api.services.audit_log import audit as _audit
+        _audit("ingest", "library", job_id, actor=f"local:{request.remote_addr}", detail={"source": source_path, "type": "image", "max_images": max_images})
         return jsonify(
             {
                 "ok": True,
@@ -529,6 +536,8 @@ def create_library_blueprint(
             return {"ok": True, "result": result, "stats": _library().stats()}
 
         run_in_bg(job_id, _do_gdrive, kind="library_ingest_gdrive")
+        from modules.app_api.services.audit_log import audit as _audit
+        _audit("ingest", "library", job_id, actor=f"local:{request.remote_addr}", detail={"type": "gdrive", "max_videos": max_videos})
         return jsonify(
             {
                 "ok": True,
@@ -706,9 +715,12 @@ def create_library_blueprint(
 
     @bp.route("/api/library/locations/roots/<int:root_id>", methods=["DELETE"])
     def api_locations_roots_delete(root_id):
+        from modules.app_api.services.audit_log import audit as _audit
         removed = _library().remove_known_root(root_id)
         if not removed:
+            _audit("delete", "location_root", str(root_id), actor=f"local:{request.remote_addr}", status="error", detail={"error": "not found"})
             return jsonify({"error": "root not found"}), 404
+        _audit("delete", "location_root", str(root_id), actor=f"local:{request.remote_addr}")
         return jsonify({"ok": True, "removed": root_id})
 
     @bp.route("/api/library/locations/scan", methods=["POST"])
@@ -733,6 +745,8 @@ def create_library_blueprint(
             return {"ok": True, "result": result}
 
         run_in_bg(job_id, _do_relocate, kind="locations_relocate")
+        from modules.app_api.services.audit_log import audit as _audit
+        _audit("relocate", "library", job_id, actor=f"local:{request.remote_addr}")
         return jsonify({"ok": True, "job_id": job_id, "mode": "async"})
 
     @bp.route("/api/library/duplicates")
@@ -751,6 +765,8 @@ def create_library_blueprint(
             return {"ok": True, "result": result}
 
         run_in_bg(job_id, _do_detect, kind="duplicates_detect")
+        from modules.app_api.services.audit_log import audit as _audit
+        _audit("detect", "duplicates", job_id, actor=f"local:{request.remote_addr}", detail={"threshold": threshold})
         return jsonify({"ok": True, "job_id": job_id, "mode": "async"})
 
     @bp.route("/api/library/relink-report")
@@ -764,9 +780,12 @@ def create_library_blueprint(
 
     @bp.route("/api/library/duplicates/<int:group_id>/resolve", methods=["POST"])
     def api_duplicates_resolve(group_id):
+        from modules.app_api.services.audit_log import audit as _audit
         result = _library().resolve_duplicate_group(group_id)
         if result.get("error"):
+            _audit("resolve", "duplicates", str(group_id), actor=f"local:{request.remote_addr}", status="error", detail={"error": result["error"]})
             return jsonify(result), 404
+        _audit("resolve", "duplicates", str(group_id), actor=f"local:{request.remote_addr}")
         return jsonify(result)
 
     @bp.route("/api/library/duplicates/<int:group_id>/ignore", methods=["POST"])
@@ -778,24 +797,30 @@ def create_library_blueprint(
 
     @bp.route("/api/library/duplicates/<int:group_id>/primary", methods=["POST"])
     def api_duplicates_set_primary(group_id):
+        from modules.app_api.services.audit_log import audit as _audit
         data = request.json or {}
         uid = (data.get("uid", "") or "").strip()
         if not uid:
             return jsonify({"error": "uid is required"}), 400
         result = _library().set_duplicate_primary(group_id, uid)
         if result.get("error"):
+            _audit("set_primary", "duplicates", str(group_id), actor=f"local:{request.remote_addr}", status="error", detail={"uid": uid, "error": result["error"]})
             return jsonify(result), 400
+        _audit("set_primary", "duplicates", str(group_id), actor=f"local:{request.remote_addr}", detail={"uid": uid})
         return jsonify(result)
 
     @bp.route("/api/library/duplicates/<int:group_id>/members/<int:member_id>/decision", methods=["POST"])
     def api_duplicates_member_decision(group_id, member_id):
+        from modules.app_api.services.audit_log import audit as _audit
         data = request.json or {}
         decision = (data.get("decision", "") or "").strip()
         if not decision:
             return jsonify({"error": "decision is required (keep|remove|undecided)"}), 400
         result = _library().set_member_decision(group_id, member_id, decision)
         if result.get("error"):
+            _audit("member_decision", "duplicates", f"{group_id}/{member_id}", actor=f"local:{request.remote_addr}", status="error", detail={"decision": decision, "error": result["error"]})
             return jsonify(result), 400
+        _audit("member_decision", "duplicates", f"{group_id}/{member_id}", actor=f"local:{request.remote_addr}", detail={"decision": decision})
         return jsonify(result)
 
     @bp.route("/api/library/locations/unavailable")
@@ -848,6 +873,7 @@ def create_library_blueprint(
     @bp.route("/api/library/project-relink/<int:job_id>/apply", methods=["POST"])
     def api_project_relink_apply(job_id):
         """Apply relink results to a project copy."""
+        from modules.app_api.services.audit_log import audit as _audit
         data = request.json or {}
         output_path = (data.get("output_path") or "").strip() or None
         force = bool(data.get("force", False))
@@ -856,8 +882,10 @@ def create_library_blueprint(
             job_id, output_path, force=force, naming_rule=naming_rule
         )
         if result.get("error"):
+            _audit("relink_apply", "project_relink", str(job_id), actor=f"local:{request.remote_addr}", status="error", detail={"error": result["error"]})
             code = 409 if result.get("already_applied") else 400
             return jsonify(result), code
+        _audit("relink_apply", "project_relink", str(job_id), actor=f"local:{request.remote_addr}")
         return jsonify({"ok": True, "result": result})
 
     # ------------------------------------------------------------------

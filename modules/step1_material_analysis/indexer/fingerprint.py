@@ -58,6 +58,8 @@ class VideoHasher:
                 "representative_hash": str   # 中位帧的哈希
             }
         """
+        import time
+        _fp_t0 = time.perf_counter()
         if not HAS_CV2:
             raise ImportError("opencv-python 未安装")
 
@@ -86,6 +88,9 @@ class VideoHasher:
         # 取中间帧作为代表哈希
         representative = frame_hashes[len(frame_hashes) // 2] if frame_hashes else ""
 
+        _fp_elapsed = (time.perf_counter() - _fp_t0) * 1000
+        logger.debug("[perf] compute_video_fingerprint: %.1fms frames=%d path=%s",
+                     _fp_elapsed, len(frame_hashes), Path(video_path).name)
         return {
             "path": video_path,
             "duration": duration,

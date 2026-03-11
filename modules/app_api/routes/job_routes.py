@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Callable, Dict
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 
 from modules.app_api.param_utils import parse_str_param
 
@@ -22,6 +22,7 @@ def create_job_blueprint(
     system_load_snapshot_getter: Callable[[], Dict[str, Any]],
     state_dict_getter: Callable[[], Dict[str, Any]],
     estimate_job_eta: Callable[[Dict[str, Any]], Dict[str, Any]],
+    retry_hint_map: Dict[str, str | None] | None = None,
 ) -> Blueprint:
     bp = Blueprint("job_api", __name__)
 
@@ -53,6 +54,8 @@ def create_job_blueprint(
         eta = estimate_job_eta(job) if isinstance(job, dict) else {}
         if not isinstance(eta, dict):
             eta = {}
+        from modules.app_api.services.recovery_rules import assess_recovery
+        recovery = assess_recovery(job, retry_hint_map=retry_hint_map)
         return jsonify(
             {
                 "status": job["status"],
@@ -69,6 +72,7 @@ def create_job_blueprint(
                 "eta": eta,
                 "system": system_load_snapshot_getter(),
                 "state": state_dict_getter(),
+                "recovery": recovery,
             }
         )
 
@@ -106,6 +110,8 @@ def create_job_blueprint(
                 job.pop("_args", None)
                 job.pop("_kwargs", None)
                 persist_job_snapshot(job_id, "job_cancelled")
+                from modules.app_api.services.audit_log import audit as _audit
+                _audit("cancel", "job", job_id, actor=f"local:{request.remote_addr}", detail={"previous_status": "queued"})
                 return jsonify({"ok": True, "status": job.get("status"), "cancel_requested": True})
         if status != "running":
             return jsonify({"error": "任务不在运行中，无法取消", "status": job.get("status")}), 409
@@ -113,6 +119,87 @@ def create_job_blueprint(
         job["cancel_requested_at"] = datetime.now().isoformat(timespec="seconds")
         job["log"].append("[系统] 收到取消请求，正在安全停止…")
         persist_job_snapshot(job_id, "job_cancel_requested")
+        from modules.app_api.services.audit_log import audit as _audit
+        _audit("cancel", "job", job_id, actor=f"local:{request.remote_addr}", detail={"previous_status": status})
         return jsonify({"ok": True, "status": job.get("status"), "cancel_requested": True})
+
+    # ── Single-job recovery (advice only) ──
+
+    @bp.route("/api/job/<job_id>/retry", methods=["POST"])
+    def api_job_retry(job_id: str):
+        from modules.app_api.services.recovery_rules import assess_recovery
+        jobs = _jobs()
+        job = jobs.get(job_id)
+        if job is None:
+            job = load_job_from_store(job_id)
+        if job is None:
+            return jsonify({"error": "job 不存在"}), 404
+        recovery = assess_recovery(job, retry_hint_map=retry_hint_map)
+        actor = f"local:{request.remote_addr}"
+        if not recovery["can_retry"]:
+            from modules.app_api.services.audit_log import audit as _audit
+            _audit("retry_blocked", "job", job_id, actor=actor, status="blocked", detail={"current_status": recovery["current_status"], "reason": recovery["reason"]})
+            return jsonify({
+                "error": "任务不可重试",
+                "action": "advice_only",
+                "retry_submitted": False,
+                "recovery": recovery,
+            }), 409
+        from modules.app_api.services.audit_log import audit as _audit
+        _audit("retry", "job", job_id, actor=actor, detail={"source_status": recovery["current_status"], "kind": job.get("kind", "")})
+        return jsonify({
+            "ok": True,
+            "action": "advice_only",
+            "retry_submitted": False,
+            "source_job_id": job_id,
+            "recovery": recovery,
+        })
+
+    # ── Batch recovery (advice only) ──
+
+    @bp.route("/api/jobs/batch-retry", methods=["POST"])
+    def api_jobs_batch_retry():
+        from modules.app_api.services.recovery_rules import assess_batch_recovery
+        payload = request.json or {}
+        job_ids = payload.get("job_ids", [])
+        if not isinstance(job_ids, list) or not job_ids:
+            return jsonify({"error": "job_ids 不能为空"}), 400
+        job_ids = [str(jid) for jid in job_ids[:200]]
+        jobs = _jobs()
+        items = []
+        for jid in job_ids:
+            job = jobs.get(jid)
+            if job is None:
+                job = load_job_from_store(jid)
+            if job is None:
+                items.append({"job_id": jid, "status": "not_found"})
+                continue
+            items.append({
+                "job_id": jid,
+                "status": str(job.get("status", "") or ""),
+                "kind": str(job.get("kind", "") or ""),
+            })
+        result = assess_batch_recovery(items, id_field="job_id", retry_hint_map=retry_hint_map)
+        actor = f"local:{request.remote_addr}"
+        from modules.app_api.services.audit_log import audit as _audit
+        _audit("batch_retry", "job", None, actor=actor, detail={
+            "total": result["total"],
+            "retryable": result["retryable"],
+            "skippable": result["skippable"],
+            "blocked": result["blocked"],
+        })
+        return jsonify({
+            "ok": True,
+            "action": "advice_only",
+            "retry_submitted": False,
+            "summary": {
+                "total": result["total"],
+                "retryable": result["retryable"],
+                "skipped": result["skippable"],
+                "blocked": result["blocked"],
+            },
+            "reason": result["reason"],
+            "items": result["items"],
+        })
 
     return bp

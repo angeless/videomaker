@@ -159,6 +159,8 @@ def create_agent_template_blueprint(
                 store["agent"] = agent_store
 
         save_agent_template_store(store)
+        from modules.app_api.services.audit_log import audit as _audit
+        _audit("delete", "agent_template", tid, actor=f"{ctx.get('actor_type', 'human')}:{ctx.get('actor_id', '')}", detail={"scope": scope})
         return jsonify({"ok": True, "deleted": deleted})
 
     return bp

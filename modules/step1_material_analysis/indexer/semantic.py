@@ -50,15 +50,22 @@ class CLIPEncoder:
     def _load_model(self):
         """延迟加载（首次使用时）"""
         if self._model is None:
+            import time as _t
+            _t0 = _t.perf_counter()
             logger.info("加载 CLIP 模型: %s (device=%s)", self.model_name, self.device)
             self._model = CLIPModel.from_pretrained(self.model_name).to(self.device)
             self._processor = CLIPProcessor.from_pretrained(self.model_name)
+            _elapsed = (_t.perf_counter() - _t0) * 1000
+            logger.info("[perf] clip_model_load: %.1fms model=%s device=%s",
+                        _elapsed, self.model_name, self.device)
 
     def encode_image(self, image) -> "np.ndarray":
         """
         编码图像为 512 维向量（归一化）
         image: numpy BGR 数组（来自 cv2）或 PIL.Image
         """
+        import time as _t
+        _t0 = _t.perf_counter()
         self._load_model()
 
         if HAS_CV2 and isinstance(image, type(None) if not HAS_NUMPY else np.ndarray):
@@ -71,16 +78,20 @@ class CLIPEncoder:
         with torch.no_grad():
             features = self._model.get_image_features(**inputs)
         vec = features.cpu().numpy()[0]
+        logger.debug("[perf] clip_encode_image: %.1fms", (_t.perf_counter() - _t0) * 1000)
         return vec / (np.linalg.norm(vec) + 1e-8)
 
     def encode_text(self, text: str) -> "np.ndarray":
         """编码文本为 512 维向量（归一化）"""
+        import time as _t
+        _t0 = _t.perf_counter()
         self._load_model()
 
         inputs = self._processor(text=[text], return_tensors="pt", padding=True).to(self.device)
         with torch.no_grad():
             features = self._model.get_text_features(**inputs)
         vec = features.cpu().numpy()[0]
+        logger.debug("[perf] clip_encode_text: %.1fms", (_t.perf_counter() - _t0) * 1000)
         return vec / (np.linalg.norm(vec) + 1e-8)
 
     def compute_similarity(self, image_vec: "np.ndarray", text_vec: "np.ndarray") -> float:

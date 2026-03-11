@@ -107,6 +107,8 @@ def create_social_export_capability_blueprint(
             return jsonify({"error": f"模板不存在: {pid}"}), 404
         templates.pop(pid, None)
         saved = save_social_export_templates(templates) if input_mode == "project" else templates
+        from modules.app_api.services.audit_log import audit as _audit
+        _audit("delete", "export_template", pid, actor=f"local:{request.remote_addr}")
         return jsonify({"ok": True, "input_mode": input_mode, "deleted": pid, "templates": list(saved.values())})
 
     @bp.route("/api/capabilities/social_export/history", methods=["GET"])
@@ -280,6 +282,8 @@ def create_social_export_capability_blueprint(
             persist_history=(input_mode == "project"),
         )
         run_in_bg(job_id, runner, kind="social_export")
+        from modules.app_api.services.audit_log import audit as _audit
+        _audit("export_run", "social_export", job_id, actor=f"local:{request.remote_addr}", detail={"input_mode": input_mode})
         return jsonify({"ok": True, "input_mode": input_mode, "job_id": job_id, "task_queue": task_queue_snapshot()})
 
     @bp.route("/api/capabilities/social_export/rerun", methods=["POST"])
@@ -331,6 +335,8 @@ def create_social_export_capability_blueprint(
             persist_history=(input_mode == "project"),
         )
         run_in_bg(job_id, runner, kind="social_export")
+        from modules.app_api.services.audit_log import audit as _audit
+        _audit("export_rerun", "social_export", job_id, actor=f"local:{request.remote_addr}", detail={"batch_id": batch_id or record.get("batch_id", "")})
         return jsonify(
             {
                 "ok": True,
