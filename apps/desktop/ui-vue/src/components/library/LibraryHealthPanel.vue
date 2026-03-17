@@ -352,13 +352,12 @@ async function generateThumbnails() {
   thumbProgress.value = 0
   thumbResult.value = null
   try {
-    const resp = await api.post('/api/library/thumbnails/generate')
-    const jobId = resp.data?.job_id
+    const resp = await api.api('POST', '/api/library/thumbnails/generate')
+    const jobId = resp?.job_id
     if (!jobId) { thumbLoading.value = false; return }
     const poll = setInterval(async () => {
       try {
-        const jr = await api.get(`/api/jobs/${jobId}`)
-        const job = jr.data
+        const job = await api.api('GET', `/api/jobs/${jobId}`)
         thumbProgress.value = job.progress || 0
         if (job.status === 'done' || job.status === 'error') {
           clearInterval(poll)
@@ -375,8 +374,8 @@ async function generateThumbnails() {
 async function loadHealth() {
   loading.value = true
   try {
-    const resp = await api.get('/api/library/health')
-    health.value = resp.data
+    const resp = await api.api('GET', '/api/library/health')
+    health.value = resp
   } catch (e) {
     console.warn('Failed to load library health:', e)
   } finally {

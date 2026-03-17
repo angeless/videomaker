@@ -42,7 +42,7 @@
       </section>
 
       <!-- 已创建工作流 -->
-      <section class="wf-section">
+      <section class="wf-section" ref="myWorkflowsSection">
         <div class="wf-section-header">
           <h3>我的工作流</h3>
           <button class="btn btn-ghost btn-sm" @click="loadWorkflows">刷新</button>
@@ -108,7 +108,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useApiStore } from '../stores/api.js'
 import { useAppStore } from '../stores/app.js'
 import { useToastStore } from '../stores/toast.js'
@@ -119,6 +119,7 @@ import AppNav from '../components/layout/AppNav.vue'
 const api = useApiStore()
 const appStore = useAppStore()
 const toast = useToastStore()
+const myWorkflowsSection = ref(null)
 
 const projectDisplayName = computed(() => {
   const dir = appStore.projectDir
@@ -155,6 +156,8 @@ async function instantiateTemplate(templateId) {
   }
   toast.show('工作流已创建: ' + (data.workflow?.name || templateId), 'success')
   await loadWorkflows()
+  await nextTick()
+  myWorkflowsSection.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 // ── 工作流列表 ──
