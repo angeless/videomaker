@@ -58,7 +58,9 @@ class AdvancedBeautyFilter:
                 model_selection=0, min_detection_confidence=0.5
             )
 
-    def detect_face_regions(self, image: "np.ndarray") -> List[Tuple[int, int, int, int]]:
+    def detect_face_regions(
+        self, image: "np.ndarray", *, degradations: Optional[List] = None,
+    ) -> List[Tuple[int, int, int, int]]:
         """
         检测人脸区域
         Returns: [(x, y, w, h), ...]
@@ -67,6 +69,15 @@ class AdvancedBeautyFilter:
             # 降级：返回图像中央 60% 区域
             h, w = image.shape[:2]
             margin_x, margin_y = int(w * 0.2), int(h * 0.1)
+            if degradations is not None:
+                degradations.append({
+                    "feature": "face_detection",
+                    "expected": "mediapipe",
+                    "actual": "center_region",
+                    "reason": "mediapipe 未安装，磨皮区域退化为画面中心 60%",
+                    "severity": "warning",
+                })
+            logger.info("磨皮: mediapipe 不可用，使用中心区域替代")
             return [(margin_x, margin_y, w - 2 * margin_x, h - 2 * margin_y)]
 
         rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -147,14 +158,16 @@ class AdvancedBeautyFilter:
             return image
         return cv2.inpaint(image, acne_mask, inpaintRadius=3, flags=cv2.INPAINT_TELEA)
 
-    def apply_beauty_filter(self, image: "np.ndarray") -> "np.ndarray":
+    def apply_beauty_filter(
+        self, image: "np.ndarray", *, degradations: Optional[List] = None,
+    ) -> "np.ndarray":
         """
         对整张图像应用磨皮滤镜
 
         流程：检测人脸 → 频率分解 → 平滑低频 → 降低高频 → 修复痘印 → 合成
         """
         result = image.copy()
-        face_regions = self.detect_face_regions(image)
+        face_regions = self.detect_face_regions(image, degradations=degradations)
 
         for region in face_regions:
             x, y, w, h = region

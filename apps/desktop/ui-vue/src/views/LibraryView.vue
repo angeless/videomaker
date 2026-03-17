@@ -1,7 +1,7 @@
 <template>
   <div class="titlebar">
     <span class="title">{{ labels.appTitle }}</span>
-    <span class="project-path">{{ appStore.projectDir || '未打开项目' }}</span>
+    <span class="project-path" :title="appStore.projectDir">{{ projectDisplayName }}</span>
     <AppNav />
   </div>
 
@@ -13,7 +13,7 @@
           <SearchAutocomplete
             v-model="libraryStore.query"
             :placeholder="labels.library.search"
-            @search="libraryStore.search()"
+            @search="onToolbarSearch"
             @select-tag="onSelectTag"
           />
           <div class="toolbar-controls">
@@ -42,7 +42,7 @@
                 title="列表视图"
               >☰</button>
             </div>
-            <button class="btn btn-primary" @click="libraryStore.search()">
+            <button class="btn btn-primary" @click="onToolbarSearch">
               搜索
             </button>
           </div>
@@ -101,7 +101,14 @@
           <ProjectRelinkPanel @search-library="onSearchFromRelink" />
         </template>
 
+        <!-- 搜索时面板已折叠提示 -->
+        <div v-if="panelGroup === '_search_results'" class="search-collapse-hint">
+          <span class="text-muted">面板已折叠以展示搜索结果</span>
+          <button class="btn btn-ghost btn-sm" @click="panelGroup = 'browse'">展开面板</button>
+        </div>
+
         <!-- 素材列表 -->
+        <div ref="resultsRef"></div>
         <div v-if="libraryStore.loading" class="empty-state">
           <div class="ai-spinner">{{ labels.common.loading }}</div>
         </div>
@@ -184,11 +191,23 @@ import ProjectRelinkPanel from '../components/library/ProjectRelinkPanel.vue'
 const appStore = useAppStore()
 const libraryStore = useLibraryStore()
 
+const projectDisplayName = computed(() => {
+  const dir = appStore.projectDir
+  if (!dir) return '未打开项目'
+  const name = dir.split('/').filter(Boolean).pop() || dir
+  const m = name.match(/^proj_selected_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})/)
+  if (m) return `项目 ${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}`
+  return name
+})
+
 // Panel group switcher — local ref, resets to 'browse' on each visit
 const panelGroup = ref('browse')
 
 // IngestPanel ref for programmatic expand + scroll
 const ingestRef = ref(null)
+
+// Results anchor ref for scroll-to-results
+const resultsRef = ref(null)
 
 // Evidence panel state
 const evidenceVisible = ref(false)
@@ -204,20 +223,41 @@ function openEvidence({ assetId, filename }) {
   evidenceVisible.value = true
 }
 
+async function onToolbarSearch() {
+  await libraryStore.search()
+  // 搜索有结果时自动隐藏面板以让结果立即可见
+  if (libraryStore.results.length > 0 && libraryStore.query) {
+    panelGroup.value = '_search_results'
+  }
+  scrollToResults()
+}
+
 function onSelectTag(item) {
   // Tag selected from autocomplete — search triggers via @search event
 }
 
-function onBrowseTag(tagName) {
+function scrollToResults() {
+  nextTick(() => {
+    requestAnimationFrame(() => {
+      if (resultsRef.value) {
+        resultsRef.value.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+    })
+  })
+}
+
+async function onBrowseTag(tagName) {
   libraryStore.query = tagName
-  libraryStore.search()
+  await libraryStore.search()
+  scrollToResults()
 }
 
 // D-1: Jump from relink missing item → library search (one-way, hard rule #6)
-function onSearchFromRelink(assetName) {
+async function onSearchFromRelink(assetName) {
   const stem = assetName.replace(/\.[^.]+$/, '')
   libraryStore.query = stem
-  libraryStore.search()
+  await libraryStore.search()
+  scrollToResults()
 }
 
 function onFeedbackDone(detail) {
@@ -340,4 +380,15 @@ onMounted(async () => {
 .list-h-meta { width: 60px; text-align: center; flex-shrink: 0; }
 .list-h-tags { width: 200px; flex-shrink: 0; }
 .list-h-quality { width: 30px; flex-shrink: 0; }
+
+.search-collapse-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--surface2);
+  border-radius: 6px;
+  margin-bottom: 12px;
+  font-size: 12px;
+}
 </style>

@@ -1,4 +1,5 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
+import { useToastStore } from '../stores/toast.js'
 
 const routes = [
   {
@@ -11,11 +12,13 @@ const routes = [
     name: 'library',
     component: () => import('../views/LibraryView.vue'),
   },
+  // ── 创作主视图（双轨制） ──
   {
-    path: '/production',
-    name: 'production',
-    component: () => import('../views/ProductionView.vue'),
+    path: '/create',
+    name: 'create',
+    component: () => import('../views/CreateView.vue'),
     children: [
+      // 引导流程
       {
         path: 'workflow',
         name: 'workflow',
@@ -27,27 +30,101 @@ const routes = [
         component: () => import('../components/workflow/WorkflowPanel.vue'),
       },
       {
-        path: 'tools',
-        name: 'tools',
-        component: () => import('../components/capabilities/CapabilityLayout.vue'),
+        path: 'ideate',
+        name: 'ideate',
+        component: () => import('../views/IdeateView.vue'),
       },
       {
-        path: 'tools/:tab',
-        name: 'tools-tab',
-        component: () => import('../components/capabilities/CapabilityLayout.vue'),
+        path: 'organize',
+        name: 'organize',
+        component: () => import('../views/OrganizeView.vue'),
+      },
+      {
+        path: 'refine',
+        name: 'refine',
+        component: () => import('../views/RefineView.vue'),
+      },
+      {
+        path: 'audio',
+        name: 'audio',
+        component: () => import('../views/AudioView.vue'),
+      },
+      {
+        path: 'subtitle',
+        name: 'subtitle',
+        component: () => import('../views/SubtitleView.vue'),
+      },
+      {
+        path: 'publish',
+        name: 'publish',
+        component: () => import('../views/PublishView.vue'),
+      },
+      // 自由创作
+      {
+        path: 'canvas',
+        name: 'canvas',
+        component: () => import('../views/CanvasView.vue'),
       },
     ],
   },
+  // ── 工作流管理 ──
+  {
+    path: '/workflows',
+    name: 'workflow-manager',
+    component: () => import('../views/WorkflowManagerView.vue'),
+  },
+  // ── 工具箱（独立入口） ──
+  {
+    path: '/tools',
+    name: 'tools',
+    component: () => import('../views/ToolsView.vue'),
+  },
+  {
+    path: '/tools/:tab',
+    name: 'tools-tab',
+    component: () => import('../views/ToolsView.vue'),
+  },
+  // ── 设置 ──
   {
     path: '/settings',
     name: 'settings',
     component: () => import('../views/SettingsView.vue'),
+  },
+  // ── 旧路由重定向 ──
+  {
+    path: '/production',
+    redirect: '/create',
+  },
+  {
+    path: '/production/workflow',
+    redirect: '/create/workflow',
+  },
+  {
+    path: '/production/workflow/:step',
+    redirect: to => `/create/workflow/${to.params.step}`,
+  },
+  {
+    path: '/production/tools',
+    redirect: '/tools',
+  },
+  {
+    path: '/production/tools/:tab',
+    redirect: to => `/tools/${to.params.tab}`,
   },
 ]
 
 const router = createRouter({
   history: createWebHashHistory(),
   routes,
+})
+
+// 跨页面导航时清理 toast，防止上一页的提示残留
+router.afterEach((to, from) => {
+  const toTop = (to.path || '').split('/').slice(0, 3).join('/')
+  const fromTop = (from.path || '').split('/').slice(0, 3).join('/')
+  if (toTop !== fromTop) {
+    try { useToastStore().clearAll() } catch { /* pinia not ready */ }
+  }
 })
 
 export default router

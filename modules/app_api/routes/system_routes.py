@@ -16,6 +16,8 @@ def create_system_blueprint(
     running_heavy_jobs_getter: Callable[[], list],
     task_queue_snapshot_getter: Callable[[], Dict[str, Any]],
     preflight_snapshot_getter: Callable[[bool], Dict[str, Any]],
+    queue_max_running_getter: Callable[[], int] = lambda: 2,
+    queue_max_running_setter: Callable[[int], None] = lambda v: None,
 ) -> Blueprint:
     bp = Blueprint("system_api", __name__)
 
@@ -125,5 +127,16 @@ def create_system_blueprint(
             mimetype="text/plain",
             headers={"Content-Disposition": "attachment; filename=videoeditor_session.log"},
         )
+
+    @bp.route("/api/system/queue-config", methods=["GET", "POST"])
+    def api_system_queue_config():
+        if request.method == "GET":
+            return jsonify({"ok": True, "max_running": queue_max_running_getter()})
+        payload = request.json or {}
+        val = payload.get("max_running")
+        if val is None or not isinstance(val, int) or val < 1 or val > 4:
+            return jsonify({"error": "max_running 必须是 1-4 的整数"}), 400
+        queue_max_running_setter(val)
+        return jsonify({"ok": True, "max_running": val})
 
     return bp

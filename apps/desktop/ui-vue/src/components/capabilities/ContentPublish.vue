@@ -14,10 +14,10 @@
     </div>
 
     <div class="btn-row" style="margin-bottom:16px">
-      <button class="btn btn-sm" @click="bootstrap" :disabled="!appStore.projectDir">初始化会话</button>
-      <button class="btn btn-sm" @click="buildPlan">生成发布计划</button>
-      <button class="btn btn-primary btn-sm" @click="runPublish">执行发布</button>
-      <button class="btn btn-sm" @click="rerunFailed" :disabled="!publishRun">复跑失败</button>
+      <button class="btn btn-sm" @click="bootstrap" :disabled="!appStore.projectDir || loadingBootstrap">{{ loadingBootstrap ? '初始化中…' : '初始化会话' }}</button>
+      <button class="btn btn-sm" @click="buildPlan" :disabled="loadingPlan">{{ loadingPlan ? '生成中…' : '生成发布计划' }}</button>
+      <button class="btn btn-primary btn-sm" @click="runPublish" :disabled="!publishPlan || loadingPublish">{{ loadingPublish ? '发布中…' : '执行发布' }}</button>
+      <button class="btn btn-sm" @click="rerunFailed" :disabled="!publishRun || loadingRerun">{{ loadingRerun ? '复跑中…' : '复跑失败' }}</button>
     </div>
 
     <div v-if="session" class="cap-section">
@@ -54,57 +54,85 @@ const input = reactive({
 const session = ref(null)
 const publishPlan = ref(null)
 const publishRun = ref(null)
+const loadingBootstrap = ref(false)
+const loadingPlan = ref(false)
+const loadingPublish = ref(false)
+const loadingRerun = ref(false)
 
 function parseList(text) {
   return (text || '').replace(/\n/g, ',').replace(/，/g, ',').split(',').map(x => x.trim()).filter(Boolean)
 }
 
 async function bootstrap() {
-  const data = await apiStore.api('POST', '/api/capabilities/content_publish/session/bootstrap', {
-    input_mode: input.input_mode, session_id: input.session_id,
-  })
-  if (data.error) { capStore.setMessage(`发布会话初始化失败：${data.error}`, 'error'); return }
-  session.value = data.session || null
-  input.session_id = session.value?.session_id || ''
-  capStore.setMessage(`发布会话已初始化：${input.session_id}`, 'success')
+  if (loadingBootstrap.value) return
+  loadingBootstrap.value = true
+  try {
+    const data = await apiStore.api('POST', '/api/capabilities/content_publish/session/bootstrap', {
+      input_mode: input.input_mode, session_id: input.session_id,
+    })
+    if (data.error) { capStore.setMessage(`发布会话初始化失败：${data.error}`, 'error'); return }
+    session.value = data.session || null
+    input.session_id = session.value?.session_id || ''
+    capStore.setMessage(`发布会话已初始化：${input.session_id}`, 'success')
+  } finally {
+    loadingBootstrap.value = false
+  }
 }
 
 async function buildPlan() {
-  const data = await apiStore.api('POST', '/api/capabilities/content_publish/plan', {
-    input_mode: input.input_mode, platforms: input.platforms,
-    platform_content_type: input.platform_content_type, dry_run: input.dry_run,
-    session_id: input.session_id,
-    content: {
-      title: input.title, description: input.description,
-      keywords: parseList(input.keywords), media_urls: parseList(input.media_urls),
-      article_markdown: input.article_markdown, article_html: input.article_html,
-    },
-  })
-  if (data.error) { capStore.setMessage(`发布计划生成失败：${data.error}`, 'error'); return }
-  publishPlan.value = data.plan || null
-  capStore.setMessage('已生成内容发布计划', 'success')
+  if (loadingPlan.value) return
+  loadingPlan.value = true
+  try {
+    const data = await apiStore.api('POST', '/api/capabilities/content_publish/plan', {
+      input_mode: input.input_mode, platforms: input.platforms,
+      platform_content_type: input.platform_content_type, dry_run: input.dry_run,
+      session_id: input.session_id,
+      content: {
+        title: input.title, description: input.description,
+        keywords: parseList(input.keywords), media_urls: parseList(input.media_urls),
+        article_markdown: input.article_markdown, article_html: input.article_html,
+      },
+    })
+    if (data.error) { capStore.setMessage(`发布计划生成失败：${data.error}`, 'error'); return }
+    publishPlan.value = data.plan || null
+    capStore.setMessage('已生成内容发布计划', 'success')
+  } finally {
+    loadingPlan.value = false
+  }
 }
 
 async function runPublish() {
-  const data = await apiStore.api('POST', '/api/capabilities/content_publish/run', {
-    input_mode: input.input_mode, session_id: input.session_id,
-    dry_run: input.dry_run, plan: publishPlan.value || undefined,
-  })
-  if (data.error) { capStore.setMessage(`内容发布执行失败：${data.error}`, 'error'); return }
-  publishRun.value = data.run || null
-  capStore.setMessage(`内容发布执行完成，状态：${data.state || 'unknown'}`, 'success')
+  if (loadingPublish.value) return
+  loadingPublish.value = true
+  try {
+    const data = await apiStore.api('POST', '/api/capabilities/content_publish/run', {
+      input_mode: input.input_mode, session_id: input.session_id,
+      dry_run: input.dry_run, plan: publishPlan.value || undefined,
+    })
+    if (data.error) { capStore.setMessage(`内容发布执行失败：${data.error}`, 'error'); return }
+    publishRun.value = data.run || null
+    capStore.setMessage(`内容发布执行完成，状态：${data.state || 'unknown'}`, 'success')
+  } finally {
+    loadingPublish.value = false
+  }
 }
 
 async function rerunFailed() {
-  const runId = publishRun.value?.run_id
-  if (!runId) { capStore.setMessage('暂无可复跑 run_id', 'warning'); return }
-  const data = await apiStore.api('POST', '/api/capabilities/content_publish/rerun', {
-    input_mode: input.input_mode, run_id: runId, session_id: input.session_id,
-    dry_run: input.dry_run, rerun_failed_only: true,
-  })
-  if (data.error) { capStore.setMessage(`内容发布复跑失败：${data.error}`, 'error'); return }
-  publishRun.value = data.run || publishRun.value
-  capStore.setMessage(`内容发布复跑完成：${data.state || 'unknown'}`, 'success')
+  if (loadingRerun.value) return
+  loadingRerun.value = true
+  try {
+    const runId = publishRun.value?.run_id
+    if (!runId) { capStore.setMessage('暂无可复跑 run_id', 'warning'); return }
+    const data = await apiStore.api('POST', '/api/capabilities/content_publish/rerun', {
+      input_mode: input.input_mode, run_id: runId, session_id: input.session_id,
+      dry_run: input.dry_run, rerun_failed_only: true,
+    })
+    if (data.error) { capStore.setMessage(`内容发布复跑失败：${data.error}`, 'error'); return }
+    publishRun.value = data.run || publishRun.value
+    capStore.setMessage(`内容发布复跑完成：${data.state || 'unknown'}`, 'success')
+  } finally {
+    loadingRerun.value = false
+  }
 }
 
 onMounted(async () => {

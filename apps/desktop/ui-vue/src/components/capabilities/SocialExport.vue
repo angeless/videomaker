@@ -10,8 +10,8 @@
       <div class="form-row"><label>输出目录</label><input v-model="input.output_dir" class="form-input" placeholder="留空默认" /></div>
       <div class="form-row"><label>严格时长</label><input type="checkbox" v-model="input.strict_duration_limit" /></div>
       <div class="btn-row">
-        <button class="btn btn-sm" @click="buildPlan" :disabled="!appStore.projectDir">生成计划</button>
-        <button class="btn btn-sm" @click="validate" :disabled="!appStore.projectDir">校验规格</button>
+        <button class="btn btn-sm" @click="buildPlan" :disabled="!appStore.projectDir || loadingPlan">{{ loadingPlan ? '生成中…' : '生成计划' }}</button>
+        <button class="btn btn-sm" @click="validate" :disabled="!appStore.projectDir || loadingValidate">{{ loadingValidate ? '校验中…' : '校验规格' }}</button>
         <button class="btn btn-primary btn-sm" @click="runExport" :disabled="!appStore.projectDir || running">
           {{ running ? `导出中 ${progress}%` : '执行导出' }}
         </button>
@@ -71,6 +71,8 @@ const exportResult = ref(null)
 const history = ref([])
 const running = ref(false)
 const progress = ref(0)
+const loadingPlan = ref(false)
+const loadingValidate = ref(false)
 
 function useProfile(p) {
   const cur = input.platforms.split(',').map(x => x.trim()).filter(Boolean)
@@ -89,22 +91,34 @@ async function loadHistory() {
 }
 
 async function buildPlan() {
-  const data = await apiStore.api('POST', '/api/capabilities/social_export/plan', {
-    input_video: input.input_video, platforms: input.platforms, quality: input.quality,
-    output_dir: input.output_dir, strict_duration_limit: input.strict_duration_limit,
-  })
-  if (data.error) { capStore.setMessage(`导出计划生成失败：${data.error}`, 'error'); return }
-  exportPlan.value = data.plan || null
-  capStore.setMessage('已生成社媒导出计划', 'success')
+  if (loadingPlan.value) return
+  loadingPlan.value = true
+  try {
+    const data = await apiStore.api('POST', '/api/capabilities/social_export/plan', {
+      input_video: input.input_video, platforms: input.platforms, quality: input.quality,
+      output_dir: input.output_dir, strict_duration_limit: input.strict_duration_limit,
+    })
+    if (data.error) { capStore.setMessage(`导出计划生成失败：${data.error}`, 'error'); return }
+    exportPlan.value = data.plan || null
+    capStore.setMessage('已生成社媒导出计划', 'success')
+  } finally {
+    loadingPlan.value = false
+  }
 }
 
 async function validate() {
-  const data = await apiStore.api('POST', '/api/capabilities/social_export/validate_source', {
-    input_video: input.input_video, platforms: input.platforms, strict_duration_limit: input.strict_duration_limit,
-  })
-  if (data.error) { capStore.setMessage(`源视频规格校验失败：${data.error}`, 'error'); return }
-  const s = data.report?.summary || {}
-  capStore.setMessage(`规格校验完成：目标平台 ${s.total_platforms || 0} 个，需变换 ${s.transform_required_platforms || 0} 个`, 'success')
+  if (loadingValidate.value) return
+  loadingValidate.value = true
+  try {
+    const data = await apiStore.api('POST', '/api/capabilities/social_export/validate_source', {
+      input_video: input.input_video, platforms: input.platforms, strict_duration_limit: input.strict_duration_limit,
+    })
+    if (data.error) { capStore.setMessage(`源视频规格校验失败：${data.error}`, 'error'); return }
+    const s = data.report?.summary || {}
+    capStore.setMessage(`规格校验完成：目标平台 ${s.total_platforms || 0} 个，需变换 ${s.transform_required_platforms || 0} 个`, 'success')
+  } finally {
+    loadingValidate.value = false
+  }
 }
 
 async function runExport() {

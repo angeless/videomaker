@@ -116,28 +116,89 @@ class VideoAssetToolkit:
         except Exception:
             return hashlib.md5(video_path.name.encode()).hexdigest()[:12]
     
-    def analyze_single_video(self, video_path):
-        """分析单个视频"""
+    def analyze_single_video(self, video_path, enable_transcription=None,
+                             include_audio_quality=None):
+        """分析单个视频
+
+        Args:
+            video_path: 视频文件路径
+            enable_transcription: 是否启用语音转录 (None=使用config, True/False=强制)
+            include_audio_quality: 是否包含音频质量评分 (None=使用config, True/False=强制)
+        """
         result = {
             "metadata": self.extract_metadata(video_path),
             "local_analysis": {},
             "cloud_analysis": {},
+            "transcription": {},
+            "audio_quality": {},
             "recommendations": []
         }
-        
+
         # 本地分析
         if self.config["local_models"]["enabled"]:
             result["local_analysis"] = self.local_analysis(video_path)
-            
+
+        # 语音转录
+        do_transcribe = enable_transcription
+        if do_transcribe is None:
+            do_transcribe = self.config.get("transcription", {}).get("enabled", False)
+        if do_transcribe:
+            result["transcription"] = self._transcribe_video(video_path)
+
+        # 音频质量评分
+        do_audio_quality = include_audio_quality
+        if do_audio_quality is None:
+            do_audio_quality = self.config.get("audio_quality", {}).get("enabled", False)
+        if do_audio_quality:
+            result["audio_quality"] = self._analyze_audio_quality(video_path)
+
         # 云端分析
         if self.config["cloud_models"]["enabled"]:
             result["cloud_analysis"] = self.cloud_analysis(video_path)
-            
+
         # 生成建议
         result["recommendations"] = self.generate_recommendations(result)
-        
+
         return result
+
+    def _transcribe_video(self, video_path):
+        """调用转录模块对视频进行语音识别"""
+        try:
+            from modules.step1_material_analysis.transcribe import transcribe_video
+        except ImportError:
+            try:
+                from .transcribe import transcribe_video
+            except ImportError:
+                logger.warning("转录模块不可用，跳过语音识别")
+                return {"enabled": False, "error": "transcribe module not found"}
+
+        tc = self.config.get("transcription", {})
+        model_size = tc.get("model_size", "medium")
+        language = tc.get("language", None)
+        max_duration = tc.get("max_duration", None)
+
+        logger.info("转录: %s (model=%s)", Path(video_path).name, model_size)
+        return transcribe_video(
+            str(video_path),
+            model_size=model_size,
+            language=language,
+            max_duration=max_duration,
+        )
     
+    def _analyze_audio_quality(self, video_path):
+        """调用音频质量评分模块"""
+        try:
+            from modules.step1_material_analysis.audio_quality import analyze_audio_quality
+        except ImportError:
+            try:
+                from .audio_quality import analyze_audio_quality
+            except ImportError:
+                logger.warning("音频质量模块不可用，跳过评分")
+                return {"enabled": False, "error": "audio_quality module not found"}
+
+        logger.info("音频质量评分: %s", Path(video_path).name)
+        return analyze_audio_quality(str(video_path))
+
     @staticmethod
     def _parse_iso6709_location(tag_value):
         """Parse ISO 6709 location string to lat/lon/alt dict.
@@ -333,12 +394,18 @@ class VideoAssetToolkit:
             "brightness": 0.5,
             "brightness_std": 0.0,
             "saturation": 0.35,
+            "saturation_std": 0.0,
             "blue_ratio": 0.33,
             "green_ratio": 0.33,
             "red_ratio": 0.33,
             "edge_density": 0.1,
+            "edge_density_std": 0.0,
             "motion_score": 0.0,
+            "motion_std": 0.0,
             "face_ratio": 0.0,
+            "color_temp": 0.0,
+            "texture_complexity": 0.0,
+            "hue_dominant": 0,
         }
 
         if not HAS_CV:
@@ -419,55 +486,121 @@ class VideoAssetToolkit:
         green_ratio = float(np.mean([x[1] for x in color_ratio_list])) if color_ratio_list else 0.33
         red_ratio = float(np.mean([x[2] for x in color_ratio_list])) if color_ratio_list else 0.33
 
+        # 色温估算: red_ratio - blue_ratio (>0 暖色调, <0 冷色调)
+        color_temp = red_ratio - blue_ratio
+
+        # 纹理复杂度: edge_density 标准差（高=场景多变，低=单一场景）
+        edge_std = float(np.std(edge_list)) if len(edge_list) > 1 else 0.0
+        texture_complexity = float(np.mean(edge_list)) * (1 + edge_std * 5) if edge_list else 0.1
+
+        # 主色调（Hue 通道众数）
+        hue_dominant = 0
+
         stats = {
             "sample_count": len(brightness_list),
             "brightness": float(np.mean(brightness_list)),
             "brightness_std": float(np.std(brightness_list)),
             "saturation": float(np.mean(saturation_list)) if saturation_list else 0.35,
+            "saturation_std": float(np.std(saturation_list)) if len(saturation_list) > 1 else 0.0,
             "blue_ratio": blue_ratio,
             "green_ratio": green_ratio,
             "red_ratio": red_ratio,
             "edge_density": float(np.mean(edge_list)) if edge_list else 0.1,
+            "edge_density_std": edge_std,
             "motion_score": float(np.mean(motion_list)) if motion_list else 0.0,
+            "motion_std": float(np.std(motion_list)) if len(motion_list) > 1 else 0.0,
             "face_ratio": float(face_hits / max(len(brightness_list), 1)),
+            "color_temp": round(color_temp, 4),
+            "texture_complexity": round(texture_complexity, 4),
+            "hue_dominant": hue_dominant,
         }
         self._visual_stats_cache[key] = stats
         return stats
     
     def object_detection_simulation(self, video_path):
-        """基于视频帧视觉统计的轻量物体/场景标签推断。"""
+        """基于视频帧视觉统计的轻量物体/场景标签推断（增强版）。"""
         stats = self._get_visual_stats(video_path)
         objects = []
 
-        if stats["face_ratio"] >= 0.15:
-            objects.append("person")
-        if stats["green_ratio"] >= 0.36:
-            objects.extend(["tree", "nature"])
-        if stats["blue_ratio"] >= 0.34 and stats["brightness"] >= 0.55:
-            objects.append("sky")
-        if stats["blue_ratio"] >= 0.38 and stats["saturation"] >= 0.32:
-            objects.append("water")
-        if stats["edge_density"] >= 0.10:
-            objects.append("building")
-        if stats["motion_score"] >= 10.0:
-            objects.append("activity")
-        if stats["motion_score"] >= 24.0:
-            objects.append("vehicle")
-        if stats["saturation"] >= 0.45 and stats["brightness"] >= 0.55:
-            objects.append("outdoor")
-        if stats["brightness"] >= 0.78 and stats["saturation"] <= 0.28:
-            objects.extend(["snow", "mountain"])
-        if stats["brightness"] <= 0.32 and stats["edge_density"] <= 0.10:
-            objects.append("indoor")
-        if stats["edge_density"] <= 0.07 and stats["green_ratio"] + stats["blue_ratio"] >= 0.70:
-            objects.append("landscape")
+        bri = stats["brightness"]
+        sat = stats["saturation"]
+        edge = stats["edge_density"]
+        motion = stats["motion_score"]
+        face = stats["face_ratio"]
+        blue = stats["blue_ratio"]
+        green = stats["green_ratio"]
+        red = stats["red_ratio"]
+        temp = stats.get("color_temp", 0)
+        tex = stats.get("texture_complexity", 0)
+        motion_std = stats.get("motion_std", 0)
 
+        # ── 人物检测 ──
+        if face >= 0.15:
+            objects.append("person")
+            if face >= 0.5 and motion <= 8:
+                objects.append("talking")  # 高人脸+低运动=对话/采访
+            if face >= 0.3:
+                objects.append("portrait")
+
+        # ── 自然元素 ──
+        if green >= 0.36:
+            objects.extend(["tree", "nature"])
+            if green >= 0.40 and sat >= 0.35:
+                objects.append("forest")
+        if blue >= 0.34 and bri >= 0.55:
+            objects.append("sky")
+        if blue >= 0.38 and sat >= 0.32:
+            objects.append("water")
+            if blue >= 0.42 and bri >= 0.50:
+                objects.append("ocean")
+        if bri >= 0.78 and sat <= 0.28:
+            objects.extend(["snow", "mountain"])
+
+        # ── 建筑与城市 ──
+        if edge >= 0.10:
+            objects.append("building")
+            if edge >= 0.15 and tex >= 0.15:
+                objects.append("urban")
+            if edge >= 0.12 and motion >= 12:
+                objects.append("street")
+
+        # ── 运动与活动 ──
+        if motion >= 10.0:
+            objects.append("activity")
+        if motion >= 24.0:
+            objects.append("vehicle")
+        if motion >= 15.0 and motion_std >= 5.0:
+            objects.append("dynamic")  # 运动变化大=动态镜头
+
+        # ── 室内/室外 ──
+        if sat >= 0.45 and bri >= 0.55:
+            objects.append("outdoor")
+        if bri <= 0.32 and edge <= 0.10:
+            objects.append("indoor")
+        elif bri <= 0.45 and temp > 0.02 and edge <= 0.12:
+            objects.append("indoor")  # 暖色调+暗=室内灯光
+
+        # ── 美食/餐饮（暖色+中等饱和度+中等亮度） ──
+        if temp > 0.03 and 0.35 <= sat <= 0.55 and 0.40 <= bri <= 0.70 and edge >= 0.06:
+            objects.append("food")
+
+        # ── 景观 ──
+        if edge <= 0.07 and green + blue >= 0.70:
+            objects.append("landscape")
         if "outdoor" in objects and "landscape" not in objects:
             objects.append("landscape")
         if "indoor" in objects and "room" not in objects:
             objects.append("room")
+
+        # ── 色温推断 ──
+        if temp > 0.04:
+            objects.append("warm_tone")  # 暖色调（日落/室内暖光）
+        elif temp < -0.03:
+            objects.append("cool_tone")  # 冷色调（蓝天/雪景/清晨）
+
+        # ── 最低保证 ──
         if len(objects) < 2:
-            if stats["brightness"] >= 0.55:
+            if bri >= 0.55:
                 objects.append("outdoor")
             else:
                 objects.append("indoor")
@@ -480,75 +613,128 @@ class VideoAssetToolkit:
             if obj not in dedup:
                 dedup.append(obj)
 
-        confidence = min(0.95, 0.45 + stats["sample_count"] / 40.0 + min(stats["motion_score"] / 120.0, 0.25))
+        # 增强置信度计算：更多特征=更高置信度
+        feature_diversity = len(set(objects)) / 10.0
+        confidence = min(0.95, 0.45 + stats["sample_count"] / 40.0
+                         + min(motion / 120.0, 0.15)
+                         + min(feature_diversity, 0.15))
 
         return {
-            "detected_objects": dedup[:8],
+            "detected_objects": dedup[:10],
             "confidence": round(float(confidence), 3),
-            "method": "视频帧视觉统计推断",
-            "note": "基于亮度/饱和度/边缘/运动/人脸的轻量本地分析"
+            "method": "视频帧视觉统计推断（增强版）",
+            "note": "基于亮度/饱和度/边缘/运动/人脸/色温/纹理的多特征分析"
         }
     
     def scene_description_simulation(self, video_path):
-        """基于视觉统计生成场景描述与情绪。"""
+        """基于视觉统计生成场景描述与情绪（增强版）。"""
         stats = self._get_visual_stats(video_path)
         objects = self.object_detection_simulation(video_path).get("detected_objects", [])
+        temp = stats.get("color_temp", 0)
 
-        if "snow" in objects:
+        # ── 场景类型（多条件组合判定） ──
+        obj_set = set(objects)
+        if "snow" in obj_set and "mountain" in obj_set:
             scene_type = "snowy mountain outdoor scene"
-        elif "building" in objects and stats["edge_density"] >= 0.15:
-            scene_type = "urban architecture or street scene"
-        elif "water" in objects and "tree" in objects:
+        elif "ocean" in obj_set or ("water" in obj_set and "sky" in obj_set):
+            scene_type = "coastal or waterfront scene"
+        elif "forest" in obj_set or ("tree" in obj_set and "nature" in obj_set and "building" not in obj_set):
+            scene_type = "natural forest or park scene"
+        elif "urban" in obj_set or ("building" in obj_set and "street" in obj_set):
+            scene_type = "urban street scene"
+        elif "building" in obj_set and stats["edge_density"] >= 0.15:
+            scene_type = "urban architecture scene"
+        elif "water" in obj_set and "tree" in obj_set:
             scene_type = "natural landscape with water and vegetation"
-        elif "indoor" in objects and "person" in objects:
+        elif "food" in obj_set:
+            scene_type = "food or dining scene"
+        elif "talking" in obj_set:
+            scene_type = "conversation or interview scene"
+        elif "indoor" in obj_set and "person" in obj_set:
             scene_type = "indoor people-focused vlog scene"
-        elif "person" in objects:
+        elif "person" in obj_set and "outdoor" in obj_set:
+            scene_type = "outdoor lifestyle scene"
+        elif "person" in obj_set:
             scene_type = "people-focused lifestyle scene"
+        elif "landscape" in obj_set:
+            scene_type = "open landscape scene"
         else:
             scene_type = "mixed environment scene"
 
+        # ── 运镜 ──
         if stats["motion_score"] >= 26.0:
             camera_motion = "fast motion"
         elif stats["motion_score"] >= 12.0:
             camera_motion = "moderate motion"
+        elif stats["motion_score"] >= 5.0:
+            camera_motion = "slow pan"
         else:
             camera_motion = "stable framing"
 
+        # ── 光线（结合色温） ──
         if stats["brightness"] >= 0.72:
-            lighting = "bright daylight"
+            if temp > 0.03:
+                lighting = "warm golden light"
+            else:
+                lighting = "bright daylight"
+        elif stats["brightness"] <= 0.30:
+            lighting = "low-light or nighttime"
         elif stats["brightness"] <= 0.40:
-            lighting = "low-light"
+            if temp > 0.02:
+                lighting = "warm indoor light"
+            else:
+                lighting = "low-light"
         else:
-            lighting = "soft natural light"
+            if temp < -0.02:
+                lighting = "cool natural light"
+            else:
+                lighting = "soft natural light"
 
+        # ── 情绪（多维度组合） ──
         if stats["motion_score"] >= 24.0:
             mood = "energetic, dynamic"
-        elif stats["brightness"] <= 0.38:
+        elif stats["brightness"] <= 0.35 and stats["saturation"] <= 0.30:
             mood = "moody, cinematic"
-        elif stats["saturation"] >= 0.46:
+        elif stats["brightness"] <= 0.38 and temp > 0.02:
+            mood = "warm, cozy"
+        elif stats["saturation"] >= 0.46 and stats["brightness"] >= 0.55:
             mood = "vivid, lively"
-        elif stats["face_ratio"] >= 0.2:
+        elif stats["face_ratio"] >= 0.3 and stats["motion_score"] <= 8:
             mood = "intimate, personal"
+        elif "snow" in obj_set or "mountain" in obj_set:
+            mood = "adventurous, majestic"
+        elif stats["brightness_std"] >= 0.12:
+            mood = "varied, transitional"
         else:
             mood = "calm, atmospheric"
 
         description = (
             f"{scene_type}; {camera_motion}; {lighting}."
         )
-        confidence = min(0.95, 0.40 + stats["sample_count"] / 45.0 + min(stats["brightness_std"], 0.2))
+        # 更多特征 → 更高置信度
+        feature_count = len([v for v in [
+            stats.get("color_temp"), stats.get("texture_complexity"),
+            stats.get("saturation_std"), stats.get("motion_std"),
+        ] if v])
+        confidence = min(0.95, 0.40 + stats["sample_count"] / 45.0
+                         + min(stats["brightness_std"], 0.15)
+                         + feature_count * 0.02)
 
         return {
             "description": description,
+            "scene_type": scene_type,
             "mood": mood,
             "confidence": round(float(confidence), 3),
-            "method": "视频帧视觉统计推断",
-            "note": "基于帧内容与运动特征自动生成",
+            "method": "视频帧视觉统计推断（增强版）",
+            "note": "基于帧内容、运动、色温、纹理多维特征自动生成",
             "visual_features": {
                 "brightness": round(float(stats["brightness"]), 3),
                 "saturation": round(float(stats["saturation"]), 3),
                 "edge_density": round(float(stats["edge_density"]), 3),
                 "motion_score": round(float(stats["motion_score"]), 3),
                 "face_ratio": round(float(stats["face_ratio"]), 3),
+                "color_temp": round(float(temp), 4),
+                "texture_complexity": round(float(stats.get("texture_complexity", 0)), 4),
             }
         }
     

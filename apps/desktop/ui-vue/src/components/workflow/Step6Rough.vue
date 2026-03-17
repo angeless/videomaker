@@ -5,8 +5,8 @@
       生成粗剪视频，用于快速预览整体效果。
     </p>
 
-    <!-- 渲染选项 -->
-    <div class="card" style="margin-bottom: 16px">
+    <!-- 渲染选项（未完成时显示） -->
+    <div v-if="!isDone" class="card" style="margin-bottom: 16px">
       <div class="card-header">渲染参数</div>
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
         <div class="form-group">
@@ -34,15 +34,15 @@
 
     <!-- 粗剪结果 -->
     <div v-if="workflow.roughUrl" class="card">
-      <div class="card-header">粗剪结果</div>
+      <div class="card-header">{{ isDone ? '✅ 粗剪已通过审核' : '粗剪预览' }}</div>
       <video :src="workflow.roughUrl" controls style="width: 100%; border-radius: 6px"></video>
     </div>
 
     <div class="step-actions">
-      <button class="btn btn-primary" :disabled="workflow.jobRunning" @click="workflow.runStep(6)">
-        {{ workflow.jobRunning ? labels.workflow.running : '生成粗剪' }}
+      <button v-if="!isDone" class="btn btn-primary" :disabled="workflow.jobRunning" @click="workflow.runStep(6)">
+        {{ workflow.jobRunning ? labels.workflow.running : (workflow.roughUrl ? '重新生成' : '生成粗剪') }}
       </button>
-      <button v-if="workflow.roughUrl" class="btn btn-success" @click="workflow.approveStep(6)">
+      <button v-if="workflow.roughUrl && isWaitingReview" class="btn btn-success" @click="workflow.approveStep(6)">
         {{ labels.workflow.approve }}
       </button>
     </div>
@@ -50,9 +50,20 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { useWorkflowStore } from '../../stores/workflow.js'
+import { useAppStore } from '../../stores/app.js'
 import labels from '../../i18n/labels.js'
+
 const workflow = useWorkflowStore()
+const appStore = useAppStore()
+
+const step6Status = computed(() => {
+  const s = (appStore.steps || []).find(s => s.n === 6)
+  return s ? s.status : ''
+})
+const isDone = computed(() => step6Status.value === 'done')
+const isWaitingReview = computed(() => step6Status.value === 'waiting_review')
 </script>
 
 <style scoped>

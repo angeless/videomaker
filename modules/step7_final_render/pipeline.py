@@ -15,7 +15,7 @@ import tempfile
 import shutil
 import time
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +67,8 @@ class RenderPipeline:
         output_path: str,
         bgm_path: Optional[str] = None,
         narration_path: Optional[str] = None,
+        *,
+        degradations: Optional[List] = None,
     ) -> str:
         """
         全流程渲染
@@ -77,6 +79,7 @@ class RenderPipeline:
             output_path: 最终输出路径
             bgm_path:    背景音乐路径（可选）
             narration_path: 旁白音频路径（可选）
+            degradations: 退化事件收集列表（可选，由调用方传入）
 
         Returns:
             最终视频路径
@@ -91,13 +94,13 @@ class RenderPipeline:
         concat_out = self._concat_materials(clips, materials, base)
 
         # 2. 磨皮（有人脸才处理）
-        beauty_out = self._apply_beauty(concat_out, base, has_face)
+        beauty_out = self._apply_beauty(concat_out, base, has_face, degradations=degradations)
 
         # 3. 调色
         color_out = self._apply_color_grading(beauty_out, base)
 
         # 4. 字幕
-        sub_out = self._apply_subtitles(color_out, subtitles, base)
+        sub_out = self._apply_subtitles(color_out, subtitles, base, degradations=degradations)
 
         # 5. 音频混合
         final = self._mix_audio(sub_out, output_path, bgm_path, narration_path)
@@ -113,14 +116,16 @@ class RenderPipeline:
     def concat_materials(self, clips: List[Dict], materials: Dict, base: str) -> str:
         return self._concat_materials(clips, materials, base)
 
-    def apply_beauty(self, input_path: str, base: str, has_face: bool) -> str:
-        return self._apply_beauty(input_path, base, has_face)
+    def apply_beauty(self, input_path: str, base: str, has_face: bool,
+                     *, degradations: Optional[List] = None) -> str:
+        return self._apply_beauty(input_path, base, has_face, degradations=degradations)
 
     def apply_color_grading(self, input_path: str, base: str) -> str:
         return self._apply_color_grading(input_path, base)
 
-    def apply_subtitles(self, input_path: str, subtitles: List[Dict], base: str) -> str:
-        return self._apply_subtitles(input_path, subtitles, base)
+    def apply_subtitles(self, input_path: str, subtitles: List[Dict], base: str,
+                        *, degradations: Optional[List] = None) -> str:
+        return self._apply_subtitles(input_path, subtitles, base, degradations=degradations)
 
     def mix_audio(
         self,
@@ -158,8 +163,8 @@ class RenderPipeline:
                 logger.warning("片段 %d 找不到素材路径，跳过", i + 1)
                 continue
 
-            ss = clip.get("source_start", 0) or 0
-            se = clip.get("source_end") or clip.get("end_time")
+            ss = clip.get("source_start") or clip.get("start_s") or 0
+            se = clip.get("source_end") or clip.get("end_s") or clip.get("end_time")
             dur = (se - ss) if se is not None else clip.get("duration", 5)
 
             seg_out = str(seg_dir / f"seg_{i:03d}.mp4")
@@ -236,7 +241,8 @@ class RenderPipeline:
             )
         return output
 
-    def _apply_beauty(self, input_path: str, base: str, has_face: bool) -> str:
+    def _apply_beauty(self, input_path: str, base: str, has_face: bool,
+                      *, degradations: Optional[List] = None) -> str:
         """逐帧磨皮（仅当检测到人脸时）"""
         if not has_face:
             return input_path
@@ -250,9 +256,17 @@ class RenderPipeline:
             )
             beauty.process_video(input_path, output)
             return output
-        except Exception:
+        except Exception as exc:
             # Bug E 修复：捕获所有异常（不只是 ImportError），fallback 到 smartblur
             logger.warning("磨皮处理失败，使用简易磨皮（FFmpeg smartblur）")
+            if degradations is not None:
+                degradations.append({
+                    "feature": "skin_smooth",
+                    "expected": "frequency_separation",
+                    "actual": "smartblur",
+                    "reason": f"频率分解磨皮失败（{exc.__class__.__name__}），退化为 FFmpeg smartblur",
+                    "severity": "warning",
+                })
             return self._apply_beauty_fallback(input_path, base)
 
     def _apply_beauty_fallback(self, input_path: str, base: str) -> str:
@@ -401,7 +415,8 @@ class RenderPipeline:
             timeout_seconds=float(self.config.get("timeout_concat_sec", 1500)),
         )
 
-    def _apply_subtitles(self, input_path: str, subtitles: List[Dict], base: str) -> str:
+    def _apply_subtitles(self, input_path: str, subtitles: List[Dict], base: str,
+                         *, degradations: Optional[List] = None) -> str:
         """
         硬字幕压制（双语）。
         Bug C 修复：先检测 FFmpeg filter 可用性；
@@ -444,13 +459,31 @@ class RenderPipeline:
         # PIL/cv2 fallback
         if HAS_CV2 and HAS_PIL:
             logger.info("libass 不可用，使用 PIL+cv2 字幕渲染")
-            return self._apply_subtitles_cv2(input_path, subtitles, output)
+            if degradations is not None:
+                degradations.append({
+                    "feature": "subtitle_render",
+                    "expected": "libass",
+                    "actual": "pil_cv2",
+                    "reason": "FFmpeg 未编译 libass，字幕退化为 PIL+cv2 渲染",
+                    "severity": "warning",
+                })
+            return self._apply_subtitles_cv2(input_path, subtitles, output,
+                                             degradations=degradations)
 
         logger.warning("字幕渲染跳过（libass / cv2 均不可用）")
+        if degradations is not None:
+            degradations.append({
+                "feature": "subtitle_render",
+                "expected": "libass",
+                "actual": "skipped",
+                "reason": "libass 和 PIL/cv2 均不可用，字幕已跳过",
+                "severity": "error",
+            })
         return input_path
 
     def _apply_subtitles_cv2(
-        self, input_path: str, subtitles: List[Dict], output: str
+        self, input_path: str, subtitles: List[Dict], output: str,
+        *, degradations: Optional[List] = None,
     ) -> str:
         """PIL + cv2 字幕渲染 fallback（无需 libass）"""
         import cv2 as _cv2  # noqa
@@ -467,6 +500,14 @@ class RenderPipeline:
         except Exception:
             font_cn = _Font.load_default()
             font_en = _Font.load_default()
+            if degradations is not None:
+                degradations.append({
+                    "feature": "subtitle_font",
+                    "expected": "PingFang.ttc",
+                    "actual": "default_bitmap",
+                    "reason": "PingFang 字体加载失败，退化为 PIL 默认位图字体（中文可能乱码）",
+                    "severity": "warning",
+                })
 
         cap = _cv2.VideoCapture(input_path)
         try:
@@ -710,6 +751,10 @@ class RenderPipeline:
             return None
         if Path(vid).exists():
             return vid
+        # 优先查 matched_path（script_matched.json 段落直接附带路径）
+        matched = clip.get("matched_path")
+        if matched and Path(matched).exists():
+            return matched
         videos = materials.get("videos", {})
         if vid in videos:
             return videos[vid].get("file_info", {}).get("path")

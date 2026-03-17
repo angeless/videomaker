@@ -24,7 +24,7 @@
     </div>
 
     <!-- 质量分 -->
-    <span v-if="asset.quality_score" class="quality-badge">Q{{ asset.quality_score }}</span>
+    <span v-if="asset.quality_score" class="quality-badge" title="画面质量评分（0-1），综合考虑清晰度、构图和光线">{{ qualityLabel(asset.quality_score) }}</span>
   </div>
 </template>
 
@@ -35,6 +35,14 @@ import { translateAndDedupe } from '../../composables/useSemanticTranslation.js'
 const props = defineProps({
   asset: { type: Object, required: true },
 })
+
+function qualityLabel(score) {
+  const n = Number(score)
+  if (n >= 0.9) return '优秀'
+  if (n >= 0.7) return '良好'
+  if (n >= 0.5) return '一般'
+  return '较差'
+}
 
 const topTags = computed(() => {
   const raw = props.asset.semantic_keywords || []

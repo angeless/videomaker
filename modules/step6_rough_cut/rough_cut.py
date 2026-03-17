@@ -239,9 +239,12 @@ def _build_clip_timeline(script: Dict) -> List[Dict]:
             continue
         subtitle_by_clip.setdefault(key, []).append(sub)
 
-    for idx, clip in enumerate(script.get("clips", []), start=1):
-        source_start = _to_float(clip.get("source_start", 0), 0.0)
-        source_end = clip.get("source_end")
+    # 兼容 "clips" 和 "segments" 两种键名
+    clips = script.get("clips") or script.get("segments") or []
+    for idx, clip in enumerate(clips, start=1):
+        # 兼容 source_start/start_s 两种字段名
+        source_start = _to_float(clip.get("source_start", clip.get("start_s", 0)), 0.0)
+        source_end = clip.get("source_end") or clip.get("end_s")
         if source_end is None:
             source_end = source_start + _to_float(clip.get("duration", 5), 5.0)
         source_end = _to_float(source_end, source_start + 5.0)

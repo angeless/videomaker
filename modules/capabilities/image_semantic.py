@@ -106,6 +106,37 @@ def _normalize_search_hit(item: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def check_ai_status(library: Optional[Any] = None) -> Dict[str, Any]:
+    """Check whether vision enrichment and vector search are available."""
+    vision_ok = False
+    vector_ok = False
+    reasons: List[str] = []
+
+    if library is None:
+        reasons.append("未注入全局媒体库")
+    else:
+        if hasattr(library, "_vision_enrich_enabled"):
+            vision_ok = library._vision_enrich_enabled()
+        if hasattr(library, "_embedding_runtime_status"):
+            emb = library._embedding_runtime_status()
+            vector_ok = bool(emb.get("enabled"))
+            if not vector_ok:
+                reasons.append(emb.get("message") or emb.get("reason") or "向量搜索不可用")
+        if not vision_ok:
+            if not any("API Key" in r for r in reasons):
+                reasons.append("视觉分析需要 OpenAI API Key")
+
+    degraded = not vision_ok or not vector_ok
+    return {
+        "degraded": degraded,
+        "vision_available": vision_ok,
+        "vector_available": vector_ok,
+        "keyword_available": True,
+        "reasons": reasons,
+        "message": "；".join(reasons) if reasons else "",
+    }
+
+
 def analyze_images(
     image_paths: Iterable[Any],
     *,

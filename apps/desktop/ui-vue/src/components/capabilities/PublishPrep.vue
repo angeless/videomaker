@@ -9,7 +9,8 @@
         <select v-model="input.platform_content_type" class="form-input"><option value="video_post">视频</option><option value="article">文章</option></select>
       </div>
       <div class="form-row"><label>使用 LLM</label><input type="checkbox" v-model="input.use_llm" /></div>
-      <button class="btn btn-primary btn-sm" @click="generate">生成发布文案</button>
+      <button class="btn btn-primary btn-sm" @click="generate" :disabled="!canGenerate || loading">{{ loading ? '生成中…' : '生成发布文案' }}</button>
+      <div v-if="!input.script_text.trim() && !input.voiceover_text.trim() && appStore.projectDir" class="form-hint">请先填写脚本文案或旁白文案</div>
     </div>
     <div v-if="result" class="cap-section">
       <div class="cap-subtitle">生成结果 (覆盖 {{ result.platform_results?.length || 0 }} 个平台)</div>
@@ -19,7 +20,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useApiStore } from '../../stores/api.js'
 import { useCapabilitiesStore } from '../../stores/capabilities.js'
 import { useAppStore } from '../../stores/app.js'
@@ -34,20 +35,42 @@ const input = reactive({
   profile_overrides_json: '{}', use_llm: true, llm_provider: '', llm_model: '',
 })
 const result = ref(null)
+const loading = ref(false)
+const canGenerate = computed(() => appStore.projectDir && (input.script_text.trim().length > 0 || input.voiceover_text.trim().length > 0))
+
+onMounted(async () => {
+  if (appStore.projectDir && !input.script_text.trim()) {
+    try {
+      const data = await apiStore.api('GET', '/api/script')
+      if (data && !data.error && Array.isArray(data.clips)) {
+        const narrations = data.clips.map(c => c.narration || '').filter(Boolean)
+        if (narrations.length) {
+          input.script_text = narrations.join('\n')
+        }
+      }
+    } catch { /* silent — script may not exist yet */ }
+  }
+})
 
 async function generate() {
-  let overrides = {}
-  try { overrides = JSON.parse(input.profile_overrides_json) } catch { capStore.setMessage('profile_overrides_json 需为 JSON 对象', 'error'); return }
-  const platforms = input.platforms.replace(/\n/g, ',').replace(/，/g, ',').split(',').map(x => x.trim()).filter(Boolean)
-  const data = await apiStore.api('POST', '/api/capabilities/publish_prep/generate', {
-    input_mode: input.input_mode, script_text: input.script_text, voiceover_text: input.voiceover_text,
-    platforms, platform_content_type: input.platform_content_type,
-    use_saved_profiles: input.use_saved_profiles, profile_overrides: overrides,
-    use_llm: input.use_llm, llm_provider: input.llm_provider, llm_model: input.llm_model,
-  })
-  if (data.error) { capStore.setMessage(`发布文案生成失败：${data.error}`, 'error'); return }
-  result.value = data.result || null
-  capStore.setMessage(`发布文案生成完成：覆盖 ${result.value?.platform_results?.length || 0} 个平台`, 'success')
+  if (!canGenerate.value || loading.value) return
+  loading.value = true
+  try {
+    let overrides = {}
+    try { overrides = JSON.parse(input.profile_overrides_json) } catch { capStore.setMessage('profile_overrides_json 需为 JSON 对象', 'error'); return }
+    const platforms = input.platforms.replace(/\n/g, ',').replace(/，/g, ',').split(',').map(x => x.trim()).filter(Boolean)
+    const data = await apiStore.api('POST', '/api/capabilities/publish_prep/generate', {
+      input_mode: input.input_mode, script_text: input.script_text, voiceover_text: input.voiceover_text,
+      platforms, platform_content_type: input.platform_content_type,
+      use_saved_profiles: input.use_saved_profiles, profile_overrides: overrides,
+      use_llm: input.use_llm, llm_provider: input.llm_provider, llm_model: input.llm_model,
+    })
+    if (data.error) { capStore.setMessage(`发布文案生成失败：${data.error}`, 'error'); return }
+    result.value = data.result || null
+    capStore.setMessage(`发布文案生成完成：覆盖 ${result.value?.platform_results?.length || 0} 个平台`, 'success')
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 
@@ -58,4 +81,5 @@ h3 { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
 .form-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .form-row label { width: 80px; font-size: 12px; color: var(--muted); flex-shrink: 0; }
 .result-pre { background: var(--surface2); padding: 12px; border-radius: 6px; font-size: 12px; overflow-x: auto; white-space: pre-wrap; max-height: 400px; overflow-y: auto; }
+.form-hint { font-size: 11px; color: var(--muted); margin-top: 6px; }
 </style>

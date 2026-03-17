@@ -34,10 +34,11 @@ export const labels = {
   // ── 导航 ──
   nav: {
     library: '素材库',
-    production: '制作',
+    create: '创作',
+    production: '制作',  // 兼容
+    tools: '工具箱',
     settings: '设置',
     workflow: '工作流',
-    tools: '工具台',
   },
 
   // ── 素材库 ──
@@ -99,6 +100,11 @@ export const labels = {
       semantics: '语义与文案',
       distribution: '分发与发布',
       automation: '自动化',
+      // 新分组（旅程导向）
+      content: '内容策划',
+      editing: '剪辑制作',
+      enhance: '后期增强',
+      distribute: '发布分发',
     },
     items: {
       topic_library: { label: '选题库', hint: '浏览和管理选题模板' },
@@ -118,6 +124,18 @@ export const labels = {
       agent_templates: { label: 'Agent 模板', hint: '技能模板与变量' },
       agent_observability: { label: 'Agent 观测', hint: '成本和运行监控' },
     },
+  },
+
+  // ── 时间线 ──
+  timeline: {
+    toggle: '时间线',
+    zoomIn: '放大',
+    zoomOut: '缩小',
+    totalDuration: '总时长',
+    clipTrack: '视频',
+    subtitleTrack: '字幕',
+    audioTrack: '音频',
+    noData: '暂无脚本数据，请先完成步骤 3',
   },
 
   // ── 设置 ──
@@ -159,6 +177,34 @@ export const labels = {
     create: '创建项目',
     creating: '创建中…',
     opening: '打开中…',
+  },
+
+  // ── 创作侧栏 ──
+  createSidebar: {
+    guided: '引导流程',
+    guidedWorkflow: '7步工作流',
+    ideate: '选题构思',
+    organize: '剪辑编排',
+    refine: '精剪交接',
+    audio: '音频设计',
+    subtitle: '字幕制作',
+    publish: '发布导出',
+    freeform: '自由创作',
+    canvas: '工作流画布',
+    myWorkflows: '我的工作流',
+    newWorkflow: '新建工作流',
+  },
+
+  // ── 画布 ──
+  canvas: {
+    title: '工作流画布',
+    addNode: '添加节点',
+    save: '保存',
+    run: '运行',
+    clear: '清空',
+    nodesCount: '节点',
+    edgesCount: '连线',
+    untitled: '未命名工作流',
   },
 
   // ── 通用 ──

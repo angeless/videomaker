@@ -9,7 +9,7 @@
     },
     {
       "name": "vue-dev",
-      "runtimeExecutable": "npm",
+      "runtimeExecutable": "/usr/local/bin/npm",
       "runtimeArgs": ["run", "dev", "--prefix", "apps/desktop/ui-vue"],
       "port": 5173
     }

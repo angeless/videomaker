@@ -6,7 +6,8 @@
         <img :src="asset.thumbnail_url" :alt="asset.filename" loading="lazy" />
       </div>
       <div v-else class="asset-thumb-placeholder">
-        {{ asset.asset_kind === 'video' ? '🎬' : '🖼️' }}
+        <span class="placeholder-icon">{{ asset.asset_kind === 'video' ? '🎬' : '🖼️' }}</span>
+        <span class="placeholder-ext">{{ fileExt }}</span>
       </div>
       <span v-if="asset.duration" class="asset-duration">{{ formatDuration(asset.duration) }}</span>
       <span v-if="asset.asset_kind" class="asset-kind-badge">{{ asset.asset_kind === 'video' ? '视频' : '图片' }}</span>
@@ -18,7 +19,7 @@
 
       <div v-if="asset.resolution" class="asset-meta">
         {{ asset.resolution }}
-        <span v-if="asset.quality_score" class="quality-badge">Q{{ asset.quality_score }}</span>
+        <span v-if="asset.quality_score" class="quality-badge" title="画面质量评分（0-1），综合考虑清晰度、构图和光线">{{ qualityLabel(asset.quality_score) }}</span>
       </div>
 
       <div v-if="displayLocation" class="asset-meta">
@@ -83,8 +84,23 @@ const props = defineProps({
 
 defineEmits(['show-evidence'])
 
+function qualityLabel(score) {
+  const n = Number(score)
+  if (n >= 0.9) return '优秀'
+  if (n >= 0.7) return '良好'
+  if (n >= 0.5) return '一般'
+  return '较差'
+}
+
 const showAll = ref(false)
 const maxVisible = 5
+
+// B-03: 无缩略图时显示文件扩展名
+const fileExt = computed(() => {
+  const fn = props.asset.filename || ''
+  const dot = fn.lastIndexOf('.')
+  return dot > 0 ? fn.slice(dot).toUpperCase() : ''
+})
 
 // Category labels (zh)
 const categoryLabels = {
@@ -134,8 +150,9 @@ const categorizedTags = computed(() => {
   return cats
 })
 
+const maxCategories = 10
 const visibleCategories = computed(() => {
-  if (showAll.value) return categorizedTags.value
+  if (showAll.value) return categorizedTags.value.slice(0, maxCategories)
   return categorizedTags.value.slice(0, 2)
 })
 
@@ -145,8 +162,9 @@ const translatedTags = computed(() => {
   return translateAndDedupe(raw)
 })
 
+const maxExpanded = 30
 const visibleTags = computed(() => {
-  if (showAll.value) return translatedTags.value
+  if (showAll.value) return translatedTags.value.slice(0, maxExpanded)
   return translatedTags.value.slice(0, maxVisible)
 })
 
@@ -217,7 +235,13 @@ function formatDuration(seconds) {
 .asset-thumb-placeholder {
   font-size: 36px;
   opacity: 0.3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
 }
+.placeholder-icon { font-size: 36px; }
+.placeholder-ext { font-size: 10px; font-weight: 600; opacity: 0.7; }
 
 .asset-duration {
   position: absolute;

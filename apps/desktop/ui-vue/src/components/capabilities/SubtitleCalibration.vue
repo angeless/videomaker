@@ -21,8 +21,8 @@
         <label>字幕 JSON</label><textarea v-model="input.subtitles_json" class="form-input" rows="4" placeholder='[{"start":0,"end":1,"text":"..."}]'></textarea>
       </div>
       <div class="btn-row">
-        <button class="btn btn-sm" @click="plan" :disabled="!appStore.projectDir">生成规划</button>
-        <button class="btn btn-primary btn-sm" @click="run" :disabled="!appStore.projectDir">执行校准</button>
+        <button class="btn btn-sm" @click="plan" :disabled="!appStore.projectDir || loadingPlan">{{ loadingPlan ? '规划中…' : '生成规划' }}</button>
+        <button class="btn btn-primary btn-sm" @click="run" :disabled="!appStore.projectDir || loadingRun">{{ loadingRun ? '校准中…' : '执行校准' }}</button>
       </div>
     </div>
     <div v-if="planResult" class="cap-section">
@@ -52,6 +52,8 @@ const input = reactive({
 })
 const planResult = ref(null)
 const runResult = ref(null)
+const loadingPlan = ref(false)
+const loadingRun = ref(false)
 
 function buildPayload() {
   const p = {
@@ -65,21 +67,33 @@ function buildPayload() {
 }
 
 async function plan() {
-  const p = buildPayload(); if (!p) return
-  const data = await apiStore.api('POST', '/api/capabilities/subtitle_calibration/plan', p)
-  if (data.error) { capStore.setMessage(`字幕校准规划失败：${data.error}`, 'error'); return }
-  planResult.value = data.plan || null
-  capStore.setMessage('已生成字幕校准规划', 'success')
+  if (loadingPlan.value) return
+  loadingPlan.value = true
+  try {
+    const p = buildPayload(); if (!p) return
+    const data = await apiStore.api('POST', '/api/capabilities/subtitle_calibration/plan', p)
+    if (data.error) { capStore.setMessage(`字幕校准规划失败：${data.error}`, 'error'); return }
+    planResult.value = data.plan || null
+    capStore.setMessage('已生成字幕校准规划', 'success')
+  } finally {
+    loadingPlan.value = false
+  }
 }
 
 async function run() {
-  const p = buildPayload(); if (!p) return
-  p.use_llm = input.use_llm; p.llm_provider = input.llm_provider; p.llm_model = input.llm_model
-  const data = await apiStore.api('POST', '/api/capabilities/subtitle_calibration/run', p)
-  if (data.error) { capStore.setMessage(`字幕校准失败：${data.error}`, 'error'); return }
-  runResult.value = data.result || null
-  const report = runResult.value?.quality_report || {}
-  capStore.setMessage(`字幕校准完成：共 ${report.total_subtitles || 0} 条，时间轴调整 ${report.timeline_changed_count || 0} 条`, 'success')
+  if (loadingRun.value) return
+  loadingRun.value = true
+  try {
+    const p = buildPayload(); if (!p) return
+    p.use_llm = input.use_llm; p.llm_provider = input.llm_provider; p.llm_model = input.llm_model
+    const data = await apiStore.api('POST', '/api/capabilities/subtitle_calibration/run', p)
+    if (data.error) { capStore.setMessage(`字幕校准失败：${data.error}`, 'error'); return }
+    runResult.value = data.result || null
+    const report = runResult.value?.quality_report || {}
+    capStore.setMessage(`字幕校准完成：共 ${report.total_subtitles || 0} 条，时间轴调整 ${report.timeline_changed_count || 0} 条`, 'success')
+  } finally {
+    loadingRun.value = false
+  }
 }
 </script>
 

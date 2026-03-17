@@ -6,6 +6,14 @@
   height: 100vh;
 }
 
+/* App.vue 根元素 — 继承 flex 高度链，避免内容溢出到 body */
+#app-root {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
 /* ── 顶部标题栏 ───────────────────────────────────────────────────── */
 
 .titlebar {
@@ -99,6 +107,14 @@
   flex: 1;
   overflow-y: auto;
   padding: 24px 32px;
+}
+
+/* 全出血布局 — 用于画布等需要撑满的视图 */
+.content.content-full {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .content-narrow {

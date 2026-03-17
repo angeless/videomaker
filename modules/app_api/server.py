@@ -137,6 +137,7 @@ from modules.app_api.routes.legacy_project_routes import create_legacy_project_b
 from modules.app_api.routes.library_routes import create_library_blueprint
 from modules.app_api.routes.settings_routes import create_settings_blueprint
 from modules.app_api.routes.system_routes import create_system_blueprint
+from modules.app_api.routes.timeline_routes import create_timeline_blueprint
 from modules.app_api.routes.ui_routes import create_ui_blueprint
 from modules.app_api.routes.workflow_routes import create_workflow_blueprint
 from modules.workflow_engine.workflow import WorkflowState, WorkflowRunner
@@ -258,6 +259,8 @@ app.register_blueprint(
         running_heavy_jobs_getter=lambda: _running_heavy_jobs(),
         task_queue_snapshot_getter=lambda: _task_queue_snapshot(),
         preflight_snapshot_getter=lambda force=False: _system_preflight_snapshot(force=bool(force)),
+        queue_max_running_getter=lambda: _HEAVY_QUEUE_MAX_RUNNING,
+        queue_max_running_setter=lambda v: _set_heavy_queue_max_running(v),
     )
 )
 app.register_blueprint(
@@ -322,6 +325,12 @@ app.register_blueprint(
         load_ai_settings=lambda: _load_ai_settings(),
         library_getter=lambda: _library,
         project_data_path=lambda filename: _project_data_path(filename),
+    )
+)
+app.register_blueprint(
+    create_timeline_blueprint(
+        project_dir_getter=lambda: _project_dir,
+        workflow_state_getter=lambda: _ws,
     )
 )
 app.register_blueprint(
@@ -671,8 +680,16 @@ _HEAVY_JOB_KINDS = {
     "audio_voice",
     "custom_workflow",
 }
-_HEAVY_QUEUE_MAX_RUNNING = max(1, min(int(os.environ.get("VIDEOEDITOR_HEAVY_QUEUE_MAX_RUNNING", "1") or 1), 4))
+_HEAVY_QUEUE_MAX_RUNNING = max(1, min(int(os.environ.get("VIDEOEDITOR_HEAVY_QUEUE_MAX_RUNNING", "2") or 2), 4))
 _job_runtime: Optional[JobRuntime] = None
+
+
+def _set_heavy_queue_max_running(val: int):
+    global _HEAVY_QUEUE_MAX_RUNNING
+    val = max(1, min(int(val), 4))
+    _HEAVY_QUEUE_MAX_RUNNING = val
+    if _job_runtime is not None:
+        _job_runtime._max_running = val
 _heavy_queue_lock = threading.Lock()
 _heavy_job_queue = []
 CANCEL_TOKEN = "__CANCELLED__"

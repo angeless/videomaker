@@ -22,6 +22,29 @@ from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
+
+# ═══════════════════════════════════════════════════════════════════════
+# 原子写入工具 — write-to-temp + os.replace，防止崩溃导致文件损坏
+# ═══════════════════════════════════════════════════════════════════════
+
+def _atomic_write_text(path, content, encoding="utf-8"):
+    """原子写入文本文件：先写临时文件，fsync 后 rename 覆盖目标。"""
+    import tempfile as _tf
+    target = Path(path) if not isinstance(path, Path) else path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = _tf.mkstemp(dir=str(target.parent), suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding=encoding) as f:
+            f.write(content)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, str(target))
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # WorkflowState — workflow.json 的读写
 # ═══════════════════════════════════════════════════════════════════════
@@ -56,9 +79,9 @@ class WorkflowState:
         return self
 
     def save(self):
-        self.state_file.write_text(
+        _atomic_write_text(
+            self.state_file,
             json.dumps(self.data, ensure_ascii=False, indent=2),
-            encoding="utf-8",
         )
 
     @classmethod
@@ -284,8 +307,9 @@ class WorkflowRunner:
 
         # 保存 materials.json
         mat_path = self.p("data", "materials.json")
-        mat_path.write_text(
-            json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8"
+        _atomic_write_text(
+            mat_path,
+            json.dumps(results, ensure_ascii=False, indent=2),
         )
         logger.info("素材索引已保存: %s", mat_path)
 
@@ -360,7 +384,7 @@ class WorkflowRunner:
             lines.append("")
 
         self.p("reviews").mkdir(exist_ok=True)
-        self.p("reviews", "01_materials.md").write_text("\n".join(lines), encoding="utf-8")
+        _atomic_write_text(self.p("reviews", "01_materials.md"), "\n".join(lines))
 
     # ==================================================================
     # Step 2: 脚本脑爆（选题）
@@ -388,13 +412,29 @@ class WorkflowRunner:
         response = ai.chat([{"role": "user", "content": prompt}], system=SYSTEM_PROMPT_VLOG)
         topics = self._extract_topics_from_response(response, materials)
 
+        # S4: detect AI degradation
+        ai_degraded = False
+        ai_degraded_reason = ""
+        if not ai.provider or not ai.api_key:
+            ai_degraded = True
+            ai_degraded_reason = "未配置 AI API Key，使用素材分析生成选题"
+        elif all(t.get("_from_materials") for t in topics):
+            ai_degraded = True
+            ai_degraded_reason = "AI 返回内容解析失败，已退化为素材驱动选题"
+
         self._write_review_02(response, summary, topics)
+        extra = {}
+        if ai_degraded:
+            extra["ai_degraded"] = True
+            extra["ai_degraded_reason"] = ai_degraded_reason
+            logger.warning("Step 2 AI 退化: %s", ai_degraded_reason)
         self.state.set_step_status(
             2, "waiting_review",
             output=json.dumps({"topics": topics}, ensure_ascii=False),
             review_file="reviews/02_topics.md",
             ai_response_raw=response,
             topics=topics,
+            **extra,
         )
         logger.info("Step 2 完成")
         logger.info("请在审核文件中填写选题序号和想法:")
@@ -595,6 +635,7 @@ class WorkflowRunner:
                 "duration": "60秒" if info["count"] >= 3 else "45秒",
                 "hook": hook,
                 "recommended_assets": picks,
+                "_from_materials": True,
             })
 
         while len(topics) < 5:
@@ -653,7 +694,7 @@ target_duration: 60
 
 {summary}
 """
-        self.p("reviews", "02_topics.md").write_text(content, encoding="utf-8")
+        _atomic_write_text(self.p("reviews", "02_topics.md"), content)
 
     # ==================================================================
     # Step 3: 生成完整脚本
@@ -703,18 +744,33 @@ target_duration: 60
         response = ai.chat([{"role": "user", "content": prompt}], system=SYSTEM_PROMPT_VLOG)
 
         script_json = self._parse_script_json(response, materials)
+        ai_degraded = False
+        ai_degraded_reason = ""
+        if not ai.provider or not ai.api_key:
+            ai_degraded = True
+            ai_degraded_reason = "未配置 AI API Key，脚本使用模板生成"
         if script_json.get("_parse_failed") or not script_json.get("clips"):
             logger.warning("AI 脚本解析失败，使用内容驱动兜底脚本生成")
             script_json = self._build_fallback_script(materials, duration, chosen, selected_topic_data)
-        self.p("data", "script_draft.json").write_text(
-            json.dumps(script_json, ensure_ascii=False, indent=2), encoding="utf-8"
+            if not ai_degraded:
+                ai_degraded = True
+                ai_degraded_reason = "AI 返回的脚本 JSON 解析失败，已退化为模板脚本"
+        _atomic_write_text(
+            self.p("data", "script_draft.json"),
+            json.dumps(script_json, ensure_ascii=False, indent=2),
         )
 
         self._write_review_03(response, script_json)
+        extra = {}
+        if ai_degraded:
+            extra["ai_degraded"] = True
+            extra["ai_degraded_reason"] = ai_degraded_reason
+            logger.warning("Step 3 AI 退化: %s", ai_degraded_reason)
         self.state.set_step_status(
             3, "waiting_review",
             output="data/script_draft.json",
             review_file="reviews/03_script.md",
+            **extra,
         )
         logger.info("Step 3 完成")
         logger.info("脚本: %s", self.p("data", "script_draft.json"))
@@ -904,7 +960,7 @@ notes: ""
 
 {ai_response[:3000]}
 """
-        self.p("reviews", "03_script.md").write_text(content, encoding="utf-8")
+        _atomic_write_text(self.p("reviews", "03_script.md"), content)
 
     # ==================================================================
     # Step 4: 素材匹配
@@ -937,8 +993,9 @@ notes: ""
         # 补全缺失的 video_id
         self._fill_video_ids(rewritten, materials)
 
-        self.p("data", "script_matched.json").write_text(
-            json.dumps(rewritten, ensure_ascii=False, indent=2), encoding="utf-8"
+        _atomic_write_text(
+            self.p("data", "script_matched.json"),
+            json.dumps(rewritten, ensure_ascii=False, indent=2),
         )
         self._write_review_04(coverage, changes, rewritten, materials)
         self.state.set_step_status(
@@ -1116,7 +1173,7 @@ notes: ""
         for vid_id, vdata in materials.items():
             content += f"| {vdata.get('filename','?')} | `{vid_id[:12]}` |\n"
 
-        self.p("reviews", "04_matching.md").write_text(content, encoding="utf-8")
+        _atomic_write_text(self.p("reviews", "04_matching.md"), content)
 
     # ==================================================================
     # Step 5: 帧预览
@@ -1181,9 +1238,9 @@ notes: ""
             emit_progress=self._emit_progress,
         )
         rough_plan_path = self.p("preview", "rough_plan.json")
-        rough_plan_path.write_text(
+        _atomic_write_text(
+            rough_plan_path,
             json.dumps(rough_result, ensure_ascii=False, indent=2),
-            encoding="utf-8",
         )
 
         if sys.platform == "darwin":
@@ -1258,7 +1315,7 @@ timeout_stage_sec: {rc.get('timeout_stage_sec', 900)}
 timeout_audio_sec: {rc.get('timeout_audio_sec', 480)}
 ```
 """
-        self.p("reviews", "05_render_options.md").write_text(content, encoding="utf-8")
+        _atomic_write_text(self.p("reviews", "05_render_options.md"), content)
 
     # ==================================================================
     # Step 7: 分阶段精渲染
@@ -1341,10 +1398,11 @@ timeout_audio_sec: {rc.get('timeout_audio_sec', 480)}
 
         pipeline = RenderPipeline(rc, on_progress=_pipeline_progress, should_cancel=self._is_cancelled)
         base = str(out_dir / "stage")
-        clips = script.get("clips", [])
+        clips = script.get("clips") or script.get("segments") or []
         subtitles = script.get("subtitles", [])
         has_face = any(c.get("has_face", False) for c in clips)
         pipeline_materials = self._convert_materials_for_pipeline(materials)
+        render_degradations: list = []  # S1: 收集渲染退化事件
 
         degrade_level = 0
         if self._is_overloaded():
@@ -1359,9 +1417,9 @@ timeout_audio_sec: {rc.get('timeout_audio_sec', 480)}
 
         stages = [
             ("stage_01_concat.mp4",   lambda inp: pipeline.concat_materials(clips, pipeline_materials, base)),
-            ("stage_02_beauty.mp4",   lambda inp: pipeline.apply_beauty(inp, base, has_face)),
+            ("stage_02_beauty.mp4",   lambda inp: pipeline.apply_beauty(inp, base, has_face, degradations=render_degradations)),
             ("stage_03_color.mp4",    lambda inp: pipeline.apply_color_grading(inp, base)),
-            ("stage_04_subtitle.mp4", lambda inp: pipeline.apply_subtitles(inp, subtitles, base)),
+            ("stage_04_subtitle.mp4", lambda inp: pipeline.apply_subtitles(inp, subtitles, base, degradations=render_degradations)),
         ]
 
         def _run_stage_with_retry(stage_i: int, fn, current_input):
@@ -1390,7 +1448,9 @@ timeout_audio_sec: {rc.get('timeout_audio_sec', 480)}
                         continue
                     raise
 
-        current_input = None
+        # 初始化 current_input：优先使用粗剪结果作为兜底输入
+        rough_cut_path = self.p("preview", "rough_cut.mp4")
+        current_input = str(rough_cut_path) if rough_cut_path.exists() else None
         for i, (fname, fn) in enumerate(stages, 1):
             self._check_cancel()
             out_file = out_dir / fname
@@ -1459,12 +1519,20 @@ timeout_audio_sec: {rc.get('timeout_audio_sec', 480)}
                     raise RuntimeError("Stage 5 失败且无可用的上一阶段文件") from stage_err
 
         self._emit_progress(99, "精渲染完成")
-        self._finish_render(out_dir)
+        self._finish_render(out_dir, degradations=render_degradations)
 
     def _staged_render_fallback(self, script: Dict, materials: Dict, rc: Dict,
                                  out_dir: Path, bgm_path, narration_path):
         """当 render.pipeline 不可用时，直接用 auto_render.VideoPipeline。"""
         from modules.step7_final_render.auto_render import VideoPipeline, RenderConfig
+
+        fallback_degradations: list = [{
+            "feature": "render_pipeline",
+            "expected": "RenderPipeline",
+            "actual": "auto_render_fallback",
+            "reason": "render.pipeline 不可用，整体退化为 auto_render.py",
+            "severity": "warning",
+        }]
 
         config = RenderConfig(
             width=rc.get("width", 1080),
@@ -1494,8 +1562,8 @@ timeout_audio_sec: {rc.get('timeout_audio_sec', 480)}
         tmp = Path(tempfile.mkdtemp())
         tmp_script = tmp / "script.json"
         tmp_mat = tmp / "materials.json"
-        tmp_script.write_text(json.dumps(script, ensure_ascii=False), encoding="utf-8")
-        tmp_mat.write_text(json.dumps(pipeline_mat, ensure_ascii=False), encoding="utf-8")
+        _atomic_write_text(tmp_script, json.dumps(script, ensure_ascii=False))
+        _atomic_write_text(tmp_mat, json.dumps(pipeline_mat, ensure_ascii=False))
 
         final = str(out_dir / "final.mp4")
         pipeline = VideoPipeline(config)
@@ -1504,17 +1572,41 @@ timeout_audio_sec: {rc.get('timeout_audio_sec', 480)}
             pipeline.render_from_script(str(tmp_script), str(tmp_mat), final)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
-        self._finish_render(out_dir)
+        self._finish_render(out_dir, degradations=fallback_degradations)
 
-    def _finish_render(self, out_dir: Path):
+    def _finish_render(self, out_dir: Path, *, degradations: Optional[list] = None):
         final = out_dir / "final.mp4"
         if sys.platform == "darwin" and final.exists():
             subprocess.run(["open", str(final)], timeout=5, check=False)
+
+        extra: Dict = {}
+        if degradations:
+            extra["degradations"] = degradations
+            logger.warning(
+                "渲染退化通知 (%d 项): %s",
+                len(degradations),
+                ", ".join(d.get("feature", "?") for d in degradations),
+            )
+            # S1: 退化事件写入审计日志
+            try:
+                from modules.app_api.services.audit_log import audit as _audit
+                _audit(
+                    "render_degradation", "workflow", None,
+                    actor="system:render",
+                    detail={
+                        "count": len(degradations),
+                        "features": [d.get("feature", "?") for d in degradations],
+                        "items": degradations,
+                    },
+                )
+            except Exception:
+                pass  # 审计不可用时不影响渲染
 
         self.state.set_step_status(
             7, "done",
             review_status="approved",
             output="output/final.mp4",
+            **extra,
         )
         logger.info("Step 7 完成  最终视频: %s", final)
 

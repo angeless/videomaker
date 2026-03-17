@@ -3,8 +3,14 @@
     <router-link to="/library" class="nav-link" :class="{ active: isActive('library') }">
       {{ labels.nav.library }}
     </router-link>
-    <router-link to="/production/workflow" class="nav-link" :class="{ active: isActive('production') }">
-      {{ labels.nav.production }}
+    <router-link to="/create/workflow" class="nav-link" :class="{ active: isActive('create') }">
+      {{ labels.nav.create }}
+    </router-link>
+    <router-link to="/workflows" class="nav-link" :class="{ active: isActive('workflows') }">
+      {{ labels.nav.workflow }}
+    </router-link>
+    <router-link to="/tools" class="nav-link" :class="{ active: isActive('tools') }">
+      {{ labels.nav.tools }}
     </router-link>
     <router-link to="/settings" class="nav-link" :class="{ active: isActive('settings') }">
       {{ labels.nav.settings }}
@@ -15,6 +21,9 @@
       {{ appStore.taskQueue.running_count }} 运行中
       <span v-if="appStore.taskQueue.queued_count > 0">, {{ appStore.taskQueue.queued_count }} 排队</span>
     </div>
+
+    <!-- 通知铃铛 -->
+    <NotificationPanel />
   </nav>
 </template>
 
@@ -22,6 +31,7 @@
 import { useRoute } from 'vue-router'
 import { useAppStore } from '../../stores/app.js'
 import labels from '../../i18n/labels.js'
+import NotificationPanel from '../common/NotificationPanel.vue'
 
 const route = useRoute()
 const appStore = useAppStore()
@@ -29,7 +39,9 @@ const appStore = useAppStore()
 function isActive(section) {
   const name = route.name || ''
   if (section === 'library') return name === 'library'
-  if (section === 'production') return ['production', 'workflow', 'workflow-step', 'tools', 'tools-tab'].includes(name)
+  if (section === 'create') return ['create', 'workflow', 'workflow-step', 'ideate', 'organize', 'refine', 'audio', 'subtitle', 'publish', 'canvas'].includes(name)
+  if (section === 'workflows') return name === 'workflow-manager'
+  if (section === 'tools') return ['tools', 'tools-tab'].includes(name)
   if (section === 'settings') return name === 'settings'
   return false
 }

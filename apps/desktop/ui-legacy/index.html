@@ -822,6 +822,11 @@
                     <span class="badge"
                           :class="capabilityModeClass(item.mode)"
                           x-text="capabilityModeText(item.mode)"></span>
+                    <span x-show="capabilityStatusText(item.tab)"
+                          class="badge"
+                          :class="capabilityStatusClass(item.tab)"
+                          x-text="capabilityStatusText(item.tab)"
+                          style="margin-left:4px;font-size:10px"></span>
                   </button>
                 </template>
               </div>
@@ -1589,6 +1594,12 @@
         </div>
 
         <div x-show="capabilityTab==='image_semantic'" class="fade-in">
+          <div x-show="imageSemanticAiStatus && imageSemanticAiStatus.degraded"
+               style="background:rgba(255,179,0,0.12);border:1px solid rgba(255,179,0,0.3);border-radius:6px;padding:10px 14px;font-size:12px;color:#b88a00;margin-bottom:14px;line-height:1.6">
+            <strong>功能受限：</strong><span x-text="imageSemanticAiStatus?.message || '部分 AI 能力不可用'"></span>
+            <span x-show="imageSemanticAiStatus && !imageSemanticAiStatus.vision_available"> · 视觉分析不可用</span>
+            <span x-show="imageSemanticAiStatus && !imageSemanticAiStatus.vector_available"> · 向量检索不可用（仅关键词检索可用）</span>
+          </div>
           <div class="form-grid">
             <div class="form-field">
               <div class="input-label">输入模式</div>
@@ -3179,24 +3190,31 @@
         </button>
       </div>
 
-      <div x-show="jobStatus==='cancelled'"
-           style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);
-                  border-radius:10px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center">
-        <div style="font-size:13px" class="text-warn">任务已取消</div>
-        <button class="btn btn-ghost" @click="jobStatus=''">关闭</button>
-      </div>
-
-      <!-- 任务错误通知条 -->
-      <div x-show="jobStatus==='error'"
+      <!-- 任务错误/取消通知条（S2: recovery_hint 增强） -->
+      <div x-show="jobStatus==='error' || jobStatus==='cancelled'"
            style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.3);
                   border-radius:10px;padding:12px 16px">
         <div style="font-size:13px;font-weight:500;color:var(--danger);margin-bottom:8px">
-          ⚠ 执行出错
+          <span x-text="jobStatus==='cancelled' ? '⊘ 已取消' : '⚠ 执行出错'"></span>
         </div>
+        <!-- S2: recovery 提示 -->
+        <template x-if="jobRecovery && jobRecovery.next_action">
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;padding:6px 8px;background:var(--surface2);border-radius:6px">
+            <span x-text="jobRecovery.reason || ''"></span>
+            <span> · </span>
+            <span x-text="jobRecovery.next_action || ''"></span>
+            <span x-show="jobRecovery.duplicate_risk" style="color:var(--warn);margin-left:6px">⚠ 重复风险</span>
+          </div>
+        </template>
         <div class="log-box" x-text="jobLog.join('\n')" id="log-box"></div>
         <div style="display:flex;justify-content:flex-end;margin-top:10px">
-          <button class="btn btn-ghost" @click="jobStatus=''">关闭</button>
-          <button class="btn btn-danger" style="margin-left:8px" @click="runCurrentStep()">重试</button>
+          <button class="btn btn-ghost" @click="jobStatus='';jobRecovery=null">关闭</button>
+          <template x-if="!jobRecovery || jobRecovery.can_retry !== false">
+            <button class="btn btn-danger" style="margin-left:8px"
+                    @click="retryWithRecovery()">
+              <span x-text="jobRecovery && jobRecovery.retry_hint ? '一键重试' : '重试'"></span>
+            </button>
+          </template>
         </div>
       </div>
 

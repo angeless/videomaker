@@ -216,6 +216,32 @@
           return;
         }
         this.capabilities = Array.isArray(data.capabilities) ? data.capabilities : [];
+        // Build tab → status map for badge display
+        const statusMap = {};
+        for (const spec of this.capabilities) {
+          if (spec.capability_id) statusMap[spec.capability_id] = spec.status || "planned";
+        }
+        // Handle frontend tab ↔ registry id mismatches
+        if (statusMap.text_rough_cut && !statusMap.text_rough) {
+          statusMap.text_rough = statusMap.text_rough_cut;
+        }
+        this.capabilityStatuses = statusMap;
+      },
+
+      capabilityStatusText(tab) {
+        const s = (this.capabilityStatuses || {})[tab];
+        if (s === "ready") return "稳定";
+        if (s === "prototype") return "原型";
+        if (s === "planned") return "开发中";
+        return "";
+      },
+
+      capabilityStatusClass(tab) {
+        const s = (this.capabilityStatuses || {})[tab];
+        if (s === "ready") return "badge-success";
+        if (s === "prototype") return "badge-info";
+        if (s === "planned") return "badge-muted";
+        return "";
       },
 
       capabilityModeText(mode) {
@@ -249,6 +275,13 @@
         this.productionView = "hub";
         this.capabilityTab = key;
         const entry = this.capabilityEntryByTab(key);
+        // Block planned capabilities
+        const capStatus = (this.capabilityStatuses || {})[key];
+        if (capStatus === "planned") {
+          this.capabilityMessage = `模块「${entry && entry.label ? entry.label : key}」正在开发中，敬请期待`;
+          this.capabilityMessageType = "info";
+          return;
+        }
         const mode = this.capabilityModeText(entry && entry.mode ? entry.mode : "hybrid");
         if (!this.projectDir && mode === "project") {
           this.capabilityMessage = `模块「${entry && entry.label ? entry.label : key}」需要先打开项目后使用`;

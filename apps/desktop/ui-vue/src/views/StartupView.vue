@@ -113,7 +113,7 @@ async function runStartup() {
   await new Promise(r => setTimeout(r, 400))
 
   if (appStore.hasProject) {
-    router.replace('/production/workflow')
+    router.replace('/create/workflow')
   } else {
     router.replace('/library')
   }

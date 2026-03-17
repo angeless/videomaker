@@ -1,7 +1,7 @@
 <template>
   <div class="titlebar">
     <span class="title">{{ labels.appTitle }}</span>
-    <span class="project-path">{{ appStore.projectDir || '未打开项目' }}</span>
+    <span class="project-path" :title="appStore.projectDir">{{ projectDisplayName }}</span>
     <AppNav />
   </div>
 
@@ -39,13 +39,20 @@
             </select>
           </div>
 
-          <div class="form-group">
-            <label class="form-label">{{ labels.settings.ai.baseUrl }}</label>
+          <FormField
+            :label="labels.settings.ai.baseUrl"
+            :error="v.getError('ai_base_url')"
+          >
             <div class="form-row">
-              <input v-model="settings.aiSettings.ai_base_url" class="form-input" placeholder="https://api.openai.com/v1" />
+              <input
+                v-model="settings.aiSettings.ai_base_url"
+                class="form-input"
+                placeholder="https://api.openai.com/v1"
+                @blur="v.validate('ai_base_url', settings.aiSettings.ai_base_url)"
+              />
               <button class="btn btn-ghost btn-sm" @click="fillUrl">{{ labels.settings.ai.fillUrl }}</button>
             </div>
-          </div>
+          </FormField>
 
           <div class="form-group">
             <label class="form-label">OpenAI API Key</label>
@@ -139,17 +146,30 @@
           </span>
         </div>
 
+        <!-- 并发设置 -->
+        <div class="card">
+          <div class="card-header">⚡ 并发任务</div>
+          <div class="form-group">
+            <label class="form-label">同时渲染任务数（{{ queueMaxRunning }}）</label>
+            <input type="range" v-model.number="queueMaxRunning" min="1" max="3" step="1" style="width: 200px" />
+            <div class="form-hint">建议 1-2，更高会占用更多 CPU 和内存</div>
+          </div>
+          <button class="btn btn-primary btn-sm" :disabled="queueLoading" @click="saveQueueConfig()">
+            {{ queueLoading ? '保存中…' : '保存' }}
+          </button>
+        </div>
+
         <!-- 系统自检 -->
         <div class="card">
           <div class="card-header">🔧 系统自检</div>
 
           <div v-if="appStore.preflightReport?.checks" class="preflight-list">
-            <div v-for="check in appStore.preflightReport.checks" :key="check.name" class="preflight-item">
+            <div v-for="check in appStore.preflightReport.checks" :key="check.id || check.name" class="preflight-item">
               <span class="badge" :class="badgeClass(check.status)">
                 {{ statusText(check.status) }}
               </span>
-              <span>{{ check.label || check.name }}</span>
-              <span v-if="check.message" class="text-muted" style="font-size: 12px">{{ check.message }}</span>
+              <span>{{ check.title || check.label || check.id || check.name }}</span>
+              <span v-if="check.detail || check.message" class="text-muted" style="font-size: 12px">{{ check.detail || check.message }}</span>
             </div>
           </div>
 
@@ -167,14 +187,46 @@
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useAppStore } from '../stores/app.js'
+import { useApiStore } from '../stores/api.js'
 import { useSettingsStore } from '../stores/settings.js'
+import { useValidation } from '../composables/useValidation.js'
 import labels from '../i18n/labels.js'
 import AppNav from '../components/layout/AppNav.vue'
+import FormField from '../components/common/FormField.vue'
 
 const appStore = useAppStore()
+const apiStore = useApiStore()
 const settings = useSettingsStore()
+
+const projectDisplayName = computed(() => {
+  const dir = appStore.projectDir
+  if (!dir) return '未打开项目'
+  const name = dir.split('/').filter(Boolean).pop() || dir
+  const m = name.match(/^proj_selected_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})/)
+  if (m) return `项目 ${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}`
+  return name
+})
+
+const v = useValidation({
+  ai_base_url: [{ type: 'url', message: '请输入合法的 URL 地址' }],
+})
+
+// 并发任务数
+const queueMaxRunning = ref(2)
+const queueLoading = ref(false)
+
+async function loadQueueConfig() {
+  const data = await apiStore.api('GET', '/api/system/queue-config')
+  if (data && data.max_running) queueMaxRunning.value = data.max_running
+}
+
+async function saveQueueConfig() {
+  queueLoading.value = true
+  await apiStore.api('POST', '/api/system/queue-config', { max_running: queueMaxRunning.value })
+  queueLoading.value = false
+}
 
 function badgeClass(status) {
   const key = `${status || ''}`.trim().toLowerCase()
@@ -203,6 +255,7 @@ function fillUrl() {
 
 onMounted(async () => {
   await settings.loadAiSettings()
+  await loadQueueConfig()
 })
 </script>
 

@@ -281,6 +281,7 @@
       },
     ],
     capabilities: [],
+    capabilityStatuses: {},
     capabilitiesLoading: false,
     topicLibraryLoading: false,
     topicLibraryQuery: "",
@@ -390,6 +391,7 @@
     },
     imageSemanticAnalyze: null,
     imageSemanticSearch: null,
+    imageSemanticAiStatus: null,
     articleExpandInput: {
       input_mode: "inline",
       source_text: "",
@@ -682,6 +684,9 @@
 
     // ── 素材列表（Step 1）──────────────────────────────────────
     materials:   {},
+
+    // ── 任务恢复信息（S2）───────────────────────────────────────
+    jobRecovery: null,
 
     // ── Toast 通知 ──────────────────────────────────────────────
     toasts: [],

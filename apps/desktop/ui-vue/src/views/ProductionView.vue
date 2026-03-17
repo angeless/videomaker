@@ -1,7 +1,7 @@
 <template>
   <div class="titlebar">
     <span class="title">{{ labels.appTitle }}</span>
-    <span class="project-path">{{ appStore.projectDir || '未打开项目' }}</span>
+    <span class="project-path" :title="appStore.projectDir">{{ projectDisplayName }}</span>
     <AppNav />
   </div>
 
@@ -38,7 +38,7 @@
           :class="{ active: proj.path === appStore.projectDir }"
           @click="openRecentProject(proj.path)"
         >
-          <span class="project-name">{{ proj.name }}</span>
+          <span class="project-name" :title="proj.name">{{ humanizeProjectName(proj.name) }}</span>
           <span class="project-status-badge" :class="`status-${proj.status}`">
             {{ statusLabel(proj.status) }}
           </span>
@@ -94,6 +94,15 @@ const router = useRouter()
 const route = useRoute()
 const appStore = useAppStore()
 
+const projectDisplayName = computed(() => {
+  const dir = appStore.projectDir
+  if (!dir) return '未打开项目'
+  const name = dir.split('/').filter(Boolean).pop() || dir
+  const m = name.match(/^proj_selected_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})/)
+  if (m) return `项目 ${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}`
+  return name
+})
+
 const currentView = computed(() => {
   if (route.name === 'workflow' || route.name === 'workflow-step') return 'workflow'
   if (route.name === 'tools' || route.name === 'tools-tab') return 'tools'
@@ -123,6 +132,18 @@ function statusLabel(status) {
     unknown: '未知',
   }
   return map[status] || status
+}
+
+// B-09: 将机器生成的项目目录名转为可读名称
+function humanizeProjectName(name) {
+  if (!name) return '未命名项目'
+  const m = name.match(/^proj_(\w+?)_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})$/)
+  if (m) {
+    const typeMap = { selected: '精选', draft: '草稿', new: '新建', import: '导入', test: '测试' }
+    const label = typeMap[m[1]] || m[1]
+    return `${label} ${m[3]}/${m[4]} ${m[5]}:${m[6]}`
+  }
+  return name
 }
 
 onMounted(() => {

@@ -91,6 +91,7 @@
           return;
         }
         this.imageSemanticAnalyze = data.result || null;
+        if (data.ai_status) this.imageSemanticAiStatus = data.ai_status;
         this.capabilityMessage = `图片语义分析完成：${(this.imageSemanticAnalyze && this.imageSemanticAnalyze.analyzed_count) || 0} 个条目`;
       },
 
@@ -106,6 +107,7 @@
           return;
         }
         this.imageSemanticSearch = data.result || null;
+        if (data.ai_status) this.imageSemanticAiStatus = data.ai_status;
         this.capabilityMessage = `图片语义检索完成：命中 ${(this.imageSemanticSearch && this.imageSemanticSearch.total_hits) || 0} 条`;
       },
 

@@ -164,6 +164,68 @@ def create_text_semantic_capability_blueprint(
             }
         )
 
+    @bp.route("/api/capabilities/transcript_correction/run", methods=["POST"])
+    def api_transcript_correction_run():
+        """ASR 转录校正：同音字/专名/标点修正"""
+        payload = request.json or {}
+        transcription = payload.get("transcription", {})
+        if not isinstance(transcription, dict) or not transcription.get("segments"):
+            return jsonify({"error": "缺少 transcription（需包含 segments 数组）"}), 400
+
+        custom_terms = payload.get("custom_terms", [])
+        if not isinstance(custom_terms, list):
+            custom_terms = []
+
+        from modules.step1_material_analysis.transcript_correction import correct_transcripts
+
+        warnings: List[str] = []
+        ai_client_instance = None
+        use_llm = bool(payload.get("use_llm", False))
+        llm_meta = {"enabled": False, "provider": "", "model": "", "fallback": True}
+
+        if use_llm:
+            ai = load_ai_settings()
+            provider = str(payload.get("llm_provider") or ai.get("provider") or "").strip().lower()
+            api_key = str(payload.get("llm_api_key") or "").strip()
+            model = str(payload.get("llm_model") or ai.get("ai_model") or "").strip()
+            base_url = str(payload.get("llm_base_url") or ai.get("ai_base_url") or "").strip()
+            if not api_key:
+                if provider == "anthropic":
+                    api_key = str(ai.get("anthropic_api_key") or "").strip()
+                else:
+                    api_key = str(ai.get("openai_api_key") or "").strip()
+            if api_key:
+                ai_client_instance = AIClient(
+                    provider=provider or None,
+                    api_key=api_key,
+                    base_url=base_url or None,
+                    model=model or None,
+                    temperature=0.2,
+                    max_tokens=2000,
+                )
+                llm_meta = {
+                    "enabled": True,
+                    "provider": str(ai_client_instance.provider or ""),
+                    "model": str(ai_client_instance.model or ""),
+                    "fallback": False,
+                }
+            else:
+                warnings.append("转录校正 use_llm=true 但未配置 API Key，已降级为规则校正。")
+
+        result = correct_transcripts(
+            transcription,
+            ai_client=ai_client_instance,
+            custom_terms=custom_terms or None,
+        )
+        if project_dir_getter() is not None and bool(payload.get("store_result", True)):
+            write_json_result(project_data_path("transcript_correction_last.json"), result)
+        return jsonify({
+            "ok": True,
+            "llm": llm_meta,
+            "result": result,
+            "warnings": warnings,
+        })
+
     @bp.route("/api/capabilities/image_semantic/analyze", methods=["POST"])
     def api_image_semantic_analyze():
         payload = request.json or {}
@@ -187,35 +249,39 @@ def create_text_semantic_capability_blueprint(
             )
             image_paths = [str(x.get("path") or "").strip() for x in latest if isinstance(x, dict) and str(x.get("path") or "").strip()]
 
-        from modules.capabilities.image_semantic import analyze_images
+        from modules.capabilities.image_semantic import analyze_images, check_ai_status
 
+        lib = library_getter()
+        ai_status = check_ai_status(lib)
         result = analyze_images(
             image_paths,
-            library=library_getter(),
+            library=lib,
             max_images=max_images,
             retrieval_mode=parse_str_param(payload.get("retrieval_mode", "hybrid"), default="hybrid"),
             auto_ingest=bool(payload.get("auto_ingest", True)),
         )
         if project_dir_getter() is not None and bool(payload.get("store_result", True)):
             write_json_result(project_data_path("image_semantic_analyze_last.json"), result)
-        return jsonify({"ok": True, "input_mode": input_mode, "max_images": max_images, "result": result})
+        return jsonify({"ok": True, "input_mode": input_mode, "max_images": max_images, "result": result, "ai_status": ai_status})
 
     @bp.route("/api/capabilities/image_semantic/search", methods=["POST"])
     def api_image_semantic_search():
         payload = request.json or {}
         query = parse_str_param(payload.get("query", ""))
-        from modules.capabilities.image_semantic import search_images
+        from modules.capabilities.image_semantic import search_images, check_ai_status
 
+        lib = library_getter()
+        ai_status = check_ai_status(lib)
         result = search_images(
             query,
-            library=library_getter(),
+            library=lib,
             limit=parse_int_param(payload.get("limit", 30), default=30, min_val=1, max_val=500),
             offset=parse_int_param(payload.get("offset", 0), default=0, min_val=0),
             retrieval_mode=parse_str_param(payload.get("retrieval_mode", "hybrid"), default="hybrid"),
         )
         if project_dir_getter() is not None and bool(payload.get("store_result", True)):
             write_json_result(project_data_path("image_semantic_search_last.json"), result)
-        return jsonify({"ok": True, "result": result})
+        return jsonify({"ok": True, "result": result, "ai_status": ai_status})
 
     @bp.route("/api/capabilities/article_expand/generate", methods=["POST"])
     def api_article_expand_generate():

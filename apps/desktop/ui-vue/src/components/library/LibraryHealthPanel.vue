@@ -60,6 +60,18 @@
             </div>
             <span class="lhp-bar-pct">{{ health.asset_coverage.tag_coverage_pct }}%</span>
           </div>
+
+          <!-- 补生成缩略图 -->
+          <div class="lhp-subsection">
+            <button
+              class="btn btn-sm"
+              :disabled="thumbLoading"
+              @click="generateThumbnails"
+            >{{ thumbLoading ? `生成中 ${thumbProgress}%…` : '补生成缩略图' }}</button>
+            <span v-if="thumbResult" class="lhp-thumb-result">
+              生成 {{ thumbResult.generated }}，跳过 {{ thumbResult.skipped }}，失败 {{ thumbResult.failed }}
+            </span>
+          </div>
         </div>
 
         <!-- Tag distribution by semantic slot -->
@@ -330,6 +342,35 @@ const candidatesApproved = computed(() => {
   if (!health.value) return 0
   return health.value.pipeline_health.candidates.approved || 0
 })
+
+const thumbLoading = ref(false)
+const thumbProgress = ref(0)
+const thumbResult = ref(null)
+
+async function generateThumbnails() {
+  thumbLoading.value = true
+  thumbProgress.value = 0
+  thumbResult.value = null
+  try {
+    const resp = await api.post('/api/library/thumbnails/generate')
+    const jobId = resp.data?.job_id
+    if (!jobId) { thumbLoading.value = false; return }
+    const poll = setInterval(async () => {
+      try {
+        const jr = await api.get(`/api/jobs/${jobId}`)
+        const job = jr.data
+        thumbProgress.value = job.progress || 0
+        if (job.status === 'done' || job.status === 'error') {
+          clearInterval(poll)
+          thumbLoading.value = false
+          thumbResult.value = job.result || null
+        }
+      } catch { clearInterval(poll); thumbLoading.value = false }
+    }, 2000)
+  } catch {
+    thumbLoading.value = false
+  }
+}
 
 async function loadHealth() {
   loading.value = true
@@ -725,5 +766,11 @@ watch(expanded, (val) => {
   flex-shrink: 0;
   width: 32px;
   text-align: right;
+}
+
+.lhp-thumb-result {
+  font-size: 11px;
+  color: var(--muted);
+  margin-left: 8px;
 }
 </style>

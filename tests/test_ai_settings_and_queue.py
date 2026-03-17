@@ -452,6 +452,8 @@ def test_publish_settings_keep_secret_sentinel_preserves_token(tmp_path):
 def test_heavy_jobs_enter_queue_and_support_cancel_queued(tmp_path):
     old_library = server._library
     old_project_dir = server._project_dir
+    old_max_running = server._HEAVY_QUEUE_MAX_RUNNING
+    server._set_heavy_queue_max_running(1)
     with server._heavy_queue_lock:
         server._jobs.clear()
         server._heavy_job_queue.clear()
@@ -502,6 +504,7 @@ def test_heavy_jobs_enter_queue_and_support_cancel_queued(tmp_path):
     finally:
         server._library = old_library
         server._project_dir = old_project_dir
+        server._set_heavy_queue_max_running(old_max_running)
 
 
 def test_jobs_persisted_and_restored_from_sqlite(tmp_path):

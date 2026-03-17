@@ -3,11 +3,21 @@ import { ref, computed } from 'vue'
 import { useApiStore } from './api.js'
 import { useAppStore } from './app.js'
 import { useToastStore } from './toast.js'
+import { useNotificationsStore } from './notifications.js'
 import labels from '../i18n/labels.js'
 
 export const useWorkflowStore = defineStore('workflow', () => {
   const api = useApiStore()
   const toast = useToastStore()
+  const notifications = useNotificationsStore()
+
+  // ── rate-limit 检测 ──
+  function _isRateLimitError(msg) {
+    const s = `${msg || ''}`.toLowerCase()
+    return s.includes('429') || s.includes('rate limit') || s.includes('rate_limit')
+      || s.includes('quota') || s.includes('resource_exhausted') || s.includes('resource exhausted')
+      || s.includes('too many requests')
+  }
 
   // ── 步骤状态 ──
   const activeStep = ref(1)
@@ -19,6 +29,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
   const jobLog = ref([])
   const jobRunning = ref(false)
   const jobProgress = ref(0)
+  const jobRecovery = ref(null)  // S2: recovery_hint
 
   // ── Step 1: 素材选择 ──
   const selectedAssets = ref([])
@@ -69,6 +80,9 @@ export const useWorkflowStore = defineStore('workflow', () => {
     'BGM 混音',
   ])
 
+  // ── 引导式工作流可用性 ──
+  const guidedAvailable = ref(true)
+
   // ── 计算属性 ──
   const stepLabels = computed(() => labels.workflow.steps)
 
@@ -77,8 +91,15 @@ export const useWorkflowStore = defineStore('workflow', () => {
   async function loadStepData() {
     const appStore = useAppStore()
     if (!appStore.projectDir) return
-    const data = await api.api('GET', '/api/workflow/status')
-    if (data.error) return
+    const data = await api.api('GET', '/api/status')
+    if (data.error) {
+      const raw = `${data.raw_error || data.error || ''}`.toLowerCase()
+      if (raw.includes('method not allowed') || raw.includes('405') || raw.includes('not found') || raw.includes('404')) {
+        guidedAvailable.value = false
+      }
+      return
+    }
+    guidedAvailable.value = true
     appStore.currentStep = data.current_step || 1
     appStore.steps = data.steps || []
 
@@ -92,6 +113,21 @@ export const useWorkflowStore = defineStore('workflow', () => {
     if (data.rough_url) roughUrl.value = data.rough_url
     if (data.stage_files) stageFiles.value = data.stage_files
     if (data.final_url) finalUrl.value = data.final_url
+
+    // 根据 step 状态推断文件 URL（后端 /api/status 不返回这些字段）
+    _inferFileUrls(data.steps || [])
+  }
+
+  /** 根据 step 完成状态推断可用的文件 URL */
+  function _inferFileUrls(stepsList) {
+    const step6 = stepsList.find(s => s.n === 6) || {}
+    const step7 = stepsList.find(s => s.n === 7) || {}
+    if (!roughUrl.value && (step6.status === 'done' || step6.status === 'waiting_review')) {
+      roughUrl.value = '/api/files/preview/rough_cut.mp4'
+    }
+    if (!finalUrl.value && step7.status === 'done') {
+      finalUrl.value = '/api/files/output/final.mp4'
+    }
   }
 
   async function runStep(step) {
@@ -99,11 +135,20 @@ export const useWorkflowStore = defineStore('workflow', () => {
     jobStatus.value = ''
     jobLog.value = []
     jobProgress.value = 0
+    jobRecovery.value = null
 
-    const data = await api.api('POST', `/api/workflow/step/${step}/run`)
+    const data = await api.api('POST', '/api/run_step', { render_opts: renderOpts.value })
     if (data.error) {
       jobRunning.value = false
-      toast.show(data.error, 'danger')
+      const raw = `${data.raw_error || data.error || ''}`.toLowerCase()
+      if (raw.includes('method not allowed') || raw.includes('405') || raw.includes('not found') || raw.includes('404')) {
+        guidedAvailable.value = false
+        toast.show('引导式工作流服务暂未就绪，请使用「选题构思」等独立模块完成创作', 'warn', 6000)
+      } else if (_isRateLimitError(data.raw_error || data.error)) {
+        toast.show('AI 服务请求频率超限，请稍后重试', 'warn', 6000)
+      } else {
+        toast.show(data.error, 'danger')
+      }
       return
     }
 
@@ -114,7 +159,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
   }
 
   async function approveStep(step) {
-    const data = await api.api('POST', `/api/workflow/step/${step}/approve`)
+    const data = await api.api('POST', `/api/approve/${step}`)
     if (data.error) {
       toast.show(data.error, 'danger')
       return
@@ -133,7 +178,11 @@ export const useWorkflowStore = defineStore('workflow', () => {
     const data = await api.api('GET', `/api/job/${jobId.value}`)
     if (data.error) {
       jobRunning.value = false
-      toast.show(data.error, 'danger')
+      if (_isRateLimitError(data.error)) {
+        toast.show('AI 服务请求频率超限，请稍后重试', 'warn', 6000)
+      } else {
+        toast.show(data.error, 'danger')
+      }
       return
     }
 
@@ -152,11 +201,20 @@ export const useWorkflowStore = defineStore('workflow', () => {
       jobRunning.value = false
       toast.show('执行完成', 'success')
       await loadStepData()
+      // S1: 渲染退化 Toast 通知
+      _showDegradationToasts()
       return
     }
-    if (status === 'error' || status === 'failed') {
+    if (status === 'error' || status === 'failed' || status === 'cancelled') {
       jobRunning.value = false
-      toast.show(data.error || '执行失败', 'danger')
+      jobRecovery.value = data.recovery || null
+      if (status === 'cancelled') {
+        toast.show('任务已取消', 'warn')
+      } else if (_isRateLimitError(data.error)) {
+        toast.show('AI 服务请求频率超限，请稍后重试', 'warn', 6000)
+      } else {
+        toast.show(data.error || '执行失败', 'danger')
+      }
       return
     }
 
@@ -170,6 +228,63 @@ export const useWorkflowStore = defineStore('workflow', () => {
     }
   }
 
+  /** S1: 渲染退化 Toast 通知 / S4: AI 退化通知 — 同时写入持久通知 */
+  function _showDegradationToasts() {
+    const appStore = useAppStore()
+    const steps = appStore.steps || []
+    // S1: render degradations (step 7)
+    const step7 = steps.find(s => s.n === 7) || {}
+    const degs = Array.isArray(step7.degradations) ? step7.degradations : []
+    const typeMap = { error: 'danger', warning: 'warn', info: 'info' }
+    for (const d of degs) {
+      const t = typeMap[d.severity] || 'warn'
+      const msg = `渲染退化: ${d.reason || d.feature || '未知'}`
+      toast.show(msg, t, 8000)
+      notifications.add({ message: msg, type: t, source: 'step7_render', details: d })
+    }
+    // S4: AI degradation (steps 2, 3)
+    for (const n of [2, 3]) {
+      const step = steps.find(s => s.n === n) || {}
+      if (step.ai_degraded) {
+        const msg = step.ai_degraded_reason || 'AI 生成已降级为模板模式'
+        toast.show(msg, 'warn', 8000)
+        notifications.add({ message: msg, type: 'warn', source: `step${n}_ai_degraded` })
+      }
+    }
+  }
+
+  /** S2: 智能重试 */
+  async function retryWithRecovery() {
+    const r = jobRecovery.value
+    if (r && r.can_retry && r.retry_hint && r.retry_hint.endpoint) {
+      if (r.duplicate_risk) {
+        toast.show('注意: 重试可能产生重复发布，请确认', 'warn', 5000)
+      }
+      const data = await api.api('POST', r.retry_hint.endpoint, {})
+      if (data.error) {
+        toast.show(data.error, 'danger')
+        return
+      }
+      if (data.job_id) {
+        jobRunning.value = true
+        jobStatus.value = ''
+        jobLog.value = []
+        jobProgress.value = 0
+        jobRecovery.value = null
+        jobId.value = data.job_id
+        _pollTimer = setTimeout(() => pollJob(), 1500)
+      } else {
+        toast.show('重试已提交', 'success')
+        jobStatus.value = ''
+        jobRecovery.value = null
+      }
+    } else {
+      // 无 recovery endpoint → 回退到普通重试
+      const appStore = useAppStore()
+      await runStep(appStore.currentStep)
+    }
+  }
+
   return {
     activeStep,
     stepData,
@@ -178,6 +293,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
     jobLog,
     jobRunning,
     jobProgress,
+    jobRecovery,
     selectedAssets,
     maxSelectedAssets,
     topics,
@@ -193,11 +309,13 @@ export const useWorkflowStore = defineStore('workflow', () => {
     stageFiles,
     finalUrl,
     stageNames,
+    guidedAvailable,
     stepLabels,
     loadStepData,
     runStep,
     approveStep,
     pollJob,
     cancelPoll,
+    retryWithRecovery,
   }
 })

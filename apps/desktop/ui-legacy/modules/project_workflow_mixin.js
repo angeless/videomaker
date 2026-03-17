@@ -144,6 +144,7 @@
         this.jobStatus = "running";
         this.jobLog = [];
         this.jobProgress = 0;
+        this.jobRecovery = null;
         this.jobEta = { available: false, remaining_seconds: null, source: "none", confidence: 0 };
         this._pollLastStateJson = "";
         clearInterval(this.jobTimer);
@@ -186,6 +187,8 @@
           clearInterval(this.jobTimer);
           this.jobTimer = null;
           this._pollLastStateJson = "";
+          // S2: 保存 recovery 信息
+          this.jobRecovery = data.recovery || null;
           if (data.status !== "running") {
             this.jobEta = { available: false, remaining_seconds: 0, source: "finished", confidence: 1 };
           }
@@ -193,6 +196,8 @@
             this.activePanel = this.currentStep;
             await this.loadStepData();
             await this.loadCapabilityWorkbench();
+            // S1: 渲染退化通知
+            this._showDegradationToasts();
           }
         }
       },
@@ -408,6 +413,60 @@
         this.productionView = "workflow";
         this.activePanel = n;
         await this.loadStepData();
+      },
+
+      /** S2: 智能重试（优先走 recovery endpoint，回退到 runCurrentStep） */
+      async retryWithRecovery() {
+        const r = this.jobRecovery;
+        if (r && r.can_retry && r.retry_hint && r.retry_hint.endpoint) {
+          // 有明确 rerun 端点
+          if (r.duplicate_risk) {
+            this.showToast("注意: 重试可能产生重复发布，请确认", "warn", 5000);
+          }
+          let endpoint = r.retry_hint.endpoint;
+          // 如果是 content_publish rerun，需要传 run_id
+          const result = this.stepInfo(this.activePanel)?.output;
+          let body = {};
+          if (endpoint.includes("content_publish/rerun") && result) {
+            try {
+              const parsed = typeof result === "string" ? JSON.parse(result) : result;
+              if (parsed.run_id) body.run_id = parsed.run_id;
+            } catch { /* ignore */ }
+          }
+          const data = await this.api("POST", endpoint, body);
+          if (data.error) {
+            this.showToast(data.error, "danger");
+            return;
+          }
+          if (data.job_id) {
+            this.startPolling(data.job_id);
+          } else {
+            this.showToast("重试已提交", "success");
+            this.jobStatus = "";
+          }
+        } else {
+          // 无 recovery endpoint → 回退到普通重试
+          await this.runCurrentStep();
+        }
+      },
+
+      /** S1: 渲染退化 Toast 通知 / S4: AI 退化通知 */
+      _showDegradationToasts() {
+        // S1: render degradations (step 7)
+        const step7 = this.stepInfo(7);
+        const degs = step7 && Array.isArray(step7.degradations) ? step7.degradations : [];
+        const typeMap = { error: "danger", warning: "warn", info: "info" };
+        for (const d of degs) {
+          const toastType = typeMap[d.severity] || "warn";
+          this.showToast(`渲染退化: ${d.reason || d.feature || "未知"}`, toastType, 8000);
+        }
+        // S4: AI degradation (steps 2, 3)
+        for (const n of [2, 3]) {
+          const step = this.stepInfo(n);
+          if (step && step.ai_degraded) {
+            this.showToast(step.ai_degraded_reason || "AI 生成已降级为模板模式", "warn", 8000);
+          }
+        }
       },
 
       scrollLog() {

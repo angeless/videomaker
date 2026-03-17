@@ -190,6 +190,68 @@ const translationMap = {
   'commercial': '广告片', 'social short': '社媒短视频',
   'product review': '产品评测', 'wedding': '婚礼活动',
   'music video': '音乐MV', 'corporate': '企业宣传',
+
+  // ── 影视剪辑 / 摄影术语 ──
+  'slow motion': '慢动作', 'fast motion': '快动作', 'fast forward': '快进',
+  'jump cut': '跳剪', 'match cut': '匹配剪辑', 'cross cut': '交叉剪辑',
+  'close-up': '特写', 'closeup': '特写', 'extreme close-up': '极端特写',
+  'wide shot': '远景', 'wide angle': '广角',
+  'medium shot': '中景', 'medium close-up': '中近景',
+  'establishing shot': '建立镜头', 'tracking shot': '跟踪镜头',
+  'dolly shot': '推轨镜头', 'dolly zoom': '滑动变焦',
+  'pan': '水平摇镜', 'panning': '水平摇镜',
+  'tilt': '垂直摇镜', 'tilt up': '上摇', 'tilt down': '下摇',
+  'zoom in': '推镜', 'zoom out': '拉镜',
+  'handheld': '手持', 'steadicam': '稳定器',
+  'split screen': '分屏', 'freeze frame': '定格',
+  'b-roll': 'B-Roll素材', 'a-roll': '主镜头',
+  'color grading': '调色', 'color correction': '校色',
+  'bokeh': '虚化', 'depth of field': '景深', 'shallow dof': '浅景深',
+  'lens flare': '镜头光晕', 'motion blur': '运动模糊',
+  'fade in': '淡入', 'fade out': '淡出',
+  'dissolve': '叠化', 'wipe': '划变',
+  'j-cut': 'J剪辑', 'l-cut': 'L剪辑',
+  'voiceover': '旁白', 'narration': '旁白',
+  'cutaway': '切入镜头', 'insert shot': '插入镜头',
+  'rack focus': '拉焦', 'pull focus': '拉焦',
+  'over the shoulder': '过肩镜头', 'point of view': '主观镜头', 'pov': '主观镜头',
+  'two shot': '双人镜头', 'reaction shot': '反应镜头',
+  'crane shot': '摇臂镜头', 'jib shot': '摇臂镜头',
+  'whip pan': '甩镜', 'dutch angle': '倾斜构图',
+  'aspect ratio': '画幅比', 'letterbox': '宽银幕黑边',
+  'keyframe': '关键帧', 'timeline': '时间线', 'sequence': '序列',
+  'rough cut': '粗剪', 'fine cut': '精剪', 'final cut': '终剪',
+  'trim': '修剪', 'splice': '拼接',
+
+  // ── 补充: 活动/交流 ──
+  'talking': '交谈', 'conversation': '对话', 'interview': '采访',
+  'speaking': '演讲', 'presenting': '演示', 'exercising': '锻炼',
+  'working': '工作', 'studying': '学习', 'playing': '玩耍',
+
+  // ── 补充: 空间/房间 ──
+  'room': '房间', 'living room': '客厅', 'bathroom': '浴室',
+  'hallway': '走廊', 'studio': '工作室', 'warehouse': '仓库',
+  'lobby': '大厅', 'corridor': '走廊',
+
+  // ── 补充: Vlog/内容类型 ──
+  'vlog': 'Vlog', 'daily': '日常', 'routine': '日常', 'haul': '开箱',
+  'unboxing': '开箱', 'tutorial': '教程', 'review': '评测',
+  'challenge': '挑战', 'mukbang': '吃播', 'asmr': 'ASMR',
+  'behind the scenes': '幕后花絮', 'bts': '幕后花絮',
+
+  // ── 补充: 人物组合 ──
+  'group': '群体', 'couple': '情侣', 'solo': '独自',
+  'baby': '婴儿', 'elder': '长辈', 'teenager': '青少年',
+
+  // ── 补充: 关键特征 ──
+  'highlight': '高光', 'dynamic': '动感', 'static': '静态',
+  'energetic/dynamic': '活力动感', 'energetic, dynamic': '活力动感',
+  'broll': 'B-Roll素材',
+  'scenic': '风光', 'closeup detail': '特写细节',
+
+  // ── 补充: 工作流/模板标签 ──
+  'material-first': '素材先行', 'template': '模板',
+  'video': '视频', 'short_video': '短视频', 'story': '故事',
 }
 
 // 合并映射：相似概念指向同一个规范词

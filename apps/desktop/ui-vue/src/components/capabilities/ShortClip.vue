@@ -4,7 +4,7 @@
     <div class="cap-section">
       <div class="form-row"><label>目标时长(秒)</label><input v-model.number="input.target_duration_s" type="number" class="form-input" /></div>
       <div class="form-row"><label>最大片段数</label><input v-model.number="input.max_clips" type="number" class="form-input" /></div>
-      <button class="btn btn-primary btn-sm" @click="build" :disabled="!appStore.projectDir">生成快剪规划</button>
+      <button class="btn btn-primary btn-sm" @click="build" :disabled="!appStore.projectDir || loading">{{ loading ? '生成中…' : '生成快剪规划' }}</button>
     </div>
     <div v-if="plan" class="cap-section">
       <div class="cap-subtitle">快剪规划</div>
@@ -25,15 +25,21 @@ const appStore = useAppStore()
 
 const input = reactive({ target_duration_s: 30, max_clips: 8 })
 const plan = ref(null)
+const loading = ref(false)
 
 async function build() {
-  if (!appStore.projectDir) return
-  const data = await apiStore.api('POST', '/api/capabilities/short_clip/plan', {
-    target_duration_s: input.target_duration_s, max_clips: input.max_clips,
-  })
-  if (data.error) { capStore.setMessage(`快剪规划失败：${data.error}`, 'error'); return }
-  plan.value = data.plan || null
-  capStore.setMessage('已生成短视频快剪规划', 'success')
+  if (!appStore.projectDir || loading.value) return
+  loading.value = true
+  try {
+    const data = await apiStore.api('POST', '/api/capabilities/short_clip/plan', {
+      target_duration_s: input.target_duration_s, max_clips: input.max_clips,
+    })
+    if (data.error) { capStore.setMessage(`快剪规划失败：${data.error}`, 'error'); return }
+    plan.value = data.plan || null
+    capStore.setMessage('已生成短视频快剪规划', 'success')
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 

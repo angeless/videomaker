@@ -10,7 +10,8 @@
       <div class="form-row"><label>目标字数</label><input v-model.number="input.length_target" type="number" class="form-input" /></div>
       <div class="form-row"><label>标题数量</label><input v-model.number="input.title_count" type="number" class="form-input" /></div>
       <div class="form-row"><label>使用 LLM</label><input type="checkbox" v-model="input.use_llm" /></div>
-      <button class="btn btn-primary btn-sm" @click="generate" :disabled="!appStore.projectDir">生成扩写</button>
+      <button class="btn btn-primary btn-sm" @click="generate" :disabled="!canGenerate || loading">{{ loading ? '生成中…' : '生成扩写' }}</button>
+      <div v-if="!input.source_text.trim() && appStore.projectDir" class="form-hint">请先粘贴源文本</div>
     </div>
     <div v-if="result" class="cap-section">
       <div class="cap-subtitle">扩写结果</div>
@@ -24,7 +25,7 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { useApiStore } from '../../stores/api.js'
 import { useCapabilitiesStore } from '../../stores/capabilities.js'
 import { useAppStore } from '../../stores/app.js'
@@ -38,16 +39,24 @@ const input = reactive({
   length_target: 1200, title_count: 5, use_llm: true, llm_provider: '', llm_model: '',
 })
 const result = ref(null)
+const loading = ref(false)
+const canGenerate = computed(() => appStore.projectDir && input.source_text.trim().length > 0)
 
 async function generate() {
-  const data = await apiStore.api('POST', '/api/capabilities/article_expand/generate', {
-    input_mode: input.input_mode, source_text: input.source_text, key_points: input.key_points,
-    tone: input.tone, length_target: input.length_target, title_count: input.title_count,
-    use_llm: input.use_llm, llm_provider: input.llm_provider, llm_model: input.llm_model,
-  })
-  if (data.error) { capStore.setMessage(`公众号扩写失败：${data.error}`, 'error'); return }
-  result.value = data.result || null
-  capStore.setMessage(`公众号扩写完成：生成标题 ${result.value?.title_candidates?.length || 0} 条`, 'success')
+  if (!canGenerate.value || loading.value) return
+  loading.value = true
+  try {
+    const data = await apiStore.api('POST', '/api/capabilities/article_expand/generate', {
+      input_mode: input.input_mode, source_text: input.source_text, key_points: input.key_points,
+      tone: input.tone, length_target: input.length_target, title_count: input.title_count,
+      use_llm: input.use_llm, llm_provider: input.llm_provider, llm_model: input.llm_model,
+    })
+    if (data.error) { capStore.setMessage(`公众号扩写失败：${data.error}`, 'error'); return }
+    result.value = data.result || null
+    capStore.setMessage(`公众号扩写完成：生成标题 ${result.value?.title_candidates?.length || 0} 条`, 'success')
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 
@@ -59,4 +68,5 @@ h3 { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
 .form-row label { width: 80px; font-size: 12px; color: var(--muted); flex-shrink: 0; }
 .title-candidate { font-size: 13px; padding: 4px 0; }
 .result-pre { background: var(--surface2); padding: 12px; border-radius: 6px; font-size: 12px; overflow-x: auto; white-space: pre-wrap; max-height: 300px; overflow-y: auto; }
+.form-hint { font-size: 11px; color: var(--muted); margin-top: 6px; }
 </style>

@@ -12,9 +12,10 @@
         <input type="checkbox" v-model="input.apply_removed_phrases" />
       </div>
       <div class="btn-row">
-        <button class="btn btn-sm" @click="loadSource" :disabled="!appStore.projectDir">加载字幕</button>
-        <button class="btn btn-primary btn-sm" @click="buildPlan" :disabled="!appStore.projectDir">生成粗剪规划</button>
+        <button class="btn btn-sm" @click="loadSource" :disabled="!appStore.projectDir || loadingSource">{{ loadingSource ? '加载中…' : '加载字幕' }}</button>
+        <button class="btn btn-primary btn-sm" @click="buildPlan" :disabled="!canBuildPlan || loading">{{ loading ? '生成中…' : '生成粗剪规划' }}</button>
       </div>
+      <div v-if="!spans.length && appStore.projectDir && !loadingSource" class="form-hint">请先点击「加载字幕」载入字幕数据</div>
     </div>
 
     <div v-if="spans.length" class="cap-section">
@@ -42,7 +43,19 @@
 
     <div v-if="plan" class="cap-section">
       <div class="cap-subtitle">粗剪规划</div>
-      <pre class="result-pre">{{ JSON.stringify(plan, null, 2) }}</pre>
+      <div v-if="plan.total_span_count === 0" class="plan-empty">
+        <div class="plan-empty-icon">📝</div>
+        <div class="plan-empty-text">暂无字幕数据，请先点击「加载字幕」</div>
+      </div>
+      <div v-else class="plan-summary">
+        <div class="plan-stat">保留 <strong>{{ plan.kept_span_count || 0 }}</strong> / {{ plan.total_span_count }} 句</div>
+        <div v-if="plan.duration_s" class="plan-stat">预估时长 <strong>{{ Number(plan.duration_s).toFixed(1) }}s</strong></div>
+        <div v-if="plan.removed_by_phrase_count" class="plan-stat">口头词移除 {{ plan.removed_by_phrase_count }} 句</div>
+        <details class="plan-raw">
+          <summary>查看完整规划</summary>
+          <pre class="result-pre">{{ JSON.stringify(plan, null, 2) }}</pre>
+        </details>
+      </div>
     </div>
   </div>
 </template>
@@ -66,6 +79,9 @@ const input = reactive({
 const spans = ref([])
 const plan = ref(null)
 const filterKeyword = ref('')
+const loadingSource = ref(false)
+const loading = ref(false)
+const canBuildPlan = computed(() => appStore.projectDir && spans.value.length > 0)
 
 const filteredSpans = computed(() => {
   const kw = filterKeyword.value.trim().toLowerCase()
@@ -99,40 +115,50 @@ function removeFillers() {
 }
 
 async function loadSource() {
-  if (!appStore.projectDir) return
-  const data = await apiStore.api('GET', '/api/capabilities/text_rough_cut/source')
-  if (data.error) { capStore.setMessage(`字幕加载失败：${data.error}`, 'error'); return }
-  const raw = Array.isArray(data.spans) ? data.spans : []
-  const keepSet = new Set(parseSpanIndexExpr(input.keep_span_indexes, raw.length))
-  const dropSet = new Set(parseSpanIndexExpr(input.drop_span_indexes, raw.length))
-  const hasManual = keepSet.size > 0 || dropSet.size > 0
-  spans.value = raw.map(s => {
-    let keep = true
-    if (hasManual) {
-      if (keepSet.size > 0 && !keepSet.has(s.index)) keep = false
-      if (dropSet.has(s.index)) keep = false
-    }
-    return { ...s, keep }
-  })
+  if (!appStore.projectDir || loadingSource.value) return
+  loadingSource.value = true
+  try {
+    const data = await apiStore.api('GET', '/api/capabilities/text_rough_cut/source')
+    if (data.error) { capStore.setMessage(`字幕加载失败：${data.error}`, 'error'); return }
+    const raw = Array.isArray(data.spans) ? data.spans : []
+    const keepSet = new Set(parseSpanIndexExpr(input.keep_span_indexes, raw.length))
+    const dropSet = new Set(parseSpanIndexExpr(input.drop_span_indexes, raw.length))
+    const hasManual = keepSet.size > 0 || dropSet.size > 0
+    spans.value = raw.map(s => {
+      let keep = true
+      if (hasManual) {
+        if (keepSet.size > 0 && !keepSet.has(s.index)) keep = false
+        if (dropSet.has(s.index)) keep = false
+      }
+      return { ...s, keep }
+    })
+  } finally {
+    loadingSource.value = false
+  }
 }
 
 async function buildPlan() {
-  if (!appStore.projectDir) return
-  const payload = {
-    removed_phrases: input.removed_phrases, target_duration_s: input.target_duration_s,
-    merge_gap_s: input.merge_gap_s, keep_span_indexes: input.keep_span_indexes,
-    drop_span_indexes: input.drop_span_indexes, apply_removed_phrases: input.apply_removed_phrases,
+  if (!canBuildPlan.value || loading.value) return
+  loading.value = true
+  try {
+    const payload = {
+      removed_phrases: input.removed_phrases, target_duration_s: input.target_duration_s,
+      merge_gap_s: input.merge_gap_s, keep_span_indexes: input.keep_span_indexes,
+      drop_span_indexes: input.drop_span_indexes, apply_removed_phrases: input.apply_removed_phrases,
+    }
+    const data = await apiStore.api('POST', '/api/capabilities/text_rough_cut/plan', payload)
+    if (data.error) { capStore.setMessage(`文字粗剪规划失败：${data.error}`, 'error'); return }
+    plan.value = data.plan || null
+    const decisions = plan.value?.decisions || []
+    if (decisions.length && spans.value.length) {
+      const keepByIdx = new Map(decisions.map(d => [d.index, !!d.kept]))
+      spans.value.forEach(s => { if (keepByIdx.has(s.index)) s.keep = keepByIdx.get(s.index) })
+      syncInputs()
+    }
+    capStore.setMessage(`已生成文字粗剪规划：保留 ${plan.value?.kept_span_count || 0}/${plan.value?.total_span_count || 0} 句`, 'success')
+  } finally {
+    loading.value = false
   }
-  const data = await apiStore.api('POST', '/api/capabilities/text_rough_cut/plan', payload)
-  if (data.error) { capStore.setMessage(`文字粗剪规划失败：${data.error}`, 'error'); return }
-  plan.value = data.plan || null
-  const decisions = plan.value?.decisions || []
-  if (decisions.length && spans.value.length) {
-    const keepByIdx = new Map(decisions.map(d => [d.index, !!d.kept]))
-    spans.value.forEach(s => { if (keepByIdx.has(s.index)) s.keep = keepByIdx.get(s.index) })
-    syncInputs()
-  }
-  capStore.setMessage(`已生成文字粗剪规划：保留 ${plan.value?.kept_span_count || 0}/${plan.value?.total_span_count || 0} 句`, 'success')
 }
 </script>
 
@@ -151,4 +177,13 @@ h3 { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
 .span-text { flex: 1; }
 .span-time { font-size: 11px; flex-shrink: 0; }
 .result-pre { background: var(--surface2); padding: 12px; border-radius: 6px; font-size: 12px; overflow-x: auto; white-space: pre-wrap; max-height: 300px; overflow-y: auto; }
+.plan-empty { text-align: center; padding: 24px; color: var(--muted); }
+.plan-empty-icon { font-size: 32px; margin-bottom: 8px; opacity: 0.4; }
+.plan-empty-text { font-size: 13px; }
+.plan-summary { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+.plan-stat { font-size: 13px; margin-bottom: 4px; }
+.plan-stat strong { color: var(--accent); }
+.plan-raw { margin-top: 8px; }
+.plan-raw summary { font-size: 11px; color: var(--muted); cursor: pointer; }
+.form-hint { font-size: 11px; color: var(--muted); margin-top: 6px; }
 </style>
