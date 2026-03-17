@@ -80,7 +80,7 @@
         <div v-if="appStore.recentProjectsLoading" class="sidebar-hint">加载中...</div>
         <div v-else-if="appStore.recentProjects.length === 0" class="sidebar-hint">暂无项目</div>
         <div
-          v-for="proj in appStore.recentProjects.slice(0, 6)"
+          v-for="proj in validRecentProjects"
           :key="proj.path"
           class="sidebar-item project-item"
           :class="{ active: proj.path === appStore.projectDir }"
@@ -134,6 +134,7 @@
 import { computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAppStore } from '../stores/app.js'
+import { useFormatters } from '../composables/useFormatters.js'
 import labels from '../i18n/labels.js'
 import AppNav from '../components/layout/AppNav.vue'
 import ProjectDialog from '../components/common/ProjectDialog.vue'
@@ -141,6 +142,7 @@ import ProjectDialog from '../components/common/ProjectDialog.vue'
 const router = useRouter()
 const route = useRoute()
 const appStore = useAppStore()
+const { humanizeProjectDir } = useFormatters()
 
 const childRouteNames = [
   'workflow', 'workflow-step', 'tools', 'tools-tab',
@@ -150,14 +152,7 @@ const childRouteNames = [
 
 const hasChildRoute = computed(() => childRouteNames.includes(route.name))
 
-const projectDisplayName = computed(() => {
-  const dir = appStore.projectDir
-  if (!dir) return '未打开项目'
-  const name = dir.split('/').filter(Boolean).pop() || dir
-  const m = name.match(/^proj_selected_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})/)
-  if (m) return `项目 ${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}`
-  return name
-})
+const projectDisplayName = computed(() => humanizeProjectDir(appStore.projectDir))
 
 // 画布等全出血视图需要去除 .content 的 padding
 const isFullBleed = computed(() => route.name === 'canvas')
@@ -182,6 +177,11 @@ function go(key) {
   }
   router.push(pathMap[key] || '/create')
 }
+
+// C-06: 过滤掉已删除（missing）的项目
+const validRecentProjects = computed(() => {
+  return (appStore.recentProjects || []).filter(p => p.status !== 'missing').slice(0, 6)
+})
 
 async function openRecentProject(path) {
   await appStore.openProject(path)

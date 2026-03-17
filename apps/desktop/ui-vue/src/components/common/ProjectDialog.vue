@@ -9,6 +9,16 @@
         <!-- 新建项目 -->
         <template v-if="appStore.initMode === 'new'">
           <FormField
+            :label="labels.project.projectName"
+          >
+            <input
+              v-model="appStore.initProjectName"
+              class="form-input"
+              :placeholder="labels.project.projectNamePlaceholder"
+            />
+          </FormField>
+
+          <FormField
             :label="labels.project.videosDir"
             :error="v.getError('videosDir')"
           >
@@ -114,7 +124,7 @@ async function submit() {
 
   let ok = false
   if (appStore.initMode === 'new') {
-    ok = await appStore.createProject(appStore.initVideosDir, appStore.initProjectDir)
+    ok = await appStore.createProject(appStore.initVideosDir, appStore.initProjectDir, appStore.initProjectName)
   } else {
     ok = await appStore.openProject(appStore.initOpenDir)
   }

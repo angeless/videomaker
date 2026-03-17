@@ -55,7 +55,7 @@
           </FormField>
 
           <div class="form-group">
-            <label class="form-label">OpenAI API Key</label>
+            <label class="form-label">OpenAI 密钥</label>
             <div class="form-row">
               <input
                 v-model="settings.aiSettings.openai_api_key"
@@ -70,7 +70,7 @@
           </div>
 
           <div class="form-group">
-            <label class="form-label">Anthropic API Key</label>
+            <label class="form-label">Anthropic 密钥</label>
             <div class="form-row">
               <input
                 v-model="settings.aiSettings.anthropic_api_key"
@@ -192,6 +192,7 @@ import { useAppStore } from '../stores/app.js'
 import { useApiStore } from '../stores/api.js'
 import { useSettingsStore } from '../stores/settings.js'
 import { useValidation } from '../composables/useValidation.js'
+import { useFormatters } from '../composables/useFormatters.js'
 import labels from '../i18n/labels.js'
 import AppNav from '../components/layout/AppNav.vue'
 import FormField from '../components/common/FormField.vue'
@@ -199,15 +200,9 @@ import FormField from '../components/common/FormField.vue'
 const appStore = useAppStore()
 const apiStore = useApiStore()
 const settings = useSettingsStore()
+const { humanizeProjectDir } = useFormatters()
 
-const projectDisplayName = computed(() => {
-  const dir = appStore.projectDir
-  if (!dir) return '未打开项目'
-  const name = dir.split('/').filter(Boolean).pop() || dir
-  const m = name.match(/^proj_selected_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})/)
-  if (m) return `项目 ${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}`
-  return name
-})
+const projectDisplayName = computed(() => humanizeProjectDir(appStore.projectDir))
 
 const v = useValidation({
   ai_base_url: [{ type: 'url', message: '请输入合法的 URL 地址' }],

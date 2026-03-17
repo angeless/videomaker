@@ -1,5 +1,5 @@
 <template>
-  <div class="asset-row">
+  <div class="asset-row" @click="$emit('select', asset)" style="cursor: pointer">
     <!-- 缩略图 -->
     <div class="row-thumb">
       <img v-if="asset.thumbnail_url" :src="asset.thumbnail_url" :alt="asset.filename" loading="lazy" />
@@ -36,6 +36,8 @@ const props = defineProps({
   asset: { type: Object, required: true },
 })
 
+defineEmits(['select'])
+
 function qualityLabel(score) {
   const n = Number(score)
   if (n >= 0.9) return '优秀'
@@ -51,10 +53,10 @@ const topTags = computed(() => {
 
 function formatDuration(seconds) {
   const s = Number(seconds) || 0
-  if (s < 60) return `${Math.round(s)}s`
+  if (s < 60) return `${Math.round(s)}秒`
   const m = Math.floor(s / 60)
   const sec = Math.round(s % 60)
-  return `${m}:${sec.toString().padStart(2, '0')}`
+  return `${m}分${sec}秒`
 }
 </script>
 

@@ -81,7 +81,7 @@ const appStore = useAppStore()
 
 const refineInput = reactive({ style: 'travel_story', editor: 'internal_ffmpeg', quality: 'high' })
 const handoff = reactive({
-  editor: 'finalcut', title: 'VideoEditer Timeline', fps: 30,
+  editor: 'finalcut', title: '视频编辑器时间线', fps: 30,
   launch: true, app_name: '', master_source: '', output_name: 'final.mp4', copy_mode: 'copy',
 })
 const connectors = ref([])

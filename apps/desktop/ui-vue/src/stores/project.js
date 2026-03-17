@@ -20,6 +20,7 @@ export const useProjectStore = defineStore('project', () => {
   // ── 初始化/打开项目 ──
   const showInit = ref(false)
   const initMode = ref('new')
+  const initProjectName = ref('')
   const initVideosDir = ref('')
   const initProjectDir = ref('')
   const initOpenDir = ref('')
@@ -66,13 +67,12 @@ export const useProjectStore = defineStore('project', () => {
     recentProjects.value = data.projects || []
   }
 
-  async function createProject(videosDir_, projectDir_) {
+  async function createProject(videosDir_, projectDir_, projectName_) {
     initLoading.value = true
     initError.value = ''
-    const data = await api.api('POST', '/api/init', {
-      videos_dir: videosDir_,
-      project_dir: projectDir_,
-    })
+    const body = { videos_dir: videosDir_, project_dir: projectDir_ }
+    if (projectName_) body.project_name = projectName_
+    const data = await api.api('POST', '/api/init', body)
     initLoading.value = false
     if (data.error) {
       initError.value = data.error
@@ -120,7 +120,7 @@ export const useProjectStore = defineStore('project', () => {
 
   return {
     projectDir, videosDir, currentStep, steps, config,
-    showInit, initMode, initVideosDir, initProjectDir, initOpenDir,
+    showInit, initMode, initProjectName, initVideosDir, initProjectDir, initOpenDir,
     initLoading, initError, recentProjects, recentProjectsLoading,
     hasProject,
     fetchStatus, applyState, loadRecentProjects,

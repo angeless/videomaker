@@ -129,6 +129,7 @@ const translationMap = {
 
   // ── 氛围 ──
   'healing': '治愈', 'calm': '宁静', 'energetic': '活力',
+  'atmospheric': '氛围感', 'ambient': '环境氛围', 'tranquil': '恬静', 'serene': '宁谧',
   'epic': '史诗感', 'lonely': '孤独', 'tense': '紧张', 'relaxed': '轻松',
   'melancholic': '忧郁', 'joyful': '欢快', 'mysterious': '神秘',
   'solemn': '庄严', 'passionate': '激昂', 'lazy': '慵懒',
@@ -252,6 +253,17 @@ const translationMap = {
   // ── 补充: 工作流/模板标签 ──
   'material-first': '素材先行', 'template': '模板',
   'video': '视频', 'short_video': '短视频', 'story': '故事',
+
+  // ── 补充: 语义分析常见分类键 ──
+  'activity': '活动', 'general': '综合', 'personal': '个人',
+  'intimate': '亲密', 'intimate, personal': '亲密个人',
+  'professional': '专业', 'casual': '休闲', 'formal': '正式',
+  'abstract': '抽象', 'concrete': '具象', 'specific': '特定',
+  'detail': '细节', 'overview': '概览', 'summary': '摘要',
+  'emotional': '情感', 'descriptive': '描述', 'narrative': '叙事',
+  'action': '动作', 'motion': '运动', 'movement': '移动',
+  'interaction': '互动', 'gesture': '手势',
+  'scenic view': '风景', 'close up': '特写', 'wide view': '全景',
 }
 
 // 合并映射：相似概念指向同一个规范词
@@ -271,7 +283,32 @@ export function translateTag(tag) {
   if (!text) return ''
   // 中文字符检测
   if (/[\u4e00-\u9fa5]/.test(text)) return text
-  return translationMap[text] || tag
+  // 直接匹配
+  if (translationMap[text]) return translationMap[text]
+  // 逗号分隔的复合值（如 "intimate, personal"）
+  if (text.includes(',')) {
+    const parts = text.split(',').map(p => {
+      const trimmed = p.trim()
+      return translationMap[trimmed] || trimmed
+    })
+    const translated = parts.filter(p => /[\u4e00-\u9fa5]/.test(p)).length
+    if (translated >= parts.length / 2) return parts.join('')
+  }
+  // 去掉尾部 s/es/ing 后重试
+  const stem = text.replace(/(?:ing|es|s)$/, '')
+  if (stem !== text && translationMap[stem]) return translationMap[stem]
+  // 下划线/连字符分隔 → 空格形式重试
+  const spaced = text.replace(/[-_]/g, ' ')
+  if (spaced !== text && translationMap[spaced]) return translationMap[spaced]
+  // 多词标签：逐词翻译拼接
+  const words = spaced.split(/\s+/)
+  if (words.length > 1) {
+    const parts = words.map(w => translationMap[w] || w)
+    // 只有至少一半词被翻译了才拼接，否则保留原文
+    const translated = parts.filter(p => /[\u4e00-\u9fa5]/.test(p)).length
+    if (translated >= words.length / 2) return parts.join('')
+  }
+  return tag
 }
 
 /**

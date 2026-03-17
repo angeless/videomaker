@@ -1,6 +1,12 @@
 <template>
   <div class="step-panel">
     <h3>{{ labels.workflow.steps[4] }}</h3>
+
+    <div v-if="stepDone" class="step-done-banner">
+      <span>✅ 帧预览已确认<span v-if="workflow.frames.length > 0"> — {{ workflow.frames.length }} 个关键帧</span></span>
+      <button class="btn btn-sm btn-next" @click="router.push('/create/workflow/6')">继续下一步 →</button>
+    </div>
+
     <p class="text-muted" style="margin-bottom: 16px">
       预览每个分镜对应的关键帧，确认素材匹配是否正确。
     </p>
@@ -34,9 +40,19 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAppStore } from '../../stores/app.js'
 import { useWorkflowStore } from '../../stores/workflow.js'
 import labels from '../../i18n/labels.js'
+const router = useRouter()
+const appStore = useAppStore()
 const workflow = useWorkflowStore()
+
+const stepDone = computed(() => {
+  const s = (appStore.steps || []).find(s => s.n === 5)
+  return s ? s.status === 'done' : false
+})
 </script>
 
 <style scoped>
@@ -49,4 +65,27 @@ const workflow = useWorkflowStore()
 .frame-placeholder { font-size: 24px; opacity: 0.3; }
 .frame-info { padding: 6px 8px; display: flex; gap: 6px; align-items: center; }
 .frame-num { font-size: 11px; font-weight: 600; color: var(--accent); }
+.step-done-banner {
+  background: rgba(52, 211, 153, 0.1);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--success, #34d399);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.btn-next {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
 </style>

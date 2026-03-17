@@ -1,6 +1,9 @@
 <template>
   <div class="step-panel">
     <h3>{{ labels.workflow.steps[5] }}</h3>
+    <div v-if="isDone" class="step-done-banner">
+      ✅ 粗剪已完成并审核通过
+    </div>
     <p class="text-muted" style="margin-bottom: 16px">
       生成粗剪视频，用于快速预览整体效果。
     </p>
@@ -34,7 +37,10 @@
 
     <!-- 粗剪结果 -->
     <div v-if="workflow.roughUrl" class="card">
-      <div class="card-header">{{ isDone ? '✅ 粗剪已通过审核' : '粗剪预览' }}</div>
+      <div class="card-header" style="display: flex; align-items: center; justify-content: space-between">
+        <span>{{ isDone ? '✅ 粗剪已通过审核' : '粗剪预览' }}</span>
+        <button v-if="isDone" class="btn btn-sm btn-next" @click="router.push('/create/workflow/7')">继续下一步 →</button>
+      </div>
       <video :src="workflow.roughUrl" controls style="width: 100%; border-radius: 6px"></video>
     </div>
 
@@ -51,10 +57,12 @@
 
 <script setup>
 import { computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { useWorkflowStore } from '../../stores/workflow.js'
 import { useAppStore } from '../../stores/app.js'
 import labels from '../../i18n/labels.js'
 
+const router = useRouter()
 const workflow = useWorkflowStore()
 const appStore = useAppStore()
 
@@ -68,5 +76,25 @@ const isWaitingReview = computed(() => step6Status.value === 'waiting_review')
 
 <style scoped>
 .step-panel h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+.step-done-banner {
+  background: rgba(52, 211, 153, 0.1);
+  border: 1px solid var(--success, #34d399);
+  border-radius: 8px;
+  padding: 10px 16px;
+  margin-bottom: 12px;
+  font-size: 14px;
+  color: var(--success, #34d399);
+  font-weight: 500;
+}
 .step-actions { display: flex; gap: 10px; margin-top: 16px; }
+.btn-next {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
 </style>

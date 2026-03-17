@@ -5,10 +5,10 @@
 export function useFormatters() {
   function formatDuration(seconds) {
     const s = Number(seconds) || 0
-    if (s < 60) return `${Math.round(s)}s`
+    if (s < 60) return `${Math.round(s)}秒`
     const m = Math.floor(s / 60)
     const sec = Math.round(s % 60)
-    return `${m}:${sec.toString().padStart(2, '0')}`
+    return `${m}分${sec}秒`
   }
 
   function formatFileSize(bytes) {
@@ -98,10 +98,22 @@ export function useFormatters() {
     return parts.join(',')
   }
 
+  /**
+   * humanizeProjectDir: 将项目路径转为可读显示名
+   */
+  function humanizeProjectDir(dir) {
+    if (!dir) return '未打开项目'
+    const name = dir.split('/').filter(Boolean).pop() || dir
+    const m = name.match(/^proj_selected_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})/)
+    if (m) return `项目 ${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}`
+    return name
+  }
+
   return {
     formatDuration,
     formatFileSize,
     formatDate,
+    humanizeProjectDir,
     normalizeTemplateId,
     parseSpanIndexExpr,
     formatSpanIndexExpr,

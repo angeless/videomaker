@@ -145,7 +145,7 @@ export const labels = {
       title: 'AI 配置',
       provider: 'AI 服务商',
       model: 'AI 模型',
-      embeddingModel: 'Embedding 模型',
+      embeddingModel: '嵌入模型 (Embedding)',
       baseUrl: 'API 地址',
       apiKey: 'API Key',
       save: '保存配置',
@@ -171,6 +171,8 @@ export const labels = {
   project: {
     new: '新建项目',
     open: '打开项目',
+    projectName: '项目名称',
+    projectNamePlaceholder: '例如：加拿大旅行Vlog',
     videosDir: '素材文件夹',
     projectDir: '项目保存位置',
     browse: '选择文件夹',
