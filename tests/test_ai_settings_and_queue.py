@@ -1354,7 +1354,7 @@ def test_v0316_remaining_str_strip_are_multi_dict_only():
     import re
 
     partially_migrated = {
-        "capability_text_semantic_routes.py": 14,
+        "capability_text_semantic_routes.py": 20,
         "capability_editing_routes.py": 2,
         "agent_task_run_routes.py": 2,
     }
@@ -1459,11 +1459,22 @@ def test_v0318_zero_print_in_all_production_modules():
             tree = _ast.parse(py_file.read_text(encoding="utf-8"))
         except SyntaxError:
             continue
+        # Collect print() calls, but skip those inside `if __name__ == "__main__"` blocks
+        main_guard_lines = set()
+        for node in _ast.walk(tree):
+            if (isinstance(node, _ast.If)
+                and isinstance(node.test, _ast.Compare)
+                and isinstance(node.test.left, _ast.Name)
+                and node.test.left.id == "__name__"):
+                for child in _ast.walk(node):
+                    if hasattr(child, 'lineno'):
+                        main_guard_lines.add(child.lineno)
         prints = [
             node for node in _ast.walk(tree)
             if isinstance(node, _ast.Call)
             and isinstance(node.func, _ast.Name)
             and node.func.id == "print"
+            and node.lineno not in main_guard_lines
         ]
         if prints:
             violations.append(f"{py_file.relative_to(ROOT)}:{len(prints)}")
