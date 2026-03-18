@@ -4,7 +4,7 @@
     <div class="cap-section">
       <div class="form-row"><label>脚本文案</label><textarea v-model="input.script_text" class="form-input" rows="3" placeholder="粘贴脚本文案"></textarea></div>
       <div class="form-row"><label>旁白文案</label><textarea v-model="input.voiceover_text" class="form-input" rows="2" placeholder="粘贴旁白"></textarea></div>
-      <div class="form-row"><label>目标平台</label><input v-model="input.platforms" class="form-input" placeholder="youtube,douyin,xiaohongshu (逗号分隔)" /></div>
+      <div class="form-row"><label>目标平台</label><input v-model="input.platforms" class="form-input" placeholder="YouTube, 抖音, 小红书 (逗号分隔)" /></div>
       <div class="form-row"><label>内容类型</label>
         <select v-model="input.platform_content_type" class="form-input"><option value="video_post">视频</option><option value="article">文章</option></select>
       </div>

@@ -9,8 +9,8 @@
       <div class="form-row"><label>描述</label><textarea v-model="input.description" class="form-input" rows="2"></textarea></div>
       <div class="form-row"><label>关键词</label><input v-model="input.keywords" class="form-input" placeholder="逗号分隔" /></div>
       <div class="form-row"><label>媒体链接</label><input v-model="input.media_urls" class="form-input" placeholder="逗号分隔" /></div>
-      <div class="form-row"><label>平台</label><input v-model="input.platforms" class="form-input" placeholder="youtube,douyin (逗号分隔)" /></div>
-      <div class="form-row"><label>Dry-run</label><input type="checkbox" v-model="input.dry_run" /></div>
+      <div class="form-row"><label>平台</label><input v-model="input.platforms" class="form-input" placeholder="YouTube, 抖音 (逗号分隔)" /></div>
+      <div class="form-row"><label>模拟运行</label><input type="checkbox" v-model="input.dry_run" /></div>
     </div>
 
     <div class="btn-row" style="margin-bottom:16px">

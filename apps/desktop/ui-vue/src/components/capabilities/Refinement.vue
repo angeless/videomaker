@@ -35,7 +35,7 @@
     </div>
 
     <div class="cap-section">
-      <div class="cap-subtitle">NLE 交接</div>
+      <div class="cap-subtitle">剪辑软件交接 (NLE)</div>
       <div class="form-row"><label>编辑器</label>
         <select v-model="handoff.editor" class="form-input">
           <option value="finalcut">Final Cut Pro</option><option value="davinci">DaVinci Resolve</option>

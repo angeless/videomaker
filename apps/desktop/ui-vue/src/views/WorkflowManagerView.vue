@@ -7,7 +7,10 @@
 
   <div class="main">
     <div class="content" style="padding: 24px">
-      <h2 class="section-title">自定义工作流管理</h2>
+      <div class="section-header-row">
+        <h2 class="section-title" style="margin-bottom: 0">自定义工作流管理</h2>
+        <router-link to="/create/canvas" class="btn btn-ghost btn-sm">← 返回创作</router-link>
+      </div>
 
       <!-- 模板区域 -->
       <section class="wf-section">
@@ -314,6 +317,13 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.section-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
 .section-title {
   font-size: 18px;
   font-weight: 600;

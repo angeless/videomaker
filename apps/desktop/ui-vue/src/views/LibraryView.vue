@@ -9,10 +9,10 @@
     <div class="content">
       <div class="content-narrow">
         <!-- 搜索栏 -->
-        <div class="library-toolbar">
+        <div class="library-toolbar" :class="{ 'toolbar-muted': isLibraryEmpty }">
           <SearchAutocomplete
             v-model="libraryStore.query"
-            :placeholder="labels.library.search"
+            :placeholder="isLibraryEmpty ? '请先导入素材后再搜索' : labels.library.search"
             @search="onToolbarSearch"
             @select-tag="onSelectTag"
           />
@@ -242,8 +242,8 @@ async function onToolbarSearch() {
   // L-03: 搜索时自动关闭素材详情面板，避免遮挡结果
   detailVisible.value = false
   await libraryStore.search()
-  // 搜索有结果时自动隐藏面板以让结果立即可见
-  if (libraryStore.results.length > 0 && libraryStore.query) {
+  // 搜索时自动隐藏面板以让结果立即可见（不论当前在哪个面板组）
+  if (libraryStore.query) {
     panelGroup.value = '_search_results'
   }
   scrollToResults()
@@ -304,6 +304,11 @@ onMounted(async () => {
   gap: 12px;
   align-items: center;
   margin-bottom: 16px;
+}
+
+.library-toolbar.toolbar-muted {
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 .toolbar-controls {
