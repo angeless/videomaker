@@ -55,6 +55,11 @@ export const useCanvasStore = defineStore('canvas', () => {
 
   function snap(v) { return Math.round(v / GRID) * GRID }
 
+  function renameNode(id, label) {
+    const node = nodes.value.find(n => n.id === id)
+    if (node && label.trim()) { node.label = label.trim(); dirty.value = true }
+  }
+
   function moveNode(id, x, y) {
     const node = nodes.value.find(n => n.id === id)
     if (node) { node.x = snap(x); node.y = snap(y); dirty.value = true }
@@ -228,7 +233,7 @@ export const useCanvasStore = defineStore('canvas', () => {
     workflowId, workflowName, dirty, saving, running,
     nodeCount, edgeCount,
     GRID, snap,
-    addNode, removeNode, duplicateNode, disconnectNode, moveNode,
+    addNode, removeNode, duplicateNode, disconnectNode, renameNode, moveNode,
     addEdge, removeEdge,
     selectNode, selectEdge, clearSelection, deleteSelected,
     pan, zoomAt, resetView, clear,

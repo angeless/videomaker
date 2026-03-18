@@ -14,10 +14,21 @@
       @mouseup.stop="$emit('port-drop', node.id)"
     ></div>
 
-    <div class="node-body">
+    <div class="node-body" @dblclick.stop="startRename">
       <span class="node-icon">{{ icon }}</span>
       <div class="node-info">
-        <div class="node-label">{{ node.label }}</div>
+        <input
+          v-if="editing"
+          ref="renameInput"
+          v-model="editLabel"
+          class="node-label-input"
+          @keyup.enter="commitRename"
+          @keyup.escape="editing = false"
+          @blur="commitRename"
+          @click.stop
+          @mousedown.stop
+        />
+        <div v-else class="node-label">{{ node.label }}</div>
         <div class="node-cap">{{ node.capability_id }}</div>
       </div>
     </div>
@@ -41,7 +52,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import { useCanvasStore } from '../../stores/canvas.js'
 
 const props = defineProps({
@@ -70,6 +81,24 @@ const nodeStyle = computed(() => ({
 
 function onClick() {
   canvas.selectNode(props.node.id)
+}
+
+// ── Inline rename ──
+const editing = ref(false)
+const editLabel = ref('')
+const renameInput = ref(null)
+
+function startRename() {
+  editLabel.value = props.node.label
+  editing.value = true
+  nextTick(() => { renameInput.value?.select() })
+}
+
+function commitRename() {
+  if (editing.value && editLabel.value.trim()) {
+    canvas.renameNode(props.node.id, editLabel.value)
+  }
+  editing.value = false
 }
 
 // ── Context menu ──
@@ -174,6 +203,18 @@ function onMouseUp() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.node-label-input {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--bg, #111);
+  border: 1px solid var(--accent, #5a8dee);
+  border-radius: 3px;
+  padding: 1px 4px;
+  outline: none;
+  width: 100%;
 }
 
 .node-cap {
