@@ -11,6 +11,8 @@
       <span class="toolbar-stats">{{ canvas.nodeCount }} 个节点 · {{ canvas.edgeCount }} 条连接</span>
     </div>
     <div class="toolbar-right">
+      <button class="btn btn-ghost btn-sm" :disabled="!canvas.canUndo" @click="canvas.undo()" title="撤销 (Ctrl+Z)">↩</button>
+      <button class="btn btn-ghost btn-sm" :disabled="!canvas.canRedo" @click="canvas.redo()" title="重做 (Ctrl+Shift+Z)">↪</button>
       <button class="btn btn-ghost btn-sm" @click="canvas.resetView()">适应</button>
       <button class="btn btn-ghost btn-sm" @click="canvas.clear()">清空</button>
       <button

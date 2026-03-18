@@ -181,9 +181,31 @@ function onPortDrop(toNodeId) {
 
 // ── Keyboard ──
 function onKeyDown(e) {
+  const isTyping = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA'
+
+  // Ctrl+Z / Cmd+Z — Undo
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+    e.preventDefault()
+    canvas.undo()
+    return
+  }
+  // Ctrl+Shift+Z / Cmd+Shift+Z — Redo
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z' && e.shiftKey) {
+    e.preventDefault()
+    canvas.redo()
+    return
+  }
+  // Ctrl+S / Cmd+S — Save
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    e.preventDefault()
+    canvas.saveToBackend()
+    return
+  }
+
+  if (isTyping) return
+
+  // Delete / Backspace — Remove selected
   if (e.key === 'Delete' || e.key === 'Backspace') {
-    // Don't delete if user is typing in an input
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
     canvas.deleteSelected()
   }
 }

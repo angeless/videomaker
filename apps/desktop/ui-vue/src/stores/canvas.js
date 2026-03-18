@@ -21,6 +21,51 @@ export const useCanvasStore = defineStore('canvas', () => {
   const saving = ref(false)
   const running = ref(false)
 
+  // ── Undo/Redo ──
+  const history = ref([])
+  const historyIndex = ref(-1)
+  const MAX_HISTORY = 50
+
+  function _snapshot() {
+    const snap = JSON.stringify({ nodes: nodes.value, edges: edges.value })
+    // Trim future states if we're in the middle of history
+    if (historyIndex.value < history.value.length - 1) {
+      history.value = history.value.slice(0, historyIndex.value + 1)
+    }
+    history.value.push(snap)
+    if (history.value.length > MAX_HISTORY) history.value.shift()
+    historyIndex.value = history.value.length - 1
+  }
+
+  function _pushHistory() {
+    // Debounce: skip if identical to last snapshot
+    const snap = JSON.stringify({ nodes: nodes.value, edges: edges.value })
+    if (history.value.length > 0 && history.value[historyIndex.value] === snap) return
+    _snapshot()
+  }
+
+  function undo() {
+    if (historyIndex.value <= 0) return
+    historyIndex.value--
+    _restoreSnapshot(history.value[historyIndex.value])
+  }
+
+  function redo() {
+    if (historyIndex.value >= history.value.length - 1) return
+    historyIndex.value++
+    _restoreSnapshot(history.value[historyIndex.value])
+  }
+
+  function _restoreSnapshot(snap) {
+    const data = JSON.parse(snap)
+    nodes.value = data.nodes
+    edges.value = data.edges
+    dirty.value = true
+  }
+
+  const canUndo = computed(() => historyIndex.value > 0)
+  const canRedo = computed(() => historyIndex.value < history.value.length - 1)
+
   // ── Computed ──
   const nodeCount = computed(() => nodes.value.length)
   const edgeCount = computed(() => edges.value.length)
@@ -30,6 +75,7 @@ export const useCanvasStore = defineStore('canvas', () => {
     const id = `node_${Date.now()}_${_nextId++}`
     nodes.value.push({ id, capability_id: capabilityId, label, x: snap(x), y: snap(y), width: 180, height: 72 })
     dirty.value = true
+    _pushHistory()
     return id
   }
 
@@ -38,6 +84,7 @@ export const useCanvasStore = defineStore('canvas', () => {
     edges.value = edges.value.filter(e => e.from !== id && e.to !== id)
     if (selectedNodeId.value === id) selectedNodeId.value = ''
     dirty.value = true
+    _pushHistory()
   }
 
   function duplicateNode(id) {
@@ -57,12 +104,16 @@ export const useCanvasStore = defineStore('canvas', () => {
 
   function renameNode(id, label) {
     const node = nodes.value.find(n => n.id === id)
-    if (node && label.trim()) { node.label = label.trim(); dirty.value = true }
+    if (node && label.trim()) { node.label = label.trim(); dirty.value = true; _pushHistory() }
   }
 
   function moveNode(id, x, y) {
     const node = nodes.value.find(n => n.id === id)
     if (node) { node.x = snap(x); node.y = snap(y); dirty.value = true }
+  }
+
+  function commitMove() {
+    _pushHistory()
   }
 
   // ── Edge CRUD ──
@@ -74,12 +125,14 @@ export const useCanvasStore = defineStore('canvas', () => {
     const id = `edge_${Date.now()}_${_nextId++}`
     edges.value.push({ id, from: fromId, to: toId })
     dirty.value = true
+    _pushHistory()
   }
 
   function removeEdge(id) {
     edges.value = edges.value.filter(e => e.id !== id)
     if (selectedEdgeId.value === id) selectedEdgeId.value = ''
     dirty.value = true
+    _pushHistory()
   }
 
   // ── Selection ──
@@ -131,7 +184,10 @@ export const useCanvasStore = defineStore('canvas', () => {
     workflowId.value = ''
     workflowName.value = '新工作流'
     dirty.value = false
+    history.value = []
+    historyIndex.value = -1
     resetView()
+    _snapshot() // initial state
   }
 
   // ── Persistence ──
@@ -233,10 +289,11 @@ export const useCanvasStore = defineStore('canvas', () => {
     workflowId, workflowName, dirty, saving, running,
     nodeCount, edgeCount,
     GRID, snap,
-    addNode, removeNode, duplicateNode, disconnectNode, renameNode, moveNode,
+    addNode, removeNode, duplicateNode, disconnectNode, renameNode, moveNode, commitMove,
     addEdge, removeEdge,
     selectNode, selectEdge, clearSelection, deleteSelected,
     pan, zoomAt, resetView, clear,
+    undo, redo, canUndo, canRedo,
     toSteps, saveToBackend, loadFromBackend, runWorkflow,
   }
 })
