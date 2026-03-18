@@ -40,6 +40,17 @@ export const useCanvasStore = defineStore('canvas', () => {
     dirty.value = true
   }
 
+  function duplicateNode(id) {
+    const src = nodes.value.find(n => n.id === id)
+    if (!src) return ''
+    return addNode(src.capability_id, src.label, src.x + 40, src.y + 40)
+  }
+
+  function disconnectNode(id) {
+    edges.value = edges.value.filter(e => e.from !== id && e.to !== id)
+    dirty.value = true
+  }
+
   function moveNode(id, x, y) {
     const node = nodes.value.find(n => n.id === id)
     if (node) { node.x = x; node.y = y; dirty.value = true }
@@ -212,7 +223,7 @@ export const useCanvasStore = defineStore('canvas', () => {
     nodes, edges, viewport, selectedNodeId, selectedEdgeId,
     workflowId, workflowName, dirty, saving, running,
     nodeCount, edgeCount,
-    addNode, removeNode, moveNode,
+    addNode, removeNode, duplicateNode, disconnectNode, moveNode,
     addEdge, removeEdge,
     selectNode, selectEdge, clearSelection, deleteSelected,
     pan, zoomAt, resetView, clear,

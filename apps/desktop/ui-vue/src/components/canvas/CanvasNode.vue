@@ -5,6 +5,7 @@
     :style="nodeStyle"
     @mousedown.stop="onMouseDown"
     @click.stop="onClick"
+    @contextmenu.prevent.stop="onContextMenu"
   >
     <!-- Input port (top) -->
     <div
@@ -26,11 +27,21 @@
       class="port port-out"
       @mousedown.stop="$emit('port-drag-start', node.id)"
     ></div>
+
+    <!-- Context menu -->
+    <Teleport to="body">
+      <div v-if="showMenu" class="node-context-menu" :style="menuStyle" @click.stop>
+        <div class="ctx-item" @click="ctxDuplicate">复制节点</div>
+        <div class="ctx-item" @click="ctxDisconnect">断开连接</div>
+        <div class="ctx-item ctx-danger" @click="ctxDelete">删除节点</div>
+      </div>
+      <div v-if="showMenu" class="ctx-backdrop" @click="showMenu = false" @contextmenu.prevent="showMenu = false"></div>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { useCanvasStore } from '../../stores/canvas.js'
 
 const props = defineProps({
@@ -59,6 +70,31 @@ const nodeStyle = computed(() => ({
 
 function onClick() {
   canvas.selectNode(props.node.id)
+}
+
+// ── Context menu ──
+const showMenu = ref(false)
+const menuStyle = ref({})
+
+function onContextMenu(e) {
+  canvas.selectNode(props.node.id)
+  menuStyle.value = { left: `${e.clientX}px`, top: `${e.clientY}px` }
+  showMenu.value = true
+}
+
+function ctxDuplicate() {
+  canvas.duplicateNode(props.node.id)
+  showMenu.value = false
+}
+
+function ctxDisconnect() {
+  canvas.disconnectNode(props.node.id)
+  showMenu.value = false
+}
+
+function ctxDelete() {
+  canvas.removeNode(props.node.id)
+  showMenu.value = false
 }
 
 let dragStartX = 0
@@ -173,5 +209,39 @@ function onMouseUp() {
 
 .port-out {
   bottom: -6px;
+}
+
+/* Context menu */
+.node-context-menu {
+  position: fixed;
+  z-index: 9999;
+  background: var(--surface, #1a1a2e);
+  border: 1px solid var(--border, #333);
+  border-radius: 8px;
+  padding: 4px 0;
+  min-width: 140px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.ctx-item {
+  padding: 7px 14px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--text);
+  transition: background 0.1s;
+}
+
+.ctx-item:hover {
+  background: var(--surface2, rgba(255,255,255,0.06));
+}
+
+.ctx-danger {
+  color: var(--danger, #f87171);
+}
+
+.ctx-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
 }
 </style>
