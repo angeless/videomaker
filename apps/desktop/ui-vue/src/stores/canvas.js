@@ -28,7 +28,7 @@ export const useCanvasStore = defineStore('canvas', () => {
   // ── Node CRUD ──
   function addNode(capabilityId, label, x, y) {
     const id = `node_${Date.now()}_${_nextId++}`
-    nodes.value.push({ id, capability_id: capabilityId, label, x, y, width: 180, height: 72 })
+    nodes.value.push({ id, capability_id: capabilityId, label, x: snap(x), y: snap(y), width: 180, height: 72 })
     dirty.value = true
     return id
   }
@@ -51,9 +51,13 @@ export const useCanvasStore = defineStore('canvas', () => {
     dirty.value = true
   }
 
+  const GRID = 24
+
+  function snap(v) { return Math.round(v / GRID) * GRID }
+
   function moveNode(id, x, y) {
     const node = nodes.value.find(n => n.id === id)
-    if (node) { node.x = x; node.y = y; dirty.value = true }
+    if (node) { node.x = snap(x); node.y = snap(y); dirty.value = true }
   }
 
   // ── Edge CRUD ──
@@ -223,6 +227,7 @@ export const useCanvasStore = defineStore('canvas', () => {
     nodes, edges, viewport, selectedNodeId, selectedEdgeId,
     workflowId, workflowName, dirty, saving, running,
     nodeCount, edgeCount,
+    GRID, snap,
     addNode, removeNode, duplicateNode, disconnectNode, moveNode,
     addEdge, removeEdge,
     selectNode, selectEdge, clearSelection, deleteSelected,
