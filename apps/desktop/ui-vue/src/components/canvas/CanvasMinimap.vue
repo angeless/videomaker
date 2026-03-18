@@ -57,7 +57,9 @@ const bounds = computed(() => {
     maxY = Math.max(maxY, n.y + (n.height || 72))
   }
   const pad = 100
-  return { x: minX - pad, y: minY - pad, w: maxX - minX + pad * 2, h: maxY - minY + pad * 2 }
+  const w = Math.max(800, maxX - minX + pad * 2)
+  const h = Math.max(600, maxY - minY + pad * 2)
+  return { x: minX - pad, y: minY - pad, w, h }
 })
 
 const viewBox = computed(() => {

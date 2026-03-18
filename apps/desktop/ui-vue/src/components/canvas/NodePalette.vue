@@ -1,8 +1,12 @@
 <template>
   <aside class="node-palette">
     <div class="palette-title">能力节点</div>
-    <div class="palette-hint">拖拽到画布添加节点</div>
-    <div v-for="group in capStore.groups" :key="group.key" class="palette-group">
+    <input
+      v-model="filter"
+      class="palette-search"
+      placeholder="搜索能力…"
+    />
+    <div v-for="group in filteredGroups" :key="group.key" class="palette-group">
       <div class="palette-group-title">{{ group.title }}</div>
       <div
         v-for="item in group.items"
@@ -15,13 +19,28 @@
         <span class="palette-item-label">{{ item.label }}</span>
       </div>
     </div>
+    <div v-if="filteredGroups.length === 0" class="palette-empty">无匹配节点</div>
   </aside>
 </template>
 
 <script setup>
+import { ref, computed } from 'vue'
 import { useCapabilitiesStore } from '../../stores/capabilities.js'
 
 const capStore = useCapabilitiesStore()
+const filter = ref('')
+
+const filteredGroups = computed(() => {
+  const groups = capStore.groups || []
+  const q = filter.value.trim().toLowerCase()
+  if (!q) return groups
+  return groups
+    .map(g => ({
+      ...g,
+      items: (g.items || []).filter(i => (i.label || '').toLowerCase().includes(q) || (i.tab || '').includes(q)),
+    }))
+    .filter(g => g.items.length > 0)
+})
 
 const icons = {
   topic_library: '💡', topic_copy: '📝', article_expand: '📰',
@@ -60,10 +79,27 @@ function onDragStart(e, item) {
   color: var(--text);
 }
 
-.palette-hint {
-  font-size: 10px;
+.palette-search {
+  width: calc(100% - 24px);
+  margin: 0 12px 8px;
+  padding: 5px 8px;
+  font-size: 12px;
+  background: var(--bg, #111);
+  border: 1px solid var(--border, #333);
+  border-radius: 5px;
+  color: var(--text);
+  outline: none;
+}
+
+.palette-search:focus {
+  border-color: var(--accent, #5a8dee);
+}
+
+.palette-empty {
+  font-size: 11px;
   color: var(--muted, #888);
-  padding: 0 12px 10px;
+  padding: 12px;
+  text-align: center;
 }
 
 .palette-group {

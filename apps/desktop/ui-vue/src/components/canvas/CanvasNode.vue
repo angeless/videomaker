@@ -29,7 +29,7 @@
           @mousedown.stop
         />
         <div v-else class="node-label">{{ node.label }}</div>
-        <div class="node-cap">{{ node.capability_id }}</div>
+        <div class="node-cap">{{ hint }}</div>
       </div>
     </div>
 
@@ -70,7 +70,23 @@ const icons = {
   publish_prep: '📤', social_export: '🌐', content_publish: '🚀',
 }
 
+const hints = {
+  topic_library: '浏览和管理选题模板',
+  topic_copy: '为选题生成文案草稿',
+  article_expand: '文章结构化扩写',
+  text_rough: '按句子删减控制时长',
+  short_clip: '快速规划精华片段',
+  refinement: '与剪辑软件协作交接',
+  audio_voice: '旁白、BGM 和混音',
+  subtitle_calibration: '中英文字幕和时间轴',
+  image_semantic: '图像分析与语义检索',
+  publish_prep: '分平台标题和描述',
+  social_export: '社媒导出',
+  content_publish: '内容发布',
+}
+
 const icon = computed(() => icons[props.node.capability_id] || '🔧')
+const hint = computed(() => hints[props.node.capability_id] || props.node.capability_id)
 const isSelected = computed(() => canvas.selectedNodeId === props.node.id)
 
 const nodeStyle = computed(() => ({

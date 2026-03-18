@@ -14,7 +14,7 @@
       <button class="btn btn-ghost btn-sm" :disabled="!canvas.canUndo" @click="canvas.undo()" title="撤销 (Ctrl+Z)">↩</button>
       <button class="btn btn-ghost btn-sm" :disabled="!canvas.canRedo" @click="canvas.redo()" title="重做 (Ctrl+Shift+Z)">↪</button>
       <button class="btn btn-ghost btn-sm" @click="canvas.resetView()">适应</button>
-      <button class="btn btn-ghost btn-sm" @click="canvas.clear()">清空</button>
+      <button class="btn btn-ghost btn-sm" @click="confirmClear">清空</button>
       <button
         class="btn btn-primary btn-sm"
         :disabled="canvas.saving || canvas.nodeCount === 0"
@@ -37,6 +37,13 @@
 import { useCanvasStore } from '../../stores/canvas.js'
 
 const canvas = useCanvasStore()
+
+function confirmClear() {
+  if (canvas.nodeCount === 0) return
+  if (confirm('确定清空画布？所有节点和连接将被移除。')) {
+    canvas.clear()
+  }
+}
 </script>
 
 <style scoped>
