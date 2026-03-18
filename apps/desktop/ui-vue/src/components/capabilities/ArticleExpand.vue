@@ -9,7 +9,7 @@
       </div>
       <div class="form-row"><label>目标字数</label><input v-model.number="input.length_target" type="number" class="form-input" /></div>
       <div class="form-row"><label>标题数量</label><input v-model.number="input.title_count" type="number" class="form-input" /></div>
-      <div class="form-row"><label>使用 LLM</label><input type="checkbox" v-model="input.use_llm" /></div>
+      <div class="form-row"><label>启用 AI 辅助</label><input type="checkbox" v-model="input.use_llm" /></div>
       <button class="btn btn-primary btn-sm" @click="generate" :disabled="!canGenerate || loading">{{ loading ? '生成中…' : '生成扩写' }}</button>
       <div v-if="!input.source_text.trim() && appStore.projectDir" class="form-hint">请先粘贴源文本</div>
     </div>

@@ -74,11 +74,10 @@
         </div>
       </div>
 
-      <!-- 最近项目 -->
-      <div class="sidebar-section">
+      <!-- 最近项目（有项目或正在加载时才显示） -->
+      <div v-if="appStore.recentProjectsLoading || validRecentProjects.length > 0" class="sidebar-section">
         <div class="sidebar-label">最近项目</div>
         <div v-if="appStore.recentProjectsLoading" class="sidebar-hint">加载中...</div>
-        <div v-else-if="appStore.recentProjects.length === 0" class="sidebar-hint">暂无项目</div>
         <div
           v-for="proj in validRecentProjects"
           :key="proj.path"

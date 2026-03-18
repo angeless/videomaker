@@ -67,6 +67,7 @@
                 {{ settings.aiStatus.openai_api_key_set ? labels.settings.ai.keyMasked : labels.settings.ai.keyNotSet }}
               </span>
             </div>
+            <div class="form-hint">用于 AI 选题、脚本生成和语义搜索</div>
           </div>
 
           <div class="form-group">
@@ -82,6 +83,7 @@
                 {{ settings.aiStatus.anthropic_api_key_set ? labels.settings.ai.keyMasked : labels.settings.ai.keyNotSet }}
               </span>
             </div>
+            <div class="form-hint">可选，作为备用 AI 服务商</div>
           </div>
 
           <div v-if="settings.aiMessage" class="badge badge-info" style="margin-bottom: 12px">

@@ -12,10 +12,10 @@
         <select v-model="input.translation" class="form-input"><option value="off">关闭</option><option value="on">开启</option></select>
       </div>
       <div class="form-row"><label>源音频</label><input v-model="input.source_audio" class="form-input" placeholder="留空使用项目默认" /></div>
-      <div class="form-row"><label>使用 LLM</label><input type="checkbox" v-model="input.use_llm" /></div>
+      <div class="form-row"><label>启用 AI 辅助</label><input type="checkbox" v-model="input.use_llm" /></div>
       <div v-if="input.use_llm">
-        <div class="form-row"><label>LLM 提供商</label><input v-model="input.llm_provider" class="form-input" /></div>
-        <div class="form-row"><label>LLM 模型</label><input v-model="input.llm_model" class="form-input" /></div>
+        <div class="form-row"><label>AI 服务商</label><input v-model="input.llm_provider" class="form-input" /></div>
+        <div class="form-row"><label>AI 模型</label><input v-model="input.llm_model" class="form-input" /></div>
       </div>
       <div v-if="input.input_mode === 'inline'" class="form-row">
         <label>字幕 JSON</label><textarea v-model="input.subtitles_json" class="form-input" rows="4" placeholder='[{"start":0,"end":1,"text":"..."}]'></textarea>

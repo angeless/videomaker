@@ -8,7 +8,7 @@
       <div class="form-row"><label>内容类型</label>
         <select v-model="input.platform_content_type" class="form-input"><option value="video_post">视频</option><option value="article">文章</option></select>
       </div>
-      <div class="form-row"><label>使用 LLM</label><input type="checkbox" v-model="input.use_llm" /></div>
+      <div class="form-row"><label>启用 AI 辅助</label><input type="checkbox" v-model="input.use_llm" /></div>
       <button class="btn btn-primary btn-sm" @click="generate" :disabled="!canGenerate || loading">{{ loading ? '生成中…' : '生成发布文案' }}</button>
       <div v-if="!input.script_text.trim() && !input.voiceover_text.trim() && appStore.projectDir" class="form-hint">请先填写脚本文案或旁白文案</div>
     </div>
