@@ -37,6 +37,9 @@
       <div class="board-empty-text">从左侧拖拽能力节点到此处</div>
     </div>
 
+    <!-- Minimap -->
+    <CanvasMinimap :board-width="boardWidth" :board-height="boardHeight" />
+
     <!-- Zoom indicator -->
     <div class="zoom-badge">{{ Math.round(canvas.viewport.zoom * 100) }}%</div>
   </div>
@@ -47,9 +50,12 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useCanvasStore } from '../../stores/canvas.js'
 import CanvasNode from './CanvasNode.vue'
 import CanvasEdge from './CanvasEdge.vue'
+import CanvasMinimap from './CanvasMinimap.vue'
 
 const canvas = useCanvasStore()
 const boardRef = ref(null)
+const boardWidth = ref(1000)
+const boardHeight = ref(700)
 
 // ── Pan/Zoom ──
 const transformStyle = computed(() => {
@@ -184,6 +190,11 @@ function onKeyDown(e) {
 
 onMounted(() => {
   document.addEventListener('keydown', onKeyDown)
+  // Track board dimensions for minimap
+  if (boardRef.value) {
+    boardWidth.value = boardRef.value.clientWidth
+    boardHeight.value = boardRef.value.clientHeight
+  }
 })
 
 onBeforeUnmount(() => {
