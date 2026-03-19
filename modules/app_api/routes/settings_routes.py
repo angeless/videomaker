@@ -310,6 +310,121 @@ def create_settings_blueprint(
             pass
         return jsonify({"ok": True})
 
+    # ── Webhook Connector Configuration ────────────────────────
+
+    @bp.route("/api/settings/connectors", methods=["GET"])
+    def api_get_connectors():
+        """List all configured webhook connectors."""
+        settings = load_publish_settings()
+        connectors = settings.get("connectors", {})
+        if not isinstance(connectors, dict):
+            connectors = {}
+        return jsonify({"ok": True, "connectors": mask_publish_connectors(connectors)})
+
+    @bp.route("/api/settings/connectors/<platform_id>", methods=["PUT"])
+    def api_put_connector(platform_id):
+        """Configure or update a webhook connector for a platform."""
+        from modules.app_api.services.audit_log import audit as _audit
+        pid = parse_str_param(platform_id).strip().lower()
+        if not pid:
+            return jsonify({"error": "platform_id 不能为空"}), 400
+
+        data = request.json or {}
+        url = parse_str_param(data.get("url", data.get("endpoint", ""))).strip()
+        if not url:
+            return jsonify({"error": "Webhook URL 不能为空"}), 400
+
+        import re
+        if not re.match(r'^https?://.+', url, re.IGNORECASE):
+            return jsonify({"error": "Webhook URL 格式不正确，需要 http:// 或 https:// 开头"}), 400
+
+        headers = data.get("headers", {})
+        if not isinstance(headers, dict):
+            headers = {}
+
+        timeout_s = 30
+        if "timeout_s" in data:
+            try:
+                timeout_s = max(5, min(120, int(data["timeout_s"])))
+            except (ValueError, TypeError):
+                timeout_s = 30
+
+        connector_entry = {
+            "kind": "webhook",
+            "endpoint": url,
+            "headers": headers,
+            "timeout_s": timeout_s,
+        }
+
+        settings = load_publish_settings()
+        connectors = settings.get("connectors", {})
+        if not isinstance(connectors, dict):
+            connectors = {}
+        connectors[pid] = connector_entry
+        save_publish_settings({"connectors": connectors})
+
+        _audit("connector_config", "webhook", pid, actor=f"local:{request.remote_addr}",
+               detail={"action": "upsert", "url_prefix": url[:30]})
+        return jsonify({"ok": True})
+
+    @bp.route("/api/settings/connectors/<platform_id>", methods=["DELETE"])
+    def api_delete_connector(platform_id):
+        """Delete a webhook connector for a platform."""
+        from modules.app_api.services.audit_log import audit as _audit
+        pid = parse_str_param(platform_id).strip().lower()
+        if not pid:
+            return jsonify({"error": "platform_id 不能为空"}), 400
+
+        settings = load_publish_settings()
+        connectors = settings.get("connectors", {})
+        if not isinstance(connectors, dict):
+            connectors = {}
+        removed = connectors.pop(pid, None)
+        save_publish_settings({"connectors": connectors})
+
+        _audit("connector_config", "webhook", pid, actor=f"local:{request.remote_addr}",
+               detail={"action": "delete", "had_config": removed is not None})
+        return jsonify({"ok": True})
+
+    @bp.route("/api/settings/connectors/<platform_id>/test", methods=["POST"])
+    def api_test_connector(platform_id):
+        """Test a webhook connector by sending a test payload."""
+        pid = parse_str_param(platform_id).strip().lower()
+        if not pid:
+            return jsonify({"error": "platform_id 不能为空"}), 400
+
+        settings = load_publish_settings()
+        connectors = settings.get("connectors", {})
+        if not isinstance(connectors, dict):
+            connectors = {}
+        connector = connectors.get(pid)
+        if not isinstance(connector, dict) or not connector:
+            return jsonify({"error": "该平台尚未配置连接器"}), 404
+
+        url = str(connector.get("endpoint", connector.get("url", "")) or "").strip()
+        if not url:
+            return jsonify({"error": "连接器缺少 URL"}), 400
+
+        headers = connector.get("headers", {})
+        if not isinstance(headers, dict):
+            headers = {}
+        timeout_s = int(connector.get("timeout_s", 30) or 30)
+
+        import urllib.request
+        test_payload = json.dumps({"test": True, "platform_id": pid}).encode("utf-8")
+        req_headers = {"Content-Type": "application/json"}
+        for hk, hv in headers.items():
+            req_headers[str(hk)] = str(hv)
+
+        try:
+            req = urllib.request.Request(url, data=test_payload, headers=req_headers, method="POST")
+            t0 = time.time()
+            with urllib.request.urlopen(req, timeout=min(timeout_s, 30)) as resp:
+                latency_ms = int((time.time() - t0) * 1000)
+                return jsonify({"ok": True, "status_code": resp.status, "latency_ms": latency_ms})
+        except Exception as exc:
+            return jsonify({"error": str(exc)[:200]}), 502
+
     return bp
 
 
