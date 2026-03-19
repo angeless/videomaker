@@ -29,6 +29,11 @@ try:
 except ImportError:
     _get_relink_adapter = None
 
+try:
+    from modules.step1_material_analysis.usability_scorer import score_asset as _score_asset
+except ImportError:
+    _score_asset = None
+
 _gml_logger = logging.getLogger(__name__)
 
 SCRIPT_DIR = Path(__file__).parent.resolve()
@@ -1305,6 +1310,38 @@ class GlobalMediaLibrary:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_assets_phash ON assets(phash)"
         )
+        # v0.8 usability scoring columns
+        usability_columns = {
+            "usability_score": "REAL DEFAULT NULL",
+            "usability_tier": "TEXT DEFAULT NULL",
+            "material_type": "TEXT DEFAULT NULL",
+            "trash_level": "TEXT DEFAULT 'none'",
+        }
+        for col, col_type in usability_columns.items():
+            if col not in existing_columns:
+                conn.execute(f"ALTER TABLE assets ADD COLUMN {col} {col_type}")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_assets_usability ON assets(usability_score)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_assets_trash ON assets(trash_level)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_assets_material_type ON assets(material_type)")
+
+    def _get_library_stats(self, conn: sqlite3.Connection) -> Dict[str, Any]:
+        """收集素材库统计信息，供独特性评分使用。"""
+        try:
+            total = conn.execute("SELECT COUNT(*) FROM assets").fetchone()[0]
+            rows = conn.execute("""
+                SELECT json_extract(analysis_json, '$.semantic.scene_description') as scene, COUNT(*) as cnt
+                FROM assets
+                WHERE analysis_json IS NOT NULL
+                GROUP BY scene
+            """).fetchall()
+            scene_counts = {r[0]: r[1] for r in rows if r[0]}
+            return {
+                "total_assets": total,
+                "scene_type_counts": scene_counts,
+                "similar_assets_count": 0,
+            }
+        except Exception:
+            return None
 
     def _backfill_semantic_columns(self, conn: sqlite3.Connection):
         rows = conn.execute(
@@ -5386,6 +5423,42 @@ class GlobalMediaLibrary:
         gps_latitude = gps["latitude"] if isinstance(gps, dict) and gps.get("latitude") is not None else None
         gps_longitude = gps["longitude"] if isinstance(gps, dict) and gps.get("longitude") is not None else None
 
+        # ---- 综合可用性评分 ----
+        _usability_result = None
+        if _score_asset is not None:
+            try:
+                _vs = toolkit._get_visual_stats(path) if hasattr(toolkit, '_get_visual_stats') else {}
+                _ai = analysis.get("audio_quality") or None
+                if isinstance(_ai, dict) and not _ai:
+                    _ai = None
+                _usability_result = _score_asset(
+                    asset_row={
+                        "uid": sha256 if 'sha256' in dir() else "",
+                        "duration": duration,
+                        "width": width,
+                        "height": height,
+                        "fps": self._parse_fps(fps_raw),
+                        "codec": codec,
+                        "quality_score": quality_score,
+                        "phash": None,
+                    },
+                    visual_stats=_vs,
+                    audio_info=_ai,
+                    analysis_json={
+                        "asr_text": analysis.get("transcription", {}).get("text", ""),
+                        "ocr_text": "",
+                        "objects": detected_objects,
+                        "semantic": semantic_bundle.get("semantic", {}),
+                        "gps": {"lat": gps_latitude, "lon": gps_longitude} if gps_latitude else None,
+                        "tags": [],
+                    },
+                    tag_results=[],
+                    library_stats=None,
+                )
+            except Exception as e:
+                _gml_logger.warning("usability scoring failed for %s: %s", path.name, e)
+                _usability_result = None
+
         _av_elapsed = (time.perf_counter() - _av_t0) * 1000
         _gml_logger.info("[perf] analyze_video: %.1fms path=%s", _av_elapsed, path.name)
         try:
@@ -5393,7 +5466,8 @@ class GlobalMediaLibrary:
             _perf_rec("analyze_video", _av_elapsed, {"path": str(path.name)})
         except Exception:
             pass
-        return {
+
+        _result = {
             "analysis": analysis,
             "duration": duration,
             "size_bytes": size_bytes,
@@ -5413,6 +5487,9 @@ class GlobalMediaLibrary:
             "gps_latitude": gps_latitude,
             "gps_longitude": gps_longitude,
         }
+        if _usability_result:
+            _result["quality_assessment"] = _usability_result
+        return _result
 
     def _analyze_image(self, path: Path) -> Dict:
         if cv2 is None or np is None:
@@ -5729,6 +5806,13 @@ class GlobalMediaLibrary:
                 semantic_version = SEMANTIC_SCHEMA_VERSION
 
             if refreshed_bundle is not None:
+                # Extract usability results from refreshed analysis
+                _ref_usability = refreshed_bundle.get("quality_assessment")
+                _ref_u_score = _ref_usability["usability_score"] if _ref_usability else None
+                _ref_u_tier = _ref_usability["usability_tier"] if _ref_usability else None
+                _ref_u_mtype = _ref_usability["material_type"] if _ref_usability else None
+                _ref_u_trash = _ref_usability["trash_evaluation"]["trash_level"] if _ref_usability else "none"
+
                 conn.execute(
                     """
                     UPDATE assets
@@ -5737,6 +5821,7 @@ class GlobalMediaLibrary:
                         quality_score=?, scene_description=?, mood=?, objects_json=?,
                         analysis_json=?, semantic_json=?, semantic_text=?, keywords_json=?, semantic_version=?,
                         gps_latitude=?, gps_longitude=?,
+                        usability_score=?, usability_tier=?, material_type=?, trash_level=?,
                         updated_at=?
                     WHERE uid=?
                     """,
@@ -5762,6 +5847,10 @@ class GlobalMediaLibrary:
                         semantic_version,
                         refreshed_bundle.get("gps_latitude"),
                         refreshed_bundle.get("gps_longitude"),
+                        _ref_u_score,
+                        _ref_u_tier,
+                        _ref_u_mtype,
+                        _ref_u_trash,
                         now,
                         uid,
                     ),
@@ -5826,6 +5915,13 @@ class GlobalMediaLibrary:
 
         created_at = now
 
+        # Extract usability scoring results from analysis_bundle
+        _usability = analysis_bundle.get("quality_assessment")
+        _u_score = _usability["usability_score"] if _usability else None
+        _u_tier = _usability["usability_tier"] if _usability else None
+        _u_mtype = _usability["material_type"] if _usability else None
+        _u_trash = _usability["trash_evaluation"]["trash_level"] if _usability else "none"
+
         conn.execute(
             """
             INSERT INTO assets (
@@ -5835,8 +5931,9 @@ class GlobalMediaLibrary:
                 analysis_json, semantic_json, semantic_text, keywords_json, semantic_version,
                 gps_latitude, gps_longitude,
                 content_fingerprint, thumbnail_hash, fingerprint_version,
+                usability_score, usability_tier, material_type, trash_level,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(uid) DO UPDATE SET
                 sha256=excluded.sha256,
                 phash=COALESCE(excluded.phash, assets.phash),
@@ -5864,6 +5961,10 @@ class GlobalMediaLibrary:
                 content_fingerprint=COALESCE(excluded.content_fingerprint, assets.content_fingerprint),
                 thumbnail_hash=COALESCE(excluded.thumbnail_hash, assets.thumbnail_hash),
                 fingerprint_version=excluded.fingerprint_version,
+                usability_score=excluded.usability_score,
+                usability_tier=excluded.usability_tier,
+                material_type=excluded.material_type,
+                trash_level=excluded.trash_level,
                 updated_at=excluded.updated_at
             """,
             (
@@ -5894,6 +5995,10 @@ class GlobalMediaLibrary:
                 content_fp,
                 thumb_hash,
                 self.FINGERPRINT_VERSION,
+                _u_score,
+                _u_tier,
+                _u_mtype,
+                _u_trash,
                 created_at,
                 now,
             ),
