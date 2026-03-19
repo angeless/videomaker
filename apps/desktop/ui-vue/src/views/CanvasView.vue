@@ -4,6 +4,7 @@
     <div class="canvas-main">
       <NodePalette />
       <CanvasBoard />
+      <NodePropsPanel />
     </div>
   </div>
 </template>
@@ -15,6 +16,7 @@ import { useCanvasStore } from '../stores/canvas.js'
 import CanvasToolbar from '../components/canvas/CanvasToolbar.vue'
 import NodePalette from '../components/canvas/NodePalette.vue'
 import CanvasBoard from '../components/canvas/CanvasBoard.vue'
+import NodePropsPanel from '../components/canvas/NodePropsPanel.vue'
 
 const route = useRoute()
 const canvas = useCanvasStore()

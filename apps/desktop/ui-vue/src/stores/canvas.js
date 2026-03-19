@@ -107,6 +107,16 @@ export const useCanvasStore = defineStore('canvas', () => {
     if (node && label.trim()) { node.label = label.trim(); dirty.value = true; _pushHistory() }
   }
 
+  function updateNodeProps(id, props) {
+    const node = nodes.value.find(n => n.id === id)
+    if (!node) return
+    for (const [k, v] of Object.entries(props)) {
+      node[k] = v
+    }
+    dirty.value = true
+    _pushHistory()
+  }
+
   function moveNode(id, x, y) {
     const node = nodes.value.find(n => n.id === id)
     if (node) { node.x = snap(x); node.y = snap(y); dirty.value = true }
@@ -194,16 +204,23 @@ export const useCanvasStore = defineStore('canvas', () => {
   function toSteps() {
     return nodes.value.map((node, i) => {
       const outEdge = edges.value.find(e => e.from === node.id)
-      return {
+      const step = {
         step_id: node.id,
         index: i + 1,
         capability_id: node.capability_id,
         name: node.label,
-        node_type: 'action',
+        node_type: node.node_type || 'action',
         action: 'auto',
         input: { _canvas: { x: node.x, y: node.y } },
-        next_step_id: outEdge?.to || '',
+        next_step_id: node.next_step_id || outEdge?.to || '',
       }
+      if (node.condition) step.condition = node.condition
+      if (node.next_on_success) step.next_on_success = node.next_on_success
+      if (node.next_on_error) step.next_on_error = node.next_on_error
+      if (node.next_on_skip) step.next_on_skip = node.next_on_skip
+      if (node.continue_on_error) step.continue_on_error = true
+      if (node.enabled === false) step.enabled = false
+      return step
     })
   }
 
@@ -289,7 +306,7 @@ export const useCanvasStore = defineStore('canvas', () => {
     workflowId, workflowName, dirty, saving, running,
     nodeCount, edgeCount,
     GRID, snap,
-    addNode, removeNode, duplicateNode, disconnectNode, renameNode, moveNode, commitMove,
+    addNode, removeNode, duplicateNode, disconnectNode, renameNode, updateNodeProps, moveNode, commitMove,
     addEdge, removeEdge,
     selectNode, selectEdge, clearSelection, deleteSelected,
     pan, zoomAt, resetView, clear,

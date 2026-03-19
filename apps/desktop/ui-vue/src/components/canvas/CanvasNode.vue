@@ -1,7 +1,7 @@
 <template>
   <div
     class="canvas-node"
-    :class="{ selected: isSelected }"
+    :class="{ selected: isSelected, 'node-condition': node.node_type === 'condition', 'node-disabled': node.enabled === false }"
     :style="nodeStyle"
     @mousedown.stop="onMouseDown"
     @click.stop="onClick"
@@ -85,7 +85,7 @@ const hints = {
   content_publish: '内容发布',
 }
 
-const icon = computed(() => icons[props.node.capability_id] || '🔧')
+const icon = computed(() => props.node.node_type === 'condition' ? '❓' : (icons[props.node.capability_id] || '🔧'))
 const hint = computed(() => hints[props.node.capability_id] || props.node.capability_id)
 const isSelected = computed(() => canvas.selectedNodeId === props.node.id)
 
@@ -195,6 +195,15 @@ function onMouseUp() {
 
 .canvas-node:active {
   cursor: grabbing;
+}
+
+.canvas-node.node-condition {
+  border-style: dashed;
+  border-color: var(--warning, #f0ad4e);
+}
+
+.canvas-node.node-disabled {
+  opacity: 0.4;
 }
 
 .node-body {
