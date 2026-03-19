@@ -54,6 +54,30 @@
       </div>
       <details style="margin-top:8px"><summary class="detail-summary">查看完整 JSON</summary><pre class="result-pre">{{ JSON.stringify(publishRun, null, 2) }}</pre></details>
     </div>
+
+    <!-- 发布历史 -->
+    <div class="cap-section">
+      <div class="cap-subtitle" style="display:flex;align-items:center;gap:8px">
+        发布历史
+        <button class="btn btn-xs" @click="loadHistory" :disabled="loadingHistory">{{ loadingHistory ? '加载中…' : '刷新' }}</button>
+      </div>
+      <div v-if="!history.length && !loadingHistory" class="text-muted" style="font-size:12px">暂无发布记录。执行发布后记录将出现在此处。</div>
+      <div v-for="run in history" :key="run.run_id" class="history-card">
+        <div class="history-header">
+          <span class="history-id">{{ run.run_id?.slice(0, 8) || '—' }}</span>
+          <span class="step-status" :class="'st-' + (run.result?.status || run.status || 'unknown')">{{ run.result?.status || run.status || '—' }}</span>
+          <span class="history-time text-muted">{{ run.requested_at || run.created_at || '' }}</span>
+        </div>
+        <div class="history-meta">
+          <span v-if="run.result?.summary">
+            成功 {{ run.result.summary.posted || 0 }} / 失败 {{ run.result.summary.failed || 0 }} / 共 {{ run.result.summary.total || 0 }}
+          </span>
+          <span v-if="run.platforms || run.platform_ids" class="text-muted">
+            {{ (run.platforms || run.platform_ids || []).join(', ') }}
+          </span>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -79,6 +103,8 @@ const loadingBootstrap = ref(false)
 const loadingPlan = ref(false)
 const loadingPublish = ref(false)
 const loadingRerun = ref(false)
+const history = ref([])
+const loadingHistory = ref(false)
 
 function parseList(text) {
   return (text || '').replace(/\n/g, ',').replace(/，/g, ',').split(',').map(x => x.trim()).filter(Boolean)
@@ -156,9 +182,20 @@ async function rerunFailed() {
   }
 }
 
+async function loadHistory() {
+  loadingHistory.value = true
+  try {
+    const data = await apiStore.api('GET', '/api/capabilities/content_publish/history?limit=20')
+    if (!data.error) history.value = data.runs || []
+  } finally {
+    loadingHistory.value = false
+  }
+}
+
 onMounted(async () => {
   const data = await apiStore.api('GET', '/api/capabilities/content_publish/platforms')
   if (!data.error && data.platforms) { /* platforms loaded */ }
+  loadHistory()
 })
 </script>
 
@@ -186,4 +223,10 @@ h3 { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
 .step-hint { color: var(--muted); font-size: 11px; font-style: italic; }
 .detail-summary { font-size: 11px; color: var(--muted); cursor: pointer; }
 .result-pre { background: var(--surface2); padding: 12px; border-radius: 6px; font-size: 12px; overflow-x: auto; white-space: pre-wrap; max-height: 400px; overflow-y: auto; }
+.btn-xs { font-size: 11px; padding: 2px 8px; }
+.history-card { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 6px; }
+.history-header { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.history-id { font-family: monospace; font-size: 11px; color: var(--muted); }
+.history-time { font-size: 11px; margin-left: auto; }
+.history-meta { font-size: 11px; margin-top: 4px; display: flex; gap: 12px; }
 </style>
