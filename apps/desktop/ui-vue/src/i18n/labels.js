@@ -331,6 +331,9 @@ export const labels = {
     create: '创建项目',
     creating: '创建中…',
     opening: '打开中…',
+    noProject: '未打开项目',
+    rename: '重命名项目',
+    renameHint: '双击项目名称可编辑',
   },
 
   // ── 创作侧栏 ──

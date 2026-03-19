@@ -1,7 +1,7 @@
 <template>
   <div class="titlebar">
     <span class="title">{{ labels.appTitle }}</span>
-    <span class="project-path" :title="appStore.projectDir">{{ projectDisplayName }}</span>
+    <ProjectTitle />
     <AppNav />
   </div>
 
@@ -133,15 +133,14 @@
 import { computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAppStore } from '../stores/app.js'
-import { useFormatters } from '../composables/useFormatters.js'
 import labels from '../i18n/labels.js'
 import AppNav from '../components/layout/AppNav.vue'
 import ProjectDialog from '../components/common/ProjectDialog.vue'
+import ProjectTitle from '../components/common/ProjectTitle.vue'
 
 const router = useRouter()
 const route = useRoute()
 const appStore = useAppStore()
-const { humanizeProjectDir } = useFormatters()
 
 const childRouteNames = [
   'workflow', 'workflow-step', 'tools', 'tools-tab',
@@ -150,8 +149,6 @@ const childRouteNames = [
 ]
 
 const hasChildRoute = computed(() => childRouteNames.includes(route.name))
-
-const projectDisplayName = computed(() => humanizeProjectDir(appStore.projectDir))
 
 // 画布等全出血视图需要去除 .content 的 padding
 const isFullBleed = computed(() => route.name === 'canvas')

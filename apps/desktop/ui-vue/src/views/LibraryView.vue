@@ -1,7 +1,7 @@
 <template>
   <div class="titlebar">
     <span class="title">{{ labels.appTitle }}</span>
-    <span class="project-path" :title="appStore.projectDir">{{ projectDisplayName }}</span>
+    <ProjectTitle />
     <AppNav />
   </div>
 
@@ -182,9 +182,9 @@
 import { ref, computed, nextTick, onMounted } from 'vue'
 import { useAppStore } from '../stores/app.js'
 import { useLibraryStore } from '../stores/library.js'
-import { useFormatters } from '../composables/useFormatters.js'
 import labels from '../i18n/labels.js'
 import AppNav from '../components/layout/AppNav.vue'
+import ProjectTitle from '../components/common/ProjectTitle.vue'
 import IngestPanel from '../components/library/IngestPanel.vue'
 import LibraryAssetCard from '../components/library/LibraryAssetCard.vue'
 import LibraryAssetRow from '../components/library/LibraryAssetRow.vue'
@@ -202,9 +202,6 @@ import ProjectRelinkPanel from '../components/library/ProjectRelinkPanel.vue'
 
 const appStore = useAppStore()
 const libraryStore = useLibraryStore()
-const { humanizeProjectDir } = useFormatters()
-
-const projectDisplayName = computed(() => humanizeProjectDir(appStore.projectDir))
 
 // Panel group switcher — local ref, resets to 'browse' on each visit
 const panelGroup = ref('browse')

@@ -403,4 +403,70 @@ def create_legacy_project_blueprint(
         except Exception:
             return jsonify({})
 
+    # ── 项目元数据 (T-0604) ──────────────────────────────────────────
+
+    _ILLEGAL_CHARS = set('/:*?"<>|\\')
+
+    def _read_project_meta(proj: Path) -> dict:
+        meta_path = proj / "data" / "project_meta.json"
+        if meta_path.exists():
+            try:
+                return json.loads(meta_path.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        return {}
+
+    def _fallback_display_name(proj: Path) -> str:
+        """从目录名提取可读名称：proj_selected_20260312_193013 → 项目 2026-03-12"""
+        import re
+        name = proj.name
+        m = re.match(r"^proj_selected_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})", name)
+        if m:
+            return f"项目 {m.group(1)}-{m.group(2)}-{m.group(3)}"
+        return name
+
+    @bp.route("/api/project/meta")
+    def api_project_meta():
+        raw_dir = request.args.get("project_dir", "").strip()
+        proj = Path(raw_dir).expanduser().resolve() if raw_dir else project_dir_getter()
+        if proj is None:
+            return jsonify({"error": "项目未加载"}), 400
+        meta = _read_project_meta(proj)
+        if not meta.get("display_name"):
+            meta["display_name"] = _fallback_display_name(proj)
+        return jsonify({"ok": True, "meta": meta})
+
+    @bp.route("/api/project/rename", methods=["POST"])
+    def api_project_rename():
+        data = request.json or {}
+        raw_dir = (data.get("project_dir") or "").strip()
+        proj = Path(raw_dir).expanduser().resolve() if raw_dir else project_dir_getter()
+        if proj is None:
+            return jsonify({"error": "项目未加载"}), 400
+
+        display_name = parse_str_param(data.get("display_name", ""))
+        if not display_name:
+            return jsonify({"error": "项目名不能为空"}), 400
+        if len(display_name) > 100:
+            return jsonify({"error": "项目名不能超过 100 个字符"}), 400
+        if any(ch in _ILLEGAL_CHARS for ch in display_name):
+            return jsonify({"error": '项目名不能包含特殊字符 / \\ : * ? " < > |'}), 400
+
+        meta = _read_project_meta(proj)
+        meta["display_name"] = display_name
+        if not meta.get("created_at"):
+            meta["created_at"] = datetime.now().isoformat()
+        meta["updated_at"] = datetime.now().isoformat()
+
+        meta_path = proj / "data" / "project_meta.json"
+        meta_path.parent.mkdir(parents=True, exist_ok=True)
+        write_json_result(meta_path, meta)
+
+        from modules.app_api.services.audit_log import audit as _audit
+        _audit("project_rename", "project", str(proj),
+               actor=f"local:{request.remote_addr}",
+               detail={"display_name": display_name})
+
+        return jsonify({"ok": True, "meta": meta})
+
     return bp

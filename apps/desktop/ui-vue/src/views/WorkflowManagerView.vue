@@ -1,7 +1,7 @@
 <template>
   <div class="titlebar">
     <span class="title">{{ labels.appTitle }}</span>
-    <span class="project-path">{{ projectDisplayName }}</span>
+    <ProjectTitle />
     <AppNav />
   </div>
 
@@ -135,18 +135,15 @@ import { ref, computed, onMounted, nextTick } from 'vue'
 import { useApiStore } from '../stores/api.js'
 import { useAppStore } from '../stores/app.js'
 import { useToastStore } from '../stores/toast.js'
-import { useFormatters } from '../composables/useFormatters.js'
 import labels from '../i18n/labels.js'
 import { translateTag } from '../composables/useSemanticTranslation.js'
 import AppNav from '../components/layout/AppNav.vue'
+import ProjectTitle from '../components/common/ProjectTitle.vue'
 
 const api = useApiStore()
 const appStore = useAppStore()
 const toast = useToastStore()
-const { humanizeProjectDir } = useFormatters()
 const myWorkflowsSection = ref(null)
-
-const projectDisplayName = computed(() => humanizeProjectDir(appStore.projectDir))
 
 // ── 模板 ──
 const templates = ref([])

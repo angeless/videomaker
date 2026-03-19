@@ -1,7 +1,7 @@
 <template>
   <div class="titlebar">
     <span class="title">{{ labels.appTitle }}</span>
-    <span class="project-path" :title="appStore.projectDir">{{ projectDisplayName }}</span>
+    <ProjectTitle />
     <AppNav />
   </div>
 
@@ -194,17 +194,14 @@ import { useAppStore } from '../stores/app.js'
 import { useApiStore } from '../stores/api.js'
 import { useSettingsStore } from '../stores/settings.js'
 import { useValidation } from '../composables/useValidation.js'
-import { useFormatters } from '../composables/useFormatters.js'
 import labels from '../i18n/labels.js'
 import AppNav from '../components/layout/AppNav.vue'
+import ProjectTitle from '../components/common/ProjectTitle.vue'
 import FormField from '../components/common/FormField.vue'
 
 const appStore = useAppStore()
 const apiStore = useApiStore()
 const settings = useSettingsStore()
-const { humanizeProjectDir } = useFormatters()
-
-const projectDisplayName = computed(() => humanizeProjectDir(appStore.projectDir))
 
 const v = useValidation({
   ai_base_url: [{ type: 'url', message: '请输入合法的 URL 地址' }],
