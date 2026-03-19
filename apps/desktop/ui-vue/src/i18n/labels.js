@@ -126,6 +126,59 @@ export const labels = {
     },
   },
 
+  // ── 社媒导出 ──
+  socialExport: {
+    title: '社媒导出',
+    form: {
+      inputVideo: '输入视频',
+      inputVideoPlaceholder: '留空默认 output/final.mp4',
+      quality: '品质',
+      qualityOptions: { draft: '草稿', medium: '中等', high: '高品质', premium: '最佳' },
+      outputDir: '输出目录',
+      outputDirPlaceholder: '留空使用默认目录',
+      strictDuration: '严格限制时长',
+      strictDurationHint: '超过平台最大时长时自动裁剪',
+    },
+    actions: {
+      plan: '生成导出计划',
+      planning: '生成中…',
+      validate: '校验规格',
+      validating: '校验中…',
+      export: '执行导出',
+      exporting: '导出中',
+    },
+    profiles: {
+      title: '选择目标平台',
+      portrait: '竖屏',
+      landscape: '横屏',
+      maxDuration: '最长',
+      selected: '已选择',
+      platforms: '个平台',
+    },
+    plan: {
+      title: '导出计划',
+      platform: '平台',
+      resolution: '分辨率',
+      bitrate: '码率',
+      status: '状态',
+    },
+    result: {
+      title: '导出结果',
+      platform: '平台',
+      outputPath: '输出路径',
+      fileSize: '文件大小',
+      success: '成功',
+      failed: '失败',
+      total: '共',
+    },
+    history: {
+      title: '历史记录',
+      rerun: '复跑',
+      createdAt: '创建时间',
+      platforms: '平台数',
+    },
+  },
+
   // ── 内容发布 ──
   contentPublish: {
     title: '内容发布',
