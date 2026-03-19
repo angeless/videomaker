@@ -2,135 +2,179 @@
   <div>
     <h3>{{ L.contentPublish.title }}</h3>
 
-    <!-- 内容表单 -->
-    <div class="cap-section">
-      <div class="form-row"><label>{{ L.contentPublish.form.title }}</label><input v-model="input.title" class="form-input" /></div>
-      <div class="form-row"><label>{{ L.contentPublish.form.description }}</label><textarea v-model="input.description" class="form-input" rows="2"></textarea></div>
-      <div class="form-row"><label>{{ L.contentPublish.form.keywords }}</label><input v-model="input.keywords" class="form-input" :placeholder="L.contentPublish.form.keywordsPlaceholder" /></div>
-      <div class="form-row"><label>{{ L.contentPublish.form.mediaUrls }}</label><input v-model="input.media_urls" class="form-input" :placeholder="L.contentPublish.form.mediaUrlsPlaceholder" /></div>
-      <div v-if="contentType === 'article'" class="form-row"><label>{{ L.contentPublish.form.articleMarkdown }}</label><textarea v-model="input.article_markdown" class="form-input" rows="4"></textarea></div>
+    <!-- Tab 导航 -->
+    <div class="tab-bar">
+      <button class="tab-btn" :class="{ active: activeTab === 'publish' }" @click="activeTab = 'publish'">{{ L.contentPublish.tabs.publish }}</button>
+      <button class="tab-btn" :class="{ active: activeTab === 'history' }" @click="switchToHistory">{{ L.contentPublish.tabs.history }}</button>
+      <button class="tab-btn" :class="{ active: activeTab === 'settings' }" @click="activeTab = 'settings'">{{ L.contentPublish.tabs.settings }}</button>
     </div>
 
-    <!-- 平台选择 checkbox picker -->
-    <div class="cap-section">
-      <div class="cap-subtitle">{{ L.contentPublish.form.selectPlatforms }}</div>
-      <div v-if="!platforms.length" class="text-muted" style="font-size:12px">{{ L.common.loading }}</div>
-      <template v-for="groupKey in ['domestic', 'global', 'custom']" :key="groupKey">
-        <div v-if="platformsByGroup[groupKey]?.length" class="platform-group">
-          <div class="platform-group-label">{{ L.contentPublish.platformGroups[groupKey] }}</div>
-          <div class="platform-grid">
-            <label
-              v-for="p in platformsByGroup[groupKey]" :key="p.platform_id"
-              class="platform-chip"
-              :class="{ selected: selectedPlatforms.has(p.platform_id), 'chip-not-ready': p.connector_ready === false }"
-              :title="p.connector_ready === false ? p.setup_hint : ''"
-            >
-              <input type="checkbox" :checked="selectedPlatforms.has(p.platform_id)" @change="togglePlatform(p.platform_id)" />
-              <span class="chip-name">{{ p.name }}</span>
-              <span v-if="p.connector_ready === false" class="chip-warn">⚠️</span>
-              <span v-if="p.connector_ready === true" class="chip-ok">✓</span>
-              <span v-if="p.notes" class="chip-note">{{ p.notes }}</span>
-            </label>
+    <!-- Tab 1: 发布 -->
+    <div v-show="activeTab === 'publish'">
+      <!-- 内容表单 -->
+      <div class="cap-section">
+        <div class="form-row"><label>{{ L.contentPublish.form.title }}</label><input v-model="input.title" class="form-input" /></div>
+        <div class="form-row"><label>{{ L.contentPublish.form.description }}</label><textarea v-model="input.description" class="form-input" rows="2"></textarea></div>
+        <div class="form-row"><label>{{ L.contentPublish.form.keywords }}</label><input v-model="input.keywords" class="form-input" :placeholder="L.contentPublish.form.keywordsPlaceholder" /></div>
+        <div class="form-row"><label>{{ L.contentPublish.form.mediaUrls }}</label><input v-model="input.media_urls" class="form-input" :placeholder="L.contentPublish.form.mediaUrlsPlaceholder" /></div>
+        <div v-if="contentType === 'article'" class="form-row"><label>{{ L.contentPublish.form.articleMarkdown }}</label><textarea v-model="input.article_markdown" class="form-input" rows="4"></textarea></div>
+      </div>
+
+      <!-- 平台选择 checkbox picker -->
+      <div class="cap-section">
+        <div class="cap-subtitle">{{ L.contentPublish.form.selectPlatforms }}</div>
+        <div v-if="!platforms.length" class="text-muted" style="font-size:12px">{{ L.common.loading }}</div>
+        <template v-for="groupKey in ['domestic', 'global', 'custom']" :key="groupKey">
+          <div v-if="platformsByGroup[groupKey]?.length" class="platform-group">
+            <div class="platform-group-label">{{ L.contentPublish.platformGroups[groupKey] }}</div>
+            <div class="platform-grid">
+              <label
+                v-for="p in platformsByGroup[groupKey]" :key="p.platform_id"
+                class="platform-chip"
+                :class="{ selected: selectedPlatforms.has(p.platform_id), 'chip-not-ready': p.connector_ready === false }"
+                :title="p.connector_ready === false ? p.setup_hint : ''"
+              >
+                <input type="checkbox" :checked="selectedPlatforms.has(p.platform_id)" @change="togglePlatform(p.platform_id)" />
+                <span class="chip-name">{{ p.name }}</span>
+                <span v-if="p.connector_ready === false" class="chip-warn">⚠️</span>
+                <span v-if="p.connector_ready === true" class="chip-ok">✓</span>
+                <span v-if="p.notes" class="chip-note">{{ p.notes }}</span>
+              </label>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- 高级选项折叠 -->
+      <details class="cap-section advanced-section">
+        <summary class="detail-summary">{{ L.contentPublish.advanced.toggle }}</summary>
+        <div class="form-row" style="margin-top:8px">
+          <label class="checkbox-label">
+            <input type="checkbox" v-model="input.dry_run" />
+            {{ L.contentPublish.advanced.dryRun }}
+          </label>
+        </div>
+      </details>
+
+      <!-- 操作按钮 -->
+      <div class="btn-row" style="margin-bottom:16px">
+        <button class="btn btn-sm" @click="buildPlan" :disabled="!selectedPlatforms.size || loadingPlan">{{ loadingPlan ? L.contentPublish.actions.planning : L.contentPublish.actions.plan }}</button>
+        <button class="btn btn-primary btn-sm" @click="runPublish" :disabled="!publishPlan || loadingPublish">{{ loadingPublish ? L.contentPublish.actions.publishing : L.contentPublish.actions.publish }}</button>
+        <button v-if="hasFailedSteps" class="btn btn-sm" @click="rerunFailed" :disabled="loadingRerun">{{ loadingRerun ? L.contentPublish.actions.rerunning : L.contentPublish.actions.rerunFailed }}</button>
+      </div>
+
+      <!-- 发布计划结果 -->
+      <div v-if="publishPlan" class="cap-section">
+        <div class="cap-subtitle">{{ L.contentPublish.plan.title }} <span class="plan-badge" :class="publishPlan.dry_run ? 'badge-dry' : 'badge-live'">{{ publishPlan.dry_run ? L.contentPublish.plan.badgeDry : L.contentPublish.plan.badgeLive }}</span></div>
+        <div class="stat-row">
+          <span class="stat-item">{{ L.contentPublish.plan.platforms }} <strong>{{ (publishPlan.platform_ids || []).length }}</strong></span>
+          <span class="stat-item">{{ L.contentPublish.plan.steps }} <strong>{{ (publishPlan.steps || []).length }}</strong></span>
+          <span class="stat-item">{{ L.contentPublish.plan.status }} <strong>{{ L.contentPublish.status[publishPlan.status] || publishPlan.status || '---' }}</strong></span>
+        </div>
+        <div v-for="step in (publishPlan.steps || [])" :key="step.platform" class="step-card">
+          <span class="step-icon">{{ L.contentPublish.statusIcon[step.status] || L.contentPublish.statusIcon.planned }}</span>
+          <span class="step-platform">{{ platformName(step.platform) }}</span>
+          <span class="step-status" :class="'st-' + (step.status || 'planned')">{{ L.contentPublish.status[step.status] || step.status || L.contentPublish.status.planned }}</span>
+          <span v-if="step.status === 'blocked'" class="step-hint">{{ L.contentPublish.blockedReason }}</span>
+        </div>
+        <details style="margin-top:8px"><summary class="detail-summary">{{ L.contentPublish.plan.viewRaw }}</summary><pre class="result-pre">{{ JSON.stringify(publishPlan, null, 2) }}</pre></details>
+      </div>
+
+      <!-- 执行结果 -->
+      <div v-if="publishRun" class="cap-section">
+        <div class="cap-subtitle">{{ L.contentPublish.result.title }}</div>
+        <div v-if="publishRun.result" class="stat-row">
+          <span class="stat-item">{{ L.contentPublish.result.total }} <strong>{{ publishRun.result.summary?.total || 0 }}</strong></span>
+          <span class="stat-item stat-success">{{ L.contentPublish.result.posted }} <strong>{{ publishRun.result.summary?.posted || 0 }}</strong></span>
+          <span v-if="publishRun.result.summary?.failed" class="stat-item stat-fail">{{ L.contentPublish.result.failed }} <strong>{{ publishRun.result.summary.failed }}</strong></span>
+          <span v-if="publishRun.result.summary?.blocked" class="stat-item stat-blocked">{{ L.contentPublish.result.blocked }} <strong>{{ publishRun.result.summary.blocked }}</strong></span>
+        </div>
+        <!-- 错误恢复面板 -->
+        <div v-if="hasFailedSteps" class="recovery-panel">
+          <div class="recovery-title">{{ L.contentPublish.recovery.title }}</div>
+          <div v-if="errorClassSummary.length" class="recovery-errors">
+            <div v-for="ec in errorClassSummary" :key="ec.errorClass" class="recovery-error-item">
+              <span class="recovery-count">{{ ec.count }}</span>
+              <span>{{ L.contentPublish.recovery.platformsFailed }}</span>
+              <span class="recovery-class">{{ L.contentPublish.errors[ec.errorClass] || L.contentPublish.errors.unknown }}</span>
+            </div>
+          </div>
+          <div v-if="!errorClassSummary.length && !recoveryHint" class="recovery-fallback text-muted">{{ L.contentPublish.recovery.fallback }}</div>
+          <div class="recovery-actions">
+            <button v-if="recoveryScope === 'failed_only'" class="btn btn-sm" @click="rerunFailed" :disabled="loadingRerun">{{ loadingRerun ? L.contentPublish.actions.rerunning : L.contentPublish.recovery.rerunFailed }}</button>
+            <button v-else-if="recoveryScope === 'all'" class="btn btn-sm" @click="rerunAll" :disabled="loadingRerun">{{ loadingRerun ? L.contentPublish.actions.rerunning : L.contentPublish.recovery.rerunAll }}</button>
+            <button v-else class="btn btn-sm" @click="rerunFailed" :disabled="loadingRerun">{{ loadingRerun ? L.contentPublish.actions.rerunning : L.contentPublish.recovery.genericRetry }}</button>
+            <button v-if="recoveryErrorClasses.has('config_missing')" class="btn btn-sm" @click="goToSettings">{{ L.contentPublish.goToSettings }}</button>
+            <button v-if="recoveryErrorClasses.has('auth_failed')" class="btn btn-sm" @click="autoBootstrap">{{ L.contentPublish.recovery.reauth }}</button>
           </div>
         </div>
-      </template>
+
+        <div v-for="step in (publishRun.result?.steps || [])" :key="step.platform" class="step-card">
+          <span class="step-icon">{{ L.contentPublish.statusIcon[step.status] || L.contentPublish.statusIcon.unknown }}</span>
+          <span class="step-platform">{{ platformName(step.platform) }}</span>
+          <span class="step-status" :class="'st-' + (step.status || 'unknown')">{{ L.contentPublish.status[step.status] || step.status }}</span>
+          <span v-if="step.error" class="step-error">{{ step.error }}</span>
+          <span v-if="step.error_class && L.contentPublish.errors[step.error_class]" class="step-hint">{{ L.contentPublish.errors[step.error_class] }}</span>
+        </div>
+        <details style="margin-top:8px"><summary class="detail-summary">{{ L.contentPublish.result.viewRaw }}</summary><pre class="result-pre">{{ JSON.stringify(publishRun, null, 2) }}</pre></details>
+      </div>
     </div>
 
-    <!-- 高级选项折叠 -->
-    <details class="cap-section advanced-section">
-      <summary class="detail-summary">{{ L.contentPublish.advanced.toggle }}</summary>
-      <div class="form-row" style="margin-top:8px">
-        <label class="checkbox-label">
-          <input type="checkbox" v-model="input.dry_run" />
-          {{ L.contentPublish.advanced.dryRun }}
-        </label>
-      </div>
-    </details>
+    <!-- Tab 2: 历史 -->
+    <div v-show="activeTab === 'history'">
+      <div class="cap-section">
+        <div class="cap-subtitle" style="display:flex;align-items:center;gap:8px">
+          {{ L.contentPublish.history.title }}
+          <button class="btn btn-xs" @click="loadHistory" :disabled="loadingHistory">{{ loadingHistory ? L.common.loading : L.contentPublish.history.refresh }}</button>
+        </div>
+        <div v-if="!history.length && !loadingHistory" class="text-muted" style="font-size:12px">{{ L.contentPublish.history.empty }}</div>
 
-    <!-- 操作按钮 -->
-    <div class="btn-row" style="margin-bottom:16px">
-      <button class="btn btn-sm" @click="buildPlan" :disabled="!selectedPlatforms.size || loadingPlan">{{ loadingPlan ? L.contentPublish.actions.planning : L.contentPublish.actions.plan }}</button>
-      <button class="btn btn-primary btn-sm" @click="runPublish" :disabled="!publishPlan || loadingPublish">{{ loadingPublish ? L.contentPublish.actions.publishing : L.contentPublish.actions.publish }}</button>
-      <button v-if="hasFailedSteps" class="btn btn-sm" @click="rerunFailed" :disabled="loadingRerun">{{ loadingRerun ? L.contentPublish.actions.rerunning : L.contentPublish.actions.rerunFailed }}</button>
-    </div>
+        <div v-for="run in history" :key="run.run_id" class="history-card" :class="{ 'history-expanded': expandedRun === run.run_id }">
+          <div class="history-header" @click="toggleExpandRun(run.run_id)" style="cursor:pointer">
+            <span class="history-id">{{ run.run_id?.slice(0, 8) || '---' }}</span>
+            <span class="step-status" :class="'st-' + historyRunStatus(run)">{{ L.contentPublish.status[historyRunStatus(run)] || historyRunStatus(run) || '---' }}</span>
+            <span v-if="run.result?.summary" class="history-stats">
+              {{ L.contentPublish.history.success }} {{ run.result.summary.posted || 0 }} / {{ L.contentPublish.history.fail }} {{ run.result.summary.failed || 0 }}
+            </span>
+            <span class="history-time text-muted">{{ run.requested_at || run.created_at || '' }}</span>
+            <span class="expand-icon">{{ expandedRun === run.run_id ? '▼' : '▸' }}</span>
+          </div>
+          <div class="history-meta">
+            <span v-if="run.platforms || run.plan?.platform_ids || run.platform_ids" class="text-muted">
+              {{ (run.platforms || run.plan?.platform_ids || run.platform_ids || []).map(id => platformName(id)).join(', ') }}
+            </span>
+          </div>
 
-    <!-- 发布计划结果 -->
-    <div v-if="publishPlan" class="cap-section">
-      <div class="cap-subtitle">{{ L.contentPublish.plan.title }} <span class="plan-badge" :class="publishPlan.dry_run ? 'badge-dry' : 'badge-live'">{{ publishPlan.dry_run ? L.contentPublish.plan.badgeDry : L.contentPublish.plan.badgeLive }}</span></div>
-      <div class="stat-row">
-        <span class="stat-item">{{ L.contentPublish.plan.platforms }} <strong>{{ (publishPlan.platform_ids || []).length }}</strong></span>
-        <span class="stat-item">{{ L.contentPublish.plan.steps }} <strong>{{ (publishPlan.steps || []).length }}</strong></span>
-        <span class="stat-item">{{ L.contentPublish.plan.status }} <strong>{{ L.contentPublish.status[publishPlan.status] || publishPlan.status || '---' }}</strong></span>
-      </div>
-      <div v-for="step in (publishPlan.steps || [])" :key="step.platform" class="step-card">
-        <span class="step-icon">{{ L.contentPublish.statusIcon[step.status] || L.contentPublish.statusIcon.planned }}</span>
-        <span class="step-platform">{{ platformName(step.platform) }}</span>
-        <span class="step-status" :class="'st-' + (step.status || 'planned')">{{ L.contentPublish.status[step.status] || step.status || L.contentPublish.status.planned }}</span>
-        <span v-if="step.status === 'blocked'" class="step-hint">{{ L.contentPublish.blockedReason }}</span>
-      </div>
-      <details style="margin-top:8px"><summary class="detail-summary">{{ L.contentPublish.plan.viewRaw }}</summary><pre class="result-pre">{{ JSON.stringify(publishPlan, null, 2) }}</pre></details>
-    </div>
-
-    <!-- 执行结果 -->
-    <div v-if="publishRun" class="cap-section">
-      <div class="cap-subtitle">{{ L.contentPublish.result.title }}</div>
-      <div v-if="publishRun.result" class="stat-row">
-        <span class="stat-item">{{ L.contentPublish.result.total }} <strong>{{ publishRun.result.summary?.total || 0 }}</strong></span>
-        <span class="stat-item stat-success">{{ L.contentPublish.result.posted }} <strong>{{ publishRun.result.summary?.posted || 0 }}</strong></span>
-        <span v-if="publishRun.result.summary?.failed" class="stat-item stat-fail">{{ L.contentPublish.result.failed }} <strong>{{ publishRun.result.summary.failed }}</strong></span>
-        <span v-if="publishRun.result.summary?.blocked" class="stat-item stat-blocked">{{ L.contentPublish.result.blocked }} <strong>{{ publishRun.result.summary.blocked }}</strong></span>
-      </div>
-      <!-- 错误恢复面板 -->
-      <div v-if="hasFailedSteps" class="recovery-panel">
-        <div class="recovery-title">{{ L.contentPublish.recovery.title }}</div>
-        <div v-if="errorClassSummary.length" class="recovery-errors">
-          <div v-for="ec in errorClassSummary" :key="ec.errorClass" class="recovery-error-item">
-            <span class="recovery-count">{{ ec.count }}</span>
-            <span>{{ L.contentPublish.recovery.platformsFailed }}</span>
-            <span class="recovery-class">{{ L.contentPublish.errors[ec.errorClass] || L.contentPublish.errors.unknown }}</span>
+          <!-- Expanded details -->
+          <div v-if="expandedRun === run.run_id" class="history-detail">
+            <div v-for="step in (run.result?.steps || [])" :key="step.platform" class="step-card">
+              <span class="step-icon">{{ L.contentPublish.statusIcon[step.status || step.run_state] || '⏳' }}</span>
+              <span class="step-platform">{{ platformName(step.platform || step.platform_id) }}</span>
+              <span class="step-status" :class="'st-' + (step.status || step.run_state || 'unknown')">{{ L.contentPublish.status[step.status || step.run_state] || step.status || step.run_state }}</span>
+              <span v-if="step.post_id" class="history-post-id">ID: {{ step.post_id }}</span>
+              <span v-if="step.url" class="history-url">{{ step.url }}</span>
+              <span v-if="step.error" class="step-error">{{ step.error }}</span>
+            </div>
+            <div class="history-detail-actions">
+              <button v-if="historyHasFailed(run)" class="btn btn-sm" :disabled="loadingRerun" @click="rerunHistoryItem(run)">
+                {{ loadingRerun ? L.contentPublish.actions.rerunning : L.contentPublish.history.rerun }}
+              </button>
+              <details style="margin-top:6px"><summary class="detail-summary">{{ L.contentPublish.result.viewRaw }}</summary><pre class="result-pre">{{ JSON.stringify(run, null, 2) }}</pre></details>
+            </div>
           </div>
         </div>
-        <div v-if="!errorClassSummary.length && !recoveryHint" class="recovery-fallback text-muted">{{ L.contentPublish.recovery.fallback }}</div>
-        <div class="recovery-actions">
-          <button v-if="recoveryScope === 'failed_only'" class="btn btn-sm" @click="rerunFailed" :disabled="loadingRerun">{{ loadingRerun ? L.contentPublish.actions.rerunning : L.contentPublish.recovery.rerunFailed }}</button>
-          <button v-else-if="recoveryScope === 'all'" class="btn btn-sm" @click="rerunAll" :disabled="loadingRerun">{{ loadingRerun ? L.contentPublish.actions.rerunning : L.contentPublish.recovery.rerunAll }}</button>
-          <button v-else class="btn btn-sm" @click="rerunFailed" :disabled="loadingRerun">{{ loadingRerun ? L.contentPublish.actions.rerunning : L.contentPublish.recovery.genericRetry }}</button>
-          <button v-if="recoveryErrorClasses.has('config_missing')" class="btn btn-sm" @click="goToSettings">{{ L.contentPublish.goToSettings }}</button>
-          <button v-if="recoveryErrorClasses.has('auth_failed')" class="btn btn-sm" @click="autoBootstrap">{{ L.contentPublish.recovery.reauth }}</button>
+
+        <!-- Load more -->
+        <div v-if="history.length >= historyLimit" style="text-align:center;margin-top:10px">
+          <button class="btn btn-ghost btn-sm" @click="loadMoreHistory" :disabled="loadingHistory">{{ L.contentPublish.history.loadMore }}</button>
         </div>
       </div>
-
-      <div v-for="step in (publishRun.result?.steps || [])" :key="step.platform" class="step-card">
-        <span class="step-icon">{{ L.contentPublish.statusIcon[step.status] || L.contentPublish.statusIcon.unknown }}</span>
-        <span class="step-platform">{{ platformName(step.platform) }}</span>
-        <span class="step-status" :class="'st-' + (step.status || 'unknown')">{{ L.contentPublish.status[step.status] || step.status }}</span>
-        <span v-if="step.error" class="step-error">{{ step.error }}</span>
-        <span v-if="step.error_class && L.contentPublish.errors[step.error_class]" class="step-hint">{{ L.contentPublish.errors[step.error_class] }}</span>
-      </div>
-      <details style="margin-top:8px"><summary class="detail-summary">{{ L.contentPublish.result.viewRaw }}</summary><pre class="result-pre">{{ JSON.stringify(publishRun, null, 2) }}</pre></details>
     </div>
 
-    <!-- 发布历史 -->
-    <div class="cap-section">
-      <div class="cap-subtitle" style="display:flex;align-items:center;gap:8px">
-        {{ L.contentPublish.history.title }}
-        <button class="btn btn-xs" @click="loadHistory" :disabled="loadingHistory">{{ loadingHistory ? L.common.loading : L.contentPublish.history.refresh }}</button>
-      </div>
-      <div v-if="!history.length && !loadingHistory" class="text-muted" style="font-size:12px">{{ L.contentPublish.history.empty }}</div>
-      <div v-for="run in history" :key="run.run_id" class="history-card">
-        <div class="history-header">
-          <span class="history-id">{{ run.run_id?.slice(0, 8) || '---' }}</span>
-          <span class="step-status" :class="'st-' + (run.result?.status || run.status || 'unknown')">{{ L.contentPublish.status[run.result?.status || run.status] || run.result?.status || run.status || '---' }}</span>
-          <span class="history-time text-muted">{{ run.requested_at || run.created_at || '' }}</span>
-        </div>
-        <div class="history-meta">
-          <span v-if="run.result?.summary">
-            {{ L.contentPublish.history.success }} {{ run.result.summary.posted || 0 }} / {{ L.contentPublish.history.fail }} {{ run.result.summary.failed || 0 }} / {{ L.contentPublish.history.total }} {{ run.result.summary.total || 0 }}
-          </span>
-          <span v-if="run.platforms || run.platform_ids" class="text-muted">
-            {{ (run.platforms || run.platform_ids || []).map(id => platformName(id)).join(', ') }}
-          </span>
-        </div>
+    <!-- Tab 3: 设置 (placeholder) -->
+    <div v-show="activeTab === 'settings'">
+      <div class="cap-section">
+        <div class="text-muted" style="font-size:13px; padding:20px 0">{{ L.contentPublish.tabs.settingsPlaceholder }}</div>
       </div>
     </div>
   </div>
@@ -148,6 +192,7 @@ const capStore = useCapabilitiesStore()
 const appStore = useAppStore()
 
 // --- State ---
+const activeTab = ref('publish')
 const input = reactive({
   title: '', description: '', keywords: '', media_urls: '',
   platform_content_type: 'video_post', dry_run: false,
@@ -165,6 +210,8 @@ const loadingPublish = ref(false)
 const loadingRerun = ref(false)
 const history = ref([])
 const loadingHistory = ref(false)
+const expandedRun = ref(null)
+const historyLimit = ref(20)
 
 // --- Computed ---
 const inputMode = computed(() => appStore.projectDir ? 'project' : 'inline')
@@ -213,6 +260,19 @@ function parseList(text) {
 }
 function selectedPlatformsStr() {
   return [...selectedPlatforms].join(',')
+}
+function historyRunStatus(run) {
+  return run.result?.status || run.status || 'unknown'
+}
+function historyHasFailed(run) {
+  return (run.result?.steps || []).some(s => (s.status || s.run_state) === 'failed')
+}
+function toggleExpandRun(runId) {
+  expandedRun.value = expandedRun.value === runId ? null : runId
+}
+function switchToHistory() {
+  activeTab.value = 'history'
+  if (!history.value.length) loadHistory()
 }
 
 // --- API ---
@@ -311,6 +371,24 @@ async function rerunAll() {
   }
 }
 
+async function rerunHistoryItem(run) {
+  if (loadingRerun.value) return
+  loadingRerun.value = true
+  try {
+    const runId = run.run_id
+    if (!runId) return
+    const data = await apiStore.api('POST', '/api/capabilities/content_publish/rerun', {
+      input_mode: inputMode.value, run_id: runId, session_id: sessionId.value,
+      dry_run: false, rerun_failed_only: true,
+    })
+    if (data.error) { capStore.setMessage(`${L.contentPublish.result.failed}: ${data.error}`, 'error'); return }
+    capStore.setMessage(`${L.contentPublish.history.rerun}: ${L.common.success}`, 'success')
+    loadHistory()
+  } finally {
+    loadingRerun.value = false
+  }
+}
+
 function goToSettings() {
   window.location.hash = '#/settings'
 }
@@ -318,11 +396,16 @@ function goToSettings() {
 async function loadHistory() {
   loadingHistory.value = true
   try {
-    const data = await apiStore.api('GET', '/api/capabilities/content_publish/history?limit=20')
+    const data = await apiStore.api('GET', `/api/capabilities/content_publish/history?limit=${historyLimit.value}`)
     if (!data.error) history.value = data.runs || []
   } finally {
     loadingHistory.value = false
   }
+}
+
+async function loadMoreHistory() {
+  historyLimit.value += 20
+  await loadHistory()
 }
 
 // --- Init ---
@@ -347,6 +430,16 @@ h3 { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
 .form-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .form-row label { width: 80px; font-size: 12px; color: var(--muted); flex-shrink: 0; }
 .btn-row { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* Tab bar */
+.tab-bar { display: flex; gap: 2px; margin-bottom: 16px; border-bottom: 1px solid var(--border); }
+.tab-btn {
+  padding: 8px 16px; font-size: 13px; font-weight: 500;
+  background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--muted); cursor: pointer; transition: all 0.15s;
+}
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
 
 /* Platform checkbox picker */
 .platform-group { margin-bottom: 12px; }
@@ -409,9 +502,17 @@ h3 { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
 .recovery-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 
 /* History */
-.history-card { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 6px; }
+.history-card { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 6px; transition: all 0.15s; }
+.history-card:hover { border-color: var(--accent); }
+.history-expanded { border-color: var(--accent); background: rgba(90,141,238,0.03); }
 .history-header { display: flex; align-items: center; gap: 8px; font-size: 12px; }
 .history-id { font-family: monospace; font-size: 11px; color: var(--muted); }
+.history-stats { font-size: 11px; }
 .history-time { font-size: 11px; margin-left: auto; }
 .history-meta { font-size: 11px; margin-top: 4px; display: flex; gap: 12px; }
+.history-detail { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+.history-detail-actions { margin-top: 8px; }
+.history-post-id { font-family: monospace; font-size: 10px; color: var(--muted); }
+.history-url { font-size: 10px; color: var(--accent); word-break: break-all; }
+.expand-icon { font-size: 10px; color: var(--muted); margin-left: 4px; }
 </style>

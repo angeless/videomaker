@@ -223,6 +223,12 @@ export const labels = {
   // ── 内容发布 ──
   contentPublish: {
     title: '内容发布',
+    tabs: {
+      publish: '发布',
+      history: '历史',
+      settings: '设置',
+      settingsPlaceholder: '发布相关设置将在后续版本中提供。当前请在"设置"页面配置平台连接。',
+    },
     platformGroups: {
       domestic: '国内平台',
       global: '国际平台',
@@ -316,6 +322,8 @@ export const labels = {
       success: '成功',
       fail: '失败',
       total: '共',
+      loadMore: '加载更多',
+      rerun: '复跑',
     },
   },
 
