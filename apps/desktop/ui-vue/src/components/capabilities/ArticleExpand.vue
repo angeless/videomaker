@@ -7,7 +7,7 @@
       <div class="form-row"><label>语气</label>
         <select v-model="input.tone" class="form-input"><option value="professional">专业</option><option value="casual">轻松</option><option value="humorous">幽默</option></select>
       </div>
-      <div class="form-row"><label>目标字数</label><input v-model.number="input.length_target" type="number" class="form-input" /></div>
+      <div class="form-row"><label>目标字数</label><input v-model.number="input.length_target" type="number" class="form-input" :placeholder="L.panelHints.articleExpand.lengthTargetPlaceholder" /></div>
       <div class="form-row"><label>标题数量</label><input v-model.number="input.title_count" type="number" class="form-input" /></div>
       <div class="form-row"><label>启用 AI 辅助</label><input type="checkbox" v-model="input.use_llm" /></div>
       <button class="btn btn-primary btn-sm" @click="generate" :disabled="!canGenerate || loading">{{ loading ? '生成中…' : '生成扩写' }}</button>
@@ -66,14 +66,16 @@ import { ref, reactive, computed } from 'vue'
 import { useApiStore } from '../../stores/api.js'
 import { useCapabilitiesStore } from '../../stores/capabilities.js'
 import { useAppStore } from '../../stores/app.js'
+import labels from '../../i18n/labels.js'
 
+const L = labels
 const apiStore = useApiStore()
 const capStore = useCapabilitiesStore()
 const appStore = useAppStore()
 
 const input = reactive({
   input_mode: 'inline', source_text: '', key_points: '', tone: 'professional',
-  length_target: 1200, title_count: 5, use_llm: true, llm_provider: '', llm_model: '',
+  length_target: 1500, title_count: 5, use_llm: true, llm_provider: '', llm_model: '',
 })
 const result = ref(null)
 const loading = ref(false)

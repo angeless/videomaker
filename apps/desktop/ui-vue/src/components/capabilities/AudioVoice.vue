@@ -23,7 +23,7 @@
           <option value="local">本地 TTS</option>
         </select>
       </div>
-      <div class="form-row"><label>音色 ID</label><input v-model="input.voice_id" class="form-input" placeholder="留空使用默认音色" /></div>
+      <div class="form-row"><label>音色 ID</label><input v-model="input.voice_id" class="form-input" :placeholder="L.panelHints.audioVoice.voiceIdPlaceholder" /></div>
       <div class="form-row"><label>模型</label>
         <select v-model="input.model_id" class="form-input">
           <option value="eleven_multilingual_v2">多语言 V2（推荐）</option>
@@ -81,7 +81,9 @@ import { useApiStore } from '../../stores/api.js'
 import { useCapabilitiesStore } from '../../stores/capabilities.js'
 import { useAppStore } from '../../stores/app.js'
 import { useJobPoller } from '../../composables/useJobPoller.js'
+import labels from '../../i18n/labels.js'
 
+const L = labels
 const apiStore = useApiStore()
 const capStore = useCapabilitiesStore()
 const appStore = useAppStore()

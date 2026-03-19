@@ -67,7 +67,7 @@ const apiStore = useApiStore()
 const capStore = useCapabilitiesStore()
 const appStore = useAppStore()
 
-const input = reactive({ target_duration_s: 30, max_clips: 8, min_gap_s: 0.3 })
+const input = reactive({ target_duration_s: 60, max_clips: 8, min_gap_s: 0.3 })
 const candidates = ref([])
 const plan = ref(null)
 const loading = ref(false)

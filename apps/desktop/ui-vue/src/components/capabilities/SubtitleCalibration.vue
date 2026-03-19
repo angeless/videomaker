@@ -6,7 +6,7 @@
         <select v-model="input.input_mode" class="form-input"><option value="project">项目</option><option value="inline">内联</option></select>
       </div>
       <div class="form-row"><label>模式</label>
-        <select v-model="input.mode" class="form-input"><option value="timeline_align">时间轴对齐</option></select>
+        <select v-model="input.mode" class="form-input"><option value="timeline_align">{{ L.panelHints.subtitleCalibration.modeTimelineAlign }}</option></select>
       </div>
       <div class="form-row"><label>翻译</label>
         <select v-model="input.translation" class="form-input"><option value="off">关闭</option><option value="on">开启</option></select>
@@ -76,7 +76,9 @@ import { ref, reactive } from 'vue'
 import { useApiStore } from '../../stores/api.js'
 import { useCapabilitiesStore } from '../../stores/capabilities.js'
 import { useAppStore } from '../../stores/app.js'
+import labels from '../../i18n/labels.js'
 
+const L = labels
 const apiStore = useApiStore()
 const capStore = useCapabilitiesStore()
 const appStore = useAppStore()

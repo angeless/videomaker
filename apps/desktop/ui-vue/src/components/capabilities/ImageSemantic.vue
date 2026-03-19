@@ -18,6 +18,9 @@
       </div>
       <div class="form-row"><label>最大分析数</label><input v-model.number="input.analyze_max_images" type="number" class="form-input" /></div>
       <div class="form-row"><label>自动入库</label><input type="checkbox" v-model="input.auto_ingest" /></div>
+      <div class="form-row"><label>{{ L.panelHints.imageSemantic.analyzeObjects }}</label><input type="checkbox" v-model="input.analyze_objects" /></div>
+      <div class="form-row"><label>{{ L.panelHints.imageSemantic.analyzeScene }}</label><input type="checkbox" v-model="input.analyze_scene" /></div>
+      <div class="form-row"><label>{{ L.panelHints.imageSemantic.analyzeMood }}</label><input type="checkbox" v-model="input.analyze_mood" /></div>
       <button class="btn btn-primary btn-sm" @click="analyze" :disabled="!appStore.projectDir || loadingAnalyze">{{ loadingAnalyze ? '分析中…' : '分析' }}</button>
     </div>
 
@@ -71,14 +74,18 @@ import { useApiStore } from '../../stores/api.js'
 import { useCapabilitiesStore } from '../../stores/capabilities.js'
 import { useAppStore } from '../../stores/app.js'
 import ResultCard from '../common/ResultCard.vue'
+import labels from '../../i18n/labels.js'
 
+const L = labels
 const apiStore = useApiStore()
 const capStore = useCapabilitiesStore()
 const appStore = useAppStore()
 
 const input = reactive({
   input_mode: 'inline', image_paths: '', retrieval_mode: 'hybrid',
-  analyze_max_images: 1200, auto_ingest: false, query: '', limit: 30,
+  analyze_max_images: 1200, auto_ingest: false,
+  analyze_objects: true, analyze_scene: true, analyze_mood: true,
+  query: '', limit: 30,
 })
 const analyzeResult = ref(null)
 const searchResult = ref(null)

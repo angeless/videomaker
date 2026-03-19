@@ -15,6 +15,7 @@
           <option value="finalcut">Final Cut Pro</option><option value="premiere">Premiere Pro</option><option value="jianying">剪映</option>
         </select>
       </div>
+      <div class="form-hint">{{ L.panelHints.refinement.editorHint }}</div>
       <div class="form-row"><label>品质</label>
         <select v-model="refineInput.quality" class="form-input">
           <option value="draft">草稿</option><option value="high">高品质</option><option value="premium">最佳</option>
@@ -74,7 +75,9 @@ import { ref, reactive, onMounted } from 'vue'
 import { useApiStore } from '../../stores/api.js'
 import { useCapabilitiesStore } from '../../stores/capabilities.js'
 import { useAppStore } from '../../stores/app.js'
+import labels from '../../i18n/labels.js'
 
+const L = labels
 const apiStore = useApiStore()
 const capStore = useCapabilitiesStore()
 const appStore = useAppStore()
@@ -172,4 +175,5 @@ h3 { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
 .connector-row { display: flex; align-items: center; margin-bottom: 4px; }
 .connector-hint { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
 .result-pre { background: var(--surface2); padding: 12px; border-radius: 6px; font-size: 12px; overflow-x: auto; white-space: pre-wrap; max-height: 300px; overflow-y: auto; }
+.form-hint { font-size: 11px; color: var(--muted); margin-top: 2px; margin-bottom: 8px; }
 </style>

@@ -8,7 +8,7 @@
       </div>
       <div class="form-row">
         <label>分类</label>
-        <input v-model="category" placeholder="如 旅行" class="form-input" />
+        <input v-model="category" :placeholder="L.panelHints.topicLibrary.categoryPlaceholder" class="form-input" />
       </div>
       <div class="btn-row">
         <button class="btn btn-sm" @click="load" :disabled="!appStore.projectDir || loadingQuery">{{ loadingQuery ? '查询中…' : '查询' }}</button>
@@ -31,7 +31,7 @@
       <div class="cap-subtitle">新建 / 编辑模板</div>
       <div class="form-row"><label>标题</label><input v-model="form.title" class="form-input" /></div>
       <div class="form-row"><label>标识符</label><input v-model="form.slug" class="form-input" placeholder="唯一标识" /></div>
-      <div class="form-row"><label>分类</label><input v-model="form.category" class="form-input" placeholder="旅行" /></div>
+      <div class="form-row"><label>分类</label><input v-model="form.category" class="form-input" :placeholder="L.panelHints.topicLibrary.categoryPlaceholder" /></div>
       <div class="form-row"><label>受众</label><input v-model="form.audience" class="form-input" placeholder="短视频" /></div>
       <div class="form-row"><label>开头风格</label><input v-model="form.hook_style" class="form-input" placeholder="故事型" /></div>
       <div class="form-row"><label>标签</label><input v-model="form.tags" class="form-input" placeholder="逗号分隔" /></div>
@@ -47,7 +47,9 @@ import { ref, reactive, onMounted, inject } from 'vue'
 import { useApiStore } from '../../stores/api.js'
 import { useCapabilitiesStore } from '../../stores/capabilities.js'
 import { useAppStore } from '../../stores/app.js'
+import labels from '../../i18n/labels.js'
 
+const L = labels
 const apiStore = useApiStore()
 const capStore = useCapabilitiesStore()
 const appStore = useAppStore()

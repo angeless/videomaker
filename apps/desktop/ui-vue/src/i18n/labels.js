@@ -135,6 +135,38 @@ export const labels = {
     },
   },
 
+  // ── 面板表单提示（T-0606）──
+  panelHints: {
+    topicLibrary: {
+      categoryPlaceholder: '如：旅行、美食、科技',
+    },
+    topicCopy: {
+      slugLabel: '选题标识',
+      slugPlaceholder: '如：snow_adventure',
+      targetDurationPlaceholder: '目标时长（秒）',
+    },
+    textRoughCut: {
+      removedPhrasesPlaceholder: '需删除的口头禅，逗号分隔，如：嗯、然后、那个',
+    },
+    refinement: {
+      editorHint: '选择已安装的 NLE 编辑器',
+    },
+    subtitleCalibration: {
+      modeTimelineAlign: '时间轴对齐（自动同步字幕时间码）',
+    },
+    audioVoice: {
+      voiceIdPlaceholder: '语音 ID，如 EXAVITQu4vr4xnSDxMaL',
+    },
+    imageSemantic: {
+      analyzeObjects: '物体识别',
+      analyzeScene: '场景分析',
+      analyzeMood: '情绪氛围',
+    },
+    articleExpand: {
+      lengthTargetPlaceholder: '目标字数',
+    },
+  },
+
   // ── 社媒导出 ──
   socialExport: {
     title: '社媒导出',
