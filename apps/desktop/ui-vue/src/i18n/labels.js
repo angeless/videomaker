@@ -455,6 +455,30 @@ export const labels = {
     untitled: '未命名工作流',
   },
 
+  // ── 中断任务恢复 ──
+  interruptedJobs: {
+    banner: '检测到 {count} 个未完成的任务',
+    bannerAction: '查看详情',
+    panelTitle: '中断任务恢复',
+    panelDesc: '以下任务因程序退出或异常而中断，你可以选择重试或忽略。',
+    retryAll: '全部重试',
+    ignoreAll: '全部忽略',
+    retry: '重试',
+    ignore: '忽略',
+    empty: '没有中断的任务',
+    retrying: '正在重新入队…',
+    ignoring: '正在忽略…',
+    retrySuccess: '{count} 个任务已重新入队',
+    ignoreSuccess: '{count} 个任务已忽略',
+    kindMap: {
+      social_export: '社媒导出',
+      content_publish: '内容发布',
+      audio_voice: '配音混音',
+      refinement: '画面优化',
+      generic: '通用任务',
+    },
+  },
+
   // ── 通用 ──
   common: {
     confirm: '确认',

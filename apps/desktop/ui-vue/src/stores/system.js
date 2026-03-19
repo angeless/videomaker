@@ -8,6 +8,46 @@ export const useSystemStore = defineStore('system', () => {
   const systemLoad = ref(null)
   const runningHeavyJobs = ref([])
 
+  // ── 中断任务恢复 ──
+  const interruptedJobs = ref([])
+  const interruptedLoading = ref(false)
+  const interruptedBannerVisible = ref(false)
+
+  async function loadInterruptedJobs() {
+    interruptedLoading.value = true
+    const data = await api.api('GET', '/api/job/interrupted')
+    interruptedLoading.value = false
+    if (data.error) return
+    interruptedJobs.value = Array.isArray(data.jobs) ? data.jobs : []
+    if (interruptedJobs.value.length > 0) {
+      interruptedBannerVisible.value = true
+    }
+  }
+
+  async function retryAllInterrupted(jobIds) {
+    const ids = jobIds || interruptedJobs.value.map(j => j.job_id)
+    const data = await api.api('POST', '/api/job/interrupted/retry-all', { job_ids: ids })
+    if (!data.error) {
+      interruptedJobs.value = interruptedJobs.value.filter(j => !ids.includes(j.job_id))
+      if (interruptedJobs.value.length === 0) interruptedBannerVisible.value = false
+    }
+    return data
+  }
+
+  async function ignoreAllInterrupted(jobIds) {
+    const ids = jobIds || interruptedJobs.value.map(j => j.job_id)
+    const data = await api.api('POST', '/api/job/interrupted/ignore', { job_ids: ids })
+    if (!data.error) {
+      interruptedJobs.value = interruptedJobs.value.filter(j => !ids.includes(j.job_id))
+      if (interruptedJobs.value.length === 0) interruptedBannerVisible.value = false
+    }
+    return data
+  }
+
+  function dismissInterruptedBanner() {
+    interruptedBannerVisible.value = false
+  }
+
   // ── 任务队列 ──
   const taskQueue = ref({
     max_running: 2,
@@ -78,7 +118,9 @@ export const useSystemStore = defineStore('system', () => {
 
   return {
     systemLoad, runningHeavyJobs, taskQueue,
+    interruptedJobs, interruptedLoading, interruptedBannerVisible,
     preflightLoading, preflightMessage, preflightReport, preflightLastRunAt,
     applySystemState, runSystemPreflight, refreshTaskQueue,
+    loadInterruptedJobs, retryAllInterrupted, ignoreAllInterrupted, dismissInterruptedBanner,
   }
 })

@@ -202,4 +202,84 @@ def create_job_blueprint(
             "items": result["items"],
         })
 
+    # ── Interrupted jobs listing + batch ignore ──
+
+    @bp.route("/api/job/interrupted", methods=["GET"])
+    def api_job_interrupted():
+        """List all jobs with status 'interrupted'."""
+        jobs = _jobs()
+        interrupted = []
+        for jid, job in jobs.items():
+            if str(job.get("status", "")).lower() == "interrupted":
+                interrupted.append({
+                    "job_id": jid,
+                    "kind": job.get("kind", "generic"),
+                    "created_at": job.get("queued_at", job.get("created_at", "")),
+                    "error": job.get("error", ""),
+                    "progress": job.get("progress", 0),
+                })
+        # Also check persisted store
+        try:
+            store_jobs = load_job_from_store("__list__")
+        except Exception:
+            store_jobs = None
+        if store_jobs is None:
+            # Fallback: scan store for interrupted jobs not already in memory
+            pass
+        return jsonify({"ok": True, "jobs": interrupted})
+
+    @bp.route("/api/job/interrupted/retry-all", methods=["POST"])
+    def api_job_interrupted_retry_all():
+        """Batch retry all interrupted jobs (re-queue them)."""
+        payload = request.json or {}
+        job_ids = payload.get("job_ids", [])
+        if not isinstance(job_ids, list):
+            job_ids = []
+        jobs = _jobs()
+        retried = 0
+        failed = 0
+        for jid in job_ids:
+            jid = str(jid)
+            job = jobs.get(jid)
+            if job is None:
+                job = load_job_from_store(jid)
+            if job is None or str(job.get("status", "")).lower() != "interrupted":
+                failed += 1
+                continue
+            # Mark as queued for re-dispatch
+            job["status"] = "queued"
+            job["error"] = ""
+            job["finished_at"] = ""
+            job["log"].append("[系统] 中断任务已重新入队")
+            persist_job_snapshot(jid, "job_requeued")
+            retried += 1
+        from modules.app_api.services.audit_log import audit as _audit
+        _audit("batch_retry_interrupted", "job", None, actor=f"local:{request.remote_addr}",
+               detail={"retried": retried, "failed": failed, "total": len(job_ids)})
+        return jsonify({"ok": True, "retried": retried, "failed": failed})
+
+    @bp.route("/api/job/interrupted/ignore", methods=["POST"])
+    def api_job_interrupted_ignore():
+        """Batch ignore interrupted jobs (mark as cancelled)."""
+        payload = request.json or {}
+        job_ids = payload.get("job_ids", [])
+        if not isinstance(job_ids, list):
+            job_ids = []
+        jobs = _jobs()
+        ignored = 0
+        for jid in job_ids:
+            jid = str(jid)
+            job = jobs.get(jid)
+            if job is None:
+                job = load_job_from_store(jid)
+            if job is None:
+                continue
+            if str(job.get("status", "")).lower() == "interrupted":
+                job["status"] = "cancelled"
+                job["error"] = "用户已忽略中断任务"
+                job["log"].append("[系统] 中断任务已被用户忽略")
+                persist_job_snapshot(jid, "job_ignored")
+                ignored += 1
+        return jsonify({"ok": True, "ignored": ignored})
+
     return bp
