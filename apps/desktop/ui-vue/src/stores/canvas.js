@@ -286,6 +286,18 @@ export const useCanvasStore = defineStore('canvas', () => {
     return true
   }
 
+  async function deleteFromBackend() {
+    if (!workflowId.value) return false
+    const data = await api.api('DELETE', `/api/workflows/${workflowId.value}`)
+    if (data.error) {
+      toast.show('删除失败: ' + data.error, 'danger')
+      return false
+    }
+    toast.show('工作流已删除', 'success')
+    clear()
+    return true
+  }
+
   async function runWorkflow() {
     if (!workflowId.value) {
       toast.show('请先保存工作流', 'warn')
@@ -311,6 +323,6 @@ export const useCanvasStore = defineStore('canvas', () => {
     selectNode, selectEdge, clearSelection, deleteSelected,
     pan, zoomAt, resetView, clear,
     undo, redo, canUndo, canRedo,
-    toSteps, saveToBackend, loadFromBackend, runWorkflow,
+    toSteps, saveToBackend, loadFromBackend, deleteFromBackend, runWorkflow,
   }
 })

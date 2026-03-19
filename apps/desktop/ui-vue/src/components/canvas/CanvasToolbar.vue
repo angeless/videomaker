@@ -16,6 +16,11 @@
       <button class="btn btn-ghost btn-sm" @click="canvas.resetView()">适应</button>
       <button class="btn btn-ghost btn-sm" @click="confirmClear">清空</button>
       <button
+        v-if="canvas.workflowId"
+        class="btn btn-ghost btn-sm btn-danger-text"
+        @click="confirmDelete"
+      >删除</button>
+      <button
         class="btn btn-primary btn-sm"
         :disabled="canvas.saving || canvas.nodeCount === 0"
         @click="canvas.saveToBackend()"
@@ -43,6 +48,12 @@ function confirmClear() {
   if (confirm('确定清空画布？所有节点和连接将被移除。')) {
     canvas.clear()
   }
+}
+
+async function confirmDelete() {
+  if (!canvas.workflowId) return
+  if (!confirm(`确定删除工作流「${canvas.workflowName}」？此操作不可撤销。`)) return
+  await canvas.deleteFromBackend()
 }
 </script>
 
@@ -102,4 +113,7 @@ function confirmClear() {
   gap: 6px;
   flex-shrink: 0;
 }
+
+.btn-danger-text { color: var(--danger, #f87171); }
+.btn-danger-text:hover { background: rgba(248, 113, 113, 0.1); }
 </style>
