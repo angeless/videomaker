@@ -559,8 +559,25 @@ def normalize_platforms(platform_ids: Iterable[str]) -> List[str]:
     return out
 
 
-def list_publish_platforms() -> Dict[str, Any]:
-    all_items = [asdict(x) for x in PUBLISH_PLATFORMS.values()]
+def list_publish_platforms(connectors: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    connector_map = connectors if isinstance(connectors, dict) else {}
+    all_items = []
+    for profile in PUBLISH_PLATFORMS.values():
+        item = asdict(profile)
+        pid = profile.platform_id
+        connector = _resolve_platform_connector(pid, connector_map)
+        item["connector_ready"] = _connector_is_ready(pid, connector)
+        item["connector_kind"] = _normalize_connector_kind(connector) if connector else "none"
+        if not item["connector_ready"]:
+            if pid == "youtube":
+                item["setup_hint"] = "请在设置页面连接 YouTube 账号"
+            elif pid == "blog":
+                item["setup_hint"] = ""
+            else:
+                item["setup_hint"] = "请在设置页面配置 Webhook 连接器"
+        else:
+            item["setup_hint"] = ""
+        all_items.append(item)
     return {
         "platforms": all_items,
         "groups": {

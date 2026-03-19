@@ -19,9 +19,16 @@
         <div v-if="platformsByGroup[groupKey]?.length" class="platform-group">
           <div class="platform-group-label">{{ L.contentPublish.platformGroups[groupKey] }}</div>
           <div class="platform-grid">
-            <label v-for="p in platformsByGroup[groupKey]" :key="p.platform_id" class="platform-chip" :class="{ selected: selectedPlatforms.has(p.platform_id) }">
+            <label
+              v-for="p in platformsByGroup[groupKey]" :key="p.platform_id"
+              class="platform-chip"
+              :class="{ selected: selectedPlatforms.has(p.platform_id), 'chip-not-ready': p.connector_ready === false }"
+              :title="p.connector_ready === false ? p.setup_hint : ''"
+            >
               <input type="checkbox" :checked="selectedPlatforms.has(p.platform_id)" @change="togglePlatform(p.platform_id)" />
               <span class="chip-name">{{ p.name }}</span>
+              <span v-if="p.connector_ready === false" class="chip-warn">⚠️</span>
+              <span v-if="p.connector_ready === true" class="chip-ok">✓</span>
               <span v-if="p.notes" class="chip-note">{{ p.notes }}</span>
             </label>
           </div>
@@ -355,6 +362,11 @@ h3 { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
 .platform-chip.selected { border-color: var(--accent); background: rgba(90,141,238,0.1); }
 .platform-chip input[type="checkbox"] { width: 14px; height: 14px; margin: 0; accent-color: var(--accent); }
 .chip-name { font-weight: 500; }
+.chip-warn { font-size: 12px; flex-shrink: 0; }
+.chip-ok { font-size: 11px; color: #34c759; flex-shrink: 0; }
+.chip-not-ready { border-style: dashed; opacity: 0.8; }
+.chip-not-ready:hover .chip-warn { animation: pulse 1s infinite; }
+@keyframes pulse { 50% { opacity: 0.5; } }
 .chip-note { font-size: 10px; color: var(--muted); }
 
 /* Advanced section */
