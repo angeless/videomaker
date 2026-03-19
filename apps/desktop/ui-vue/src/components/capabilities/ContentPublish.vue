@@ -73,6 +73,26 @@
         <span v-if="publishRun.result.summary?.failed" class="stat-item stat-fail">{{ L.contentPublish.result.failed }} <strong>{{ publishRun.result.summary.failed }}</strong></span>
         <span v-if="publishRun.result.summary?.blocked" class="stat-item stat-blocked">{{ L.contentPublish.result.blocked }} <strong>{{ publishRun.result.summary.blocked }}</strong></span>
       </div>
+      <!-- 错误恢复面板 -->
+      <div v-if="hasFailedSteps" class="recovery-panel">
+        <div class="recovery-title">{{ L.contentPublish.recovery.title }}</div>
+        <div v-if="errorClassSummary.length" class="recovery-errors">
+          <div v-for="ec in errorClassSummary" :key="ec.errorClass" class="recovery-error-item">
+            <span class="recovery-count">{{ ec.count }}</span>
+            <span>{{ L.contentPublish.recovery.platformsFailed }}</span>
+            <span class="recovery-class">{{ L.contentPublish.errors[ec.errorClass] || L.contentPublish.errors.unknown }}</span>
+          </div>
+        </div>
+        <div v-if="!errorClassSummary.length && !recoveryHint" class="recovery-fallback text-muted">{{ L.contentPublish.recovery.fallback }}</div>
+        <div class="recovery-actions">
+          <button v-if="recoveryScope === 'failed_only'" class="btn btn-sm" @click="rerunFailed" :disabled="loadingRerun">{{ loadingRerun ? L.contentPublish.actions.rerunning : L.contentPublish.recovery.rerunFailed }}</button>
+          <button v-else-if="recoveryScope === 'all'" class="btn btn-sm" @click="rerunAll" :disabled="loadingRerun">{{ loadingRerun ? L.contentPublish.actions.rerunning : L.contentPublish.recovery.rerunAll }}</button>
+          <button v-else class="btn btn-sm" @click="rerunFailed" :disabled="loadingRerun">{{ loadingRerun ? L.contentPublish.actions.rerunning : L.contentPublish.recovery.genericRetry }}</button>
+          <button v-if="recoveryErrorClasses.has('config_missing')" class="btn btn-sm" @click="goToSettings">{{ L.contentPublish.goToSettings }}</button>
+          <button v-if="recoveryErrorClasses.has('auth_failed')" class="btn btn-sm" @click="autoBootstrap">{{ L.contentPublish.recovery.reauth }}</button>
+        </div>
+      </div>
+
       <div v-for="step in (publishRun.result?.steps || [])" :key="step.platform" class="step-card">
         <span class="step-icon">{{ L.contentPublish.statusIcon[step.status] || L.contentPublish.statusIcon.unknown }}</span>
         <span class="step-platform">{{ platformName(step.platform) }}</span>
@@ -154,6 +174,19 @@ const platformsByGroup = computed(() => {
 const hasFailedSteps = computed(() =>
   (publishRun.value?.result?.steps || []).some(s => s.status === 'failed')
 )
+const recoveryHint = computed(() => publishRun.value?.recovery_hint || publishRun.value?.result?.recovery_hint || null)
+const recoveryScope = computed(() => recoveryHint.value?.rerun_scope || '')
+const recoveryErrorClasses = computed(() => new Set(recoveryHint.value?.error_classes || []))
+const errorClassSummary = computed(() => {
+  const steps = publishRun.value?.result?.steps || []
+  const counts = {}
+  for (const s of steps) {
+    if (s.status === 'failed' && s.error_class) {
+      counts[s.error_class] = (counts[s.error_class] || 0) + 1
+    }
+  }
+  return Object.entries(counts).map(([errorClass, count]) => ({ errorClass, count }))
+})
 
 // --- Helpers ---
 const platformNameMap = computed(() => {
@@ -253,6 +286,28 @@ async function rerunFailed() {
   }
 }
 
+async function rerunAll() {
+  if (loadingRerun.value) return
+  loadingRerun.value = true
+  try {
+    const runId = publishRun.value?.run_id
+    if (!runId) return
+    const data = await apiStore.api('POST', '/api/capabilities/content_publish/rerun', {
+      input_mode: inputMode.value, run_id: runId, session_id: sessionId.value,
+      dry_run: input.dry_run, rerun_failed_only: false,
+    })
+    if (data.error) { capStore.setMessage(`${L.contentPublish.result.failed}: ${data.error}`, 'error'); return }
+    publishRun.value = data.run || publishRun.value
+    capStore.setMessage(`${L.contentPublish.recovery.rerunAll}: ${L.common.success}`, 'success')
+  } finally {
+    loadingRerun.value = false
+  }
+}
+
+function goToSettings() {
+  window.location.hash = '#/settings'
+}
+
 async function loadHistory() {
   loadingHistory.value = true
   try {
@@ -330,6 +385,16 @@ h3 { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
 .detail-summary { font-size: 11px; color: var(--muted); cursor: pointer; }
 .result-pre { background: var(--surface2); padding: 12px; border-radius: 6px; font-size: 12px; overflow-x: auto; white-space: pre-wrap; max-height: 400px; overflow-y: auto; }
 .btn-xs { font-size: 11px; padding: 2px 8px; }
+
+/* Recovery panel */
+.recovery-panel { padding: 12px 14px; background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.25); border-radius: 8px; margin-bottom: 10px; }
+.recovery-title { font-size: 12px; font-weight: 600; color: #f87171; margin-bottom: 6px; }
+.recovery-errors { margin-bottom: 8px; }
+.recovery-error-item { font-size: 12px; margin-bottom: 2px; display: flex; gap: 4px; align-items: center; }
+.recovery-count { font-weight: 700; color: #f87171; min-width: 16px; }
+.recovery-class { color: var(--muted); }
+.recovery-fallback { font-size: 12px; margin-bottom: 8px; }
+.recovery-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 
 /* History */
 .history-card { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 6px; }

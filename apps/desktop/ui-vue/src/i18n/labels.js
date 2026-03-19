@@ -259,6 +259,15 @@ export const labels = {
     blockedReason: '未配置连接器',
     goToSettings: '前往设置',
     bootstrapFailed: '发布服务初始化失败，请检查网络后重试',
+    recovery: {
+      title: '问题诊断',
+      platformsFailed: '个平台',
+      rerunFailed: '重试失败平台',
+      rerunAll: '全部重新发布',
+      reauth: '重新授权',
+      fallback: '发布过程中出现问题，请检查设置后重试',
+      genericRetry: '重试',
+    },
     history: {
       title: '发布历史',
       refresh: '刷新',
