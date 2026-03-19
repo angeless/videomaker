@@ -14,7 +14,27 @@
     </div>
     <div v-if="result" class="cap-section">
       <div class="cap-subtitle">生成结果 (覆盖 {{ result.platform_results?.length || 0 }} 个平台)</div>
-      <pre class="result-pre">{{ JSON.stringify(result, null, 2) }}</pre>
+      <div v-for="pr in (result.platform_results || [])" :key="pr.platform" class="platform-card">
+        <div class="platform-name">{{ pr.platform }}</div>
+        <div v-if="pr.title" class="platform-field"><span class="field-label">标题</span>{{ pr.title }}</div>
+        <div v-if="pr.description" class="platform-field"><span class="field-label">描述</span>{{ pr.description }}</div>
+        <div v-if="pr.keywords && pr.keywords.length" class="platform-field">
+          <span class="field-label">关键词</span>
+          <span v-for="kw in pr.keywords" :key="kw" class="kw-tag">{{ kw }}</span>
+        </div>
+        <div v-if="pr.hashtags && pr.hashtags.length" class="platform-field">
+          <span class="field-label">标签</span>
+          <span class="field-text">{{ pr.hashtags.join(' ') }}</span>
+        </div>
+      </div>
+      <details v-if="result.warnings && result.warnings.length" style="margin-top:8px">
+        <summary class="detail-summary">警告 ({{ result.warnings.length }})</summary>
+        <div v-for="(w, i) in result.warnings" :key="i" class="warn-line">{{ w }}</div>
+      </details>
+      <details style="margin-top:8px">
+        <summary class="detail-summary">查看完整 JSON</summary>
+        <pre class="result-pre">{{ JSON.stringify(result, null, 2) }}</pre>
+      </details>
     </div>
   </div>
 </template>
@@ -80,6 +100,14 @@ h3 { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
 .cap-subtitle { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 8px; }
 .form-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .form-row label { width: 80px; font-size: 12px; color: var(--muted); flex-shrink: 0; }
+.platform-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 10px; }
+.platform-name { font-size: 13px; font-weight: 600; color: var(--accent); margin-bottom: 6px; }
+.platform-field { font-size: 12px; margin-bottom: 4px; line-height: 1.5; }
+.field-label { font-weight: 600; color: var(--muted); margin-right: 6px; }
+.field-text { color: var(--text); }
+.kw-tag { display: inline-block; font-size: 11px; padding: 1px 6px; background: rgba(90,141,238,0.12); color: var(--accent); border-radius: 10px; margin-right: 4px; }
+.detail-summary { font-size: 11px; color: var(--muted); cursor: pointer; }
+.warn-line { font-size: 11px; color: var(--warning, #f0ad4e); padding: 2px 0; }
 .result-pre { background: var(--surface2); padding: 12px; border-radius: 6px; font-size: 12px; overflow-x: auto; white-space: pre-wrap; max-height: 400px; overflow-y: auto; }
 .form-hint { font-size: 11px; color: var(--muted); margin-top: 6px; }
 </style>

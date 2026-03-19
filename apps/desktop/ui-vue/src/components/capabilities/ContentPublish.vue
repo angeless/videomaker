@@ -26,12 +26,33 @@
     </div>
 
     <div v-if="publishPlan" class="cap-section">
-      <div class="cap-subtitle">发布计划</div>
-      <pre class="result-pre">{{ JSON.stringify(publishPlan, null, 2) }}</pre>
+      <div class="cap-subtitle">发布计划 <span class="plan-badge" :class="publishPlan.dry_run ? 'badge-dry' : 'badge-live'">{{ publishPlan.dry_run ? '模拟' : '实际' }}</span></div>
+      <div class="stat-row">
+        <span class="stat-item">平台 <strong>{{ (publishPlan.platform_ids || []).length }}</strong></span>
+        <span class="stat-item">步骤 <strong>{{ (publishPlan.steps || []).length }}</strong></span>
+        <span class="stat-item">状态 <strong>{{ publishPlan.status || '—' }}</strong></span>
+      </div>
+      <div v-for="step in (publishPlan.steps || [])" :key="step.platform" class="step-card">
+        <span class="step-platform">{{ step.platform }}</span>
+        <span class="step-status" :class="'st-' + (step.status || 'planned')">{{ step.status || 'planned' }}</span>
+      </div>
+      <details style="margin-top:8px"><summary class="detail-summary">查看完整计划</summary><pre class="result-pre">{{ JSON.stringify(publishPlan, null, 2) }}</pre></details>
     </div>
     <div v-if="publishRun" class="cap-section">
       <div class="cap-subtitle">执行结果</div>
-      <pre class="result-pre">{{ JSON.stringify(publishRun, null, 2) }}</pre>
+      <div v-if="publishRun.result" class="stat-row">
+        <span class="stat-item">总数 <strong>{{ publishRun.result.summary?.total || 0 }}</strong></span>
+        <span class="stat-item" style="color:#34c759">成功 <strong>{{ publishRun.result.summary?.posted || 0 }}</strong></span>
+        <span v-if="publishRun.result.summary?.failed" class="stat-item" style="color:#f87171">失败 <strong>{{ publishRun.result.summary.failed }}</strong></span>
+        <span v-if="publishRun.result.summary?.blocked" class="stat-item" style="color:#f0ad4e">阻塞 <strong>{{ publishRun.result.summary.blocked }}</strong></span>
+      </div>
+      <div v-for="step in (publishRun.result?.steps || [])" :key="step.platform" class="step-card">
+        <span class="step-platform">{{ step.platform }}</span>
+        <span class="step-status" :class="'st-' + (step.status || 'unknown')">{{ step.status || 'unknown' }}</span>
+        <span v-if="step.error" class="step-error">{{ step.error }}</span>
+        <span v-if="step.auth_hint" class="step-hint">{{ step.auth_hint }}</span>
+      </div>
+      <details style="margin-top:8px"><summary class="detail-summary">查看完整 JSON</summary><pre class="result-pre">{{ JSON.stringify(publishRun, null, 2) }}</pre></details>
     </div>
   </div>
 </template>
@@ -148,5 +169,21 @@ h3 { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
 .form-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .form-row label { width: 80px; font-size: 12px; color: var(--muted); flex-shrink: 0; }
 .btn-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.stat-row { display: flex; flex-wrap: wrap; gap: 14px; padding: 10px 14px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; }
+.stat-item { font-size: 12px; }
+.stat-item strong { color: var(--accent); }
+.plan-badge { font-size: 10px; padding: 1px 6px; border-radius: 4px; margin-left: 6px; }
+.badge-dry { background: rgba(90,141,238,0.15); color: var(--accent); }
+.badge-live { background: rgba(52,199,89,0.15); color: #34c759; }
+.step-card { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--border); font-size: 12px; }
+.step-platform { font-weight: 600; min-width: 100px; }
+.step-status { font-size: 11px; padding: 1px 6px; border-radius: 4px; }
+.st-posted, .st-done { background: rgba(52,199,89,0.15); color: #34c759; }
+.st-failed { background: rgba(248,113,113,0.15); color: #f87171; }
+.st-blocked, .st-waiting_auth { background: rgba(240,173,78,0.15); color: #f0ad4e; }
+.st-planned, .st-dry_run { background: rgba(90,141,238,0.15); color: var(--accent); }
+.step-error { color: #f87171; font-size: 11px; }
+.step-hint { color: var(--muted); font-size: 11px; font-style: italic; }
+.detail-summary { font-size: 11px; color: var(--muted); cursor: pointer; }
 .result-pre { background: var(--surface2); padding: 12px; border-radius: 6px; font-size: 12px; overflow-x: auto; white-space: pre-wrap; max-height: 400px; overflow-y: auto; }
 </style>
