@@ -203,6 +203,7 @@ app.register_blueprint(
         load_publish_settings=lambda: _load_publish_settings(),
         save_publish_settings=lambda payload: _save_publish_settings(payload),
         mask_publish_connectors=lambda payload: _mask_publish_connectors(payload),
+        secret_store_getter=lambda: _secret_store,
     )
 )
 app.register_blueprint(
@@ -7509,9 +7510,85 @@ def _resolve_content_publish_content(
 def _resolve_content_publish_connectors(payload: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     connectors = payload.get("connectors", {})
     if isinstance(connectors, dict) and connectors:
-        return _normalize_publish_connectors(connectors)
-    saved = _load_publish_settings()
-    return saved.get("connectors", {}) if isinstance(saved.get("connectors"), dict) else {}
+        result = _normalize_publish_connectors(connectors)
+    else:
+        saved = _load_publish_settings()
+        result = saved.get("connectors", {}) if isinstance(saved.get("connectors"), dict) else {}
+    # Auto-inject YouTube OAuth token from secure_store
+    result = _inject_youtube_oauth_token(result)
+    return result
+
+
+def _inject_youtube_oauth_token(connectors: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    """If YouTube connector has no access_token, inject from secure_store OAuth."""
+    yt = connectors.get("youtube", {})
+    if isinstance(yt, dict) and yt.get("access_token"):
+        return connectors  # Already has a token, don't override
+    try:
+        raw = _secret_store.get("youtube_oauth")
+        if not raw:
+            return connectors
+        import json as _json
+        token_data = _json.loads(raw)
+        access_token = token_data.get("access_token", "")
+        if not access_token:
+            return connectors
+        # Auto-refresh if expired
+        expires_at = float(token_data.get("expires_at", 0))
+        if expires_at and (time.time() > expires_at - 300):
+            refreshed = _refresh_youtube_token(token_data)
+            if refreshed:
+                token_data = refreshed
+                access_token = token_data.get("access_token", "")
+        yt_connector = dict(yt) if isinstance(yt, dict) else {}
+        yt_connector.update({
+            "kind": "youtube_api",
+            "access_token": access_token,
+        })
+        connectors = dict(connectors)
+        connectors["youtube"] = yt_connector
+    except Exception:
+        pass
+    return connectors
+
+
+def _refresh_youtube_token(token_data: dict) -> Optional[dict]:
+    """Refresh YouTube OAuth token using refresh_token."""
+    refresh_token = token_data.get("refresh_token", "")
+    if not refresh_token:
+        return None
+    import os
+    client_id = os.environ.get("GOOGLE_CLIENT_ID", "").strip()
+    client_secret = os.environ.get("GOOGLE_CLIENT_SECRET", "").strip()
+    if not client_id or not client_secret:
+        return None
+    try:
+        import urllib.request
+        import urllib.parse
+        import json as _json
+        post_data = urllib.parse.urlencode({
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "refresh_token": refresh_token,
+            "grant_type": "refresh_token",
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            "https://oauth2.googleapis.com/token",
+            data=post_data,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            new_token = _json.loads(resp.read().decode("utf-8"))
+        new_access = new_token.get("access_token", "")
+        if not new_access:
+            return None
+        token_data["access_token"] = new_access
+        token_data["expires_at"] = time.time() + int(new_token.get("expires_in", 3600))
+        # Persist refreshed token
+        _secret_store.set("youtube_oauth", _json.dumps(token_data, ensure_ascii=False))
+        return token_data
+    except Exception:
+        return None
 
 
 # ── 工厂函数（供 app.py 调用）─────────────────────────────────────────

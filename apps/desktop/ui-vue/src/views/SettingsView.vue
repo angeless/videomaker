@@ -95,6 +95,40 @@
           </button>
         </div>
 
+        <!-- 平台连接 -->
+        <div class="card">
+          <div class="card-header">🔗 {{ labels.settings.platformConnections.title }}</div>
+
+          <div class="form-group platform-row">
+            <div class="platform-info">
+              <strong>{{ labels.settings.platformConnections.youtube.title }}</strong>
+              <span class="badge" :class="youtubeConnected ? 'badge-success' : 'badge-warn'">
+                {{ youtubeConnected ? labels.settings.platformConnections.youtube.connected : labels.settings.platformConnections.youtube.notConnected }}
+              </span>
+            </div>
+            <div v-if="youtubeConnected" class="platform-detail">
+              <span>{{ labels.settings.platformConnections.youtube.channel }}：<strong>{{ youtubeChannel }}</strong></span>
+            </div>
+            <div v-if="youtubeWaiting" class="form-hint" style="color: var(--accent)">
+              {{ labels.settings.platformConnections.youtube.waitingAuth }}
+            </div>
+            <div class="btn-row" style="margin-top: 8px">
+              <button
+                v-if="!youtubeConnected"
+                class="btn btn-primary btn-sm"
+                :disabled="youtubeLoading"
+                @click="connectYouTube"
+              >{{ youtubeLoading ? labels.settings.platformConnections.youtube.connecting : labels.settings.platformConnections.youtube.connect }}</button>
+              <button
+                v-if="youtubeConnected"
+                class="btn btn-ghost btn-sm"
+                :disabled="youtubeLoading"
+                @click="disconnectYouTube"
+              >{{ youtubeLoading ? labels.settings.platformConnections.youtube.disconnecting : labels.settings.platformConnections.youtube.disconnect }}</button>
+            </div>
+          </div>
+        </div>
+
         <!-- 界面设置 -->
         <div class="card">
           <div class="card-header">🎨 {{ labels.settings.ui.title }}</div>
@@ -207,6 +241,60 @@ const v = useValidation({
   ai_base_url: [{ type: 'url', message: '请输入合法的 URL 地址' }],
 })
 
+// ── YouTube OAuth ──
+const youtubeConnected = ref(false)
+const youtubeChannel = ref('')
+const youtubeLoading = ref(false)
+const youtubeWaiting = ref(false)
+let ytPollTimer = null
+
+async function loadYouTubeStatus() {
+  const data = await apiStore.api('GET', '/api/settings/oauth/youtube/status')
+  if (data && data.connected) {
+    youtubeConnected.value = true
+    youtubeChannel.value = data.channel_name || ''
+    youtubeWaiting.value = false
+  } else {
+    youtubeConnected.value = false
+    youtubeChannel.value = ''
+  }
+}
+
+async function connectYouTube() {
+  youtubeLoading.value = true
+  const data = await apiStore.api('POST', '/api/settings/oauth/youtube/start', {})
+  youtubeLoading.value = false
+  if (data && data.error) {
+    appStore.showToast?.(data.error, 'danger')
+    return
+  }
+  // Start polling for connection
+  youtubeWaiting.value = true
+  ytPollTimer = setInterval(async () => {
+    const status = await apiStore.api('GET', '/api/settings/oauth/youtube/status')
+    if (status && status.connected) {
+      youtubeConnected.value = true
+      youtubeChannel.value = status.channel_name || ''
+      youtubeWaiting.value = false
+      clearInterval(ytPollTimer)
+      ytPollTimer = null
+    }
+  }, 3000)
+  // Stop polling after 5 minutes
+  setTimeout(() => {
+    if (ytPollTimer) { clearInterval(ytPollTimer); ytPollTimer = null; youtubeWaiting.value = false }
+  }, 300000)
+}
+
+async function disconnectYouTube() {
+  if (!confirm(labels.settings.platformConnections.youtube.disconnectConfirm)) return
+  youtubeLoading.value = true
+  await apiStore.api('POST', '/api/settings/oauth/youtube/disconnect', {})
+  youtubeLoading.value = false
+  youtubeConnected.value = false
+  youtubeChannel.value = ''
+}
+
 // 并发任务数
 const queueMaxRunning = ref(2)
 const queueLoading = ref(false)
@@ -249,7 +337,8 @@ function fillUrl() {
 
 onMounted(async () => {
   await settings.loadAiSettings()
-  await loadQueueConfig()
+  loadQueueConfig()
+  loadYouTubeStatus()
 })
 </script>
 
@@ -266,4 +355,9 @@ onMounted(async () => {
   gap: 8px;
   font-size: 13px;
 }
+
+.platform-row { margin-bottom: 4px; }
+.platform-info { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.platform-detail { font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+.btn-row { display: flex; gap: 8px; }
 </style>

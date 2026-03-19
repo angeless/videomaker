@@ -358,6 +358,23 @@ export const labels = {
       autoOpenLast: '启动时自动打开上次项目',
       save: '保存设置',
     },
+    platformConnections: {
+      title: '平台连接',
+      youtube: {
+        title: 'YouTube',
+        connect: '连接 YouTube',
+        connecting: '正在跳转授权…',
+        disconnect: '断开连接',
+        disconnecting: '断开中…',
+        connected: '已连接',
+        notConnected: '未连接',
+        channel: '频道',
+        connectedAt: '连接时间',
+        waitingAuth: '等待浏览器授权…请在浏览器中完成授权后返回此页面',
+        noClientId: '未配置 Google OAuth Client ID，请设置 GOOGLE_CLIENT_ID 环境变量',
+        disconnectConfirm: '确定要断开 YouTube 连接吗？断开后需重新授权才能发布到 YouTube。',
+      },
+    },
   },
 
   // ── 项目 ──
