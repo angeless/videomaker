@@ -57,6 +57,8 @@ import ArticleExpand from './ArticleExpand.vue'
 import PublishPrep from './PublishPrep.vue'
 import SocialExport from './SocialExport.vue'
 import ContentPublish from './ContentPublish.vue'
+import AgentTemplates from './AgentTemplates.vue'
+import AgentObservability from './AgentObservability.vue'
 
 const panelMap = {
   topic_library: TopicLibrary,
@@ -71,6 +73,8 @@ const panelMap = {
   publish_prep: PublishPrep,
   social_export: SocialExport,
   content_publish: ContentPublish,
+  agent_templates: AgentTemplates,
+  agent_observability: AgentObservability,
 }
 
 const route = useRoute()
