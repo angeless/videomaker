@@ -849,6 +849,13 @@ class GlobalMediaLibrary:
         if not jsonl_path.exists():
             return  # seed data not available, skip silently
 
+        # Guard against macOS TCC PermissionError (~/Downloads may be
+        # metadata-readable but content-blocked in sandboxed environments).
+        try:
+            jsonl_path.open("r").close()
+        except (PermissionError, OSError):
+            return
+
         # ── Step 1: Insert tag_category ──
         # ChatGPT's 12 top_categories + our extra system categories
         category_map = {}  # category_code → category_id

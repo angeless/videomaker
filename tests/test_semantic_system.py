@@ -26,9 +26,21 @@ if _mod_name in sys.modules:
 # Skip entire module if seed data directory doesn't exist
 # ---------------------------------------------------------------------------
 _SEED_DIR = Path(os.path.expanduser("~/Downloads/语义数据库-chatgpt-20260306"))
+_SEED_JSONL = _SEED_DIR / "semantic_keyword_library_flat.jsonl"
+
+
+def _seed_data_readable():
+    """Check seed data is both present and readable (macOS TCC may block ~/Downloads)."""
+    try:
+        _SEED_JSONL.open("r").close()
+        return True
+    except (PermissionError, OSError, FileNotFoundError):
+        return False
+
+
 pytestmark = pytest.mark.skipif(
-    not _SEED_DIR.exists(),
-    reason="Seed data directory not available",
+    not _seed_data_readable(),
+    reason="Seed data directory not available or not readable",
 )
 
 
