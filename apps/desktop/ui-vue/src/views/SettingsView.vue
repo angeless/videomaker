@@ -279,7 +279,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useAppStore } from '../stores/app.js'
 import { useApiStore } from '../stores/api.js'
 import { useSettingsStore } from '../stores/settings.js'
