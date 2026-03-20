@@ -1,0 +1,1768 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VideoEditor — Design System v1.0</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ════════════════════════════════════════════════════════════════════
+   FOUNDATION — Design Tokens
+   ════════════════════════════════════════════════════════════════════ */
+
+/* ── Dark Theme (Default) ─────────────────────────────────────────── */
+[data-theme="dark"] {
+  /* Background */
+  --bg-base:      #0f0f0f;
+  --bg-surface:   #1a1a1a;
+  --bg-elevated:  #222222;
+  --bg-inset:     #0a0a0a;
+  --bg-canvas:    #111111;
+
+  /* Text */
+  --text-primary:   #e8e8e8;
+  --text-secondary: #a0a0a0;
+  --text-tertiary:  #6b7280;
+  --text-inverse:   #111111;
+
+  /* Accent */
+  --accent-main:   #5a8dee;
+  --accent-hover:  #4b7ddb;
+  --accent-soft:   rgba(90, 141, 238, 0.12);
+  --accent-glow:   rgba(90, 141, 238, 0.3);
+  --accent2:       #8b5cf6;
+  --accent2-soft:  rgba(139, 92, 246, 0.12);
+
+  /* Border */
+  --border-faint:   #1e1e1e;
+  --border-default: #2e2e2e;
+  --border-strong:  #404040;
+  --border-accent:  var(--accent-main);
+
+  /* Semantic */
+  --success:      #34d399;
+  --success-soft:  rgba(52, 211, 153, 0.10);
+  --warning:      #fbbf24;
+  --warning-soft:  rgba(251, 191, 36, 0.10);
+  --error:        #f87171;
+  --error-soft:    rgba(248, 113, 113, 0.10);
+  --info:         #60a5fa;
+  --info-soft:     rgba(96, 165, 250, 0.10);
+
+  /* Shadow */
+  --shadow-sm:  0 1px 2px rgba(0,0,0,0.3);
+  --shadow-md:  0 4px 12px rgba(0,0,0,0.4);
+  --shadow-lg:  0 8px 24px rgba(0,0,0,0.5);
+  --shadow-xl:  0 16px 48px rgba(0,0,0,0.6);
+}
+
+/* ── Light Theme ──────────────────────────────────────────────────── */
+[data-theme="light"] {
+  --bg-base:      #f5f5f7;
+  --bg-surface:   #ffffff;
+  --bg-elevated:  #f0f0f2;
+  --bg-inset:     #e8e8ec;
+  --bg-canvas:    #fafafa;
+
+  --text-primary:   #1a1a1a;
+  --text-secondary: #555555;
+  --text-tertiary:  #888888;
+  --text-inverse:   #ffffff;
+
+  --accent-main:   #3b6fd4;
+  --accent-hover:  #2f5cb8;
+  --accent-soft:   rgba(59, 111, 212, 0.08);
+  --accent-glow:   rgba(59, 111, 212, 0.15);
+  --accent2:       #7c3aed;
+  --accent2-soft:  rgba(124, 58, 237, 0.08);
+
+  --border-faint:   #e5e5e5;
+  --border-default: #d4d4d4;
+  --border-strong:  #b0b0b0;
+  --border-accent:  var(--accent-main);
+
+  --success:      #16a34a;
+  --success-soft:  rgba(22, 163, 74, 0.08);
+  --warning:      #d97706;
+  --warning-soft:  rgba(217, 119, 6, 0.08);
+  --error:        #dc2626;
+  --error-soft:    rgba(220, 38, 38, 0.08);
+  --info:         #2563eb;
+  --info-soft:     rgba(37, 99, 235, 0.08);
+
+  --shadow-sm:  0 1px 2px rgba(0,0,0,0.06);
+  --shadow-md:  0 4px 12px rgba(0,0,0,0.08);
+  --shadow-lg:  0 8px 24px rgba(0,0,0,0.12);
+  --shadow-xl:  0 16px 48px rgba(0,0,0,0.16);
+}
+
+/* ── Typography Tokens ────────────────────────────────────────────── */
+:root {
+  --font-sans: 'Inter', -apple-system, 'SF Pro Text', 'PingFang SC', 'Helvetica Neue', sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Menlo', monospace;
+
+  --text-xs:   11px;
+  --text-sm:   12px;
+  --text-base: 13px;
+  --text-md:   14px;
+  --text-lg:   15px;
+  --text-xl:   18px;
+  --text-2xl:  22px;
+  --text-3xl:  28px;
+  --text-4xl:  36px;
+
+  --weight-regular: 400;
+  --weight-medium:  500;
+  --weight-semi:    600;
+  --weight-bold:    700;
+
+  --leading-tight:  1.3;
+  --leading-normal: 1.6;
+  --leading-loose:  1.8;
+}
+
+/* ── Spacing Tokens (4px grid) ────────────────────────────────────── */
+:root {
+  --space-0:  0;
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+}
+
+/* ── Border & Radius Tokens ───────────────────────────────────────── */
+:root {
+  --radius-sm:   4px;
+  --radius-md:   6px;
+  --radius-lg:   8px;
+  --radius-xl:  10px;
+  --radius-2xl: 12px;
+  --radius-full: 9999px;
+}
+
+/* ── Animation Tokens ─────────────────────────────────────────────── */
+:root {
+  --duration-fast:    0.1s;
+  --duration-normal:  0.15s;
+  --duration-slow:    0.25s;
+  --duration-slower:  0.35s;
+  --ease-default: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-in:      cubic-bezier(0.4, 0, 1, 1);
+  --ease-out:     cubic-bezier(0, 0, 0.2, 1);
+  --ease-bounce:  cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   GLOBAL RESET & BASE
+   ════════════════════════════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a { color: var(--accent-main); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+code, pre { font-family: var(--font-mono); }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
+
+/* ════════════════════════════════════════════════════════════════════
+   DOCUMENT LAYOUT
+   ════════════════════════════════════════════════════════════════════ */
+.doc-layout {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── Top Bar ──────────────────────────────────────────────────────── */
+.topbar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 52px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-default);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-6);
+  z-index: 100;
+  gap: var(--space-4);
+}
+.topbar-title {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semi);
+  letter-spacing: -0.01em;
+}
+.topbar-version {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  background: var(--bg-elevated);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+.topbar-actions {
+  margin-left: auto;
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* ── Sidebar Navigation ──────────────────────────────────────────── */
+.sidebar {
+  position: fixed;
+  top: 52px;
+  left: 0;
+  bottom: 0;
+  width: 220px;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-default);
+  overflow-y: auto;
+  padding: var(--space-4) 0;
+  z-index: 90;
+}
+.sidebar-group {
+  margin-bottom: var(--space-3);
+}
+.sidebar-group-label {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  letter-spacing: 0.08em;
+  padding: var(--space-1) var(--space-5);
+  margin-bottom: var(--space-1);
+  font-weight: var(--weight-medium);
+}
+.sidebar-link {
+  display: block;
+  padding: 6px var(--space-5);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  transition: all var(--duration-fast);
+}
+.sidebar-link:hover {
+  color: var(--text-primary);
+  background: var(--accent-soft);
+  text-decoration: none;
+}
+.sidebar-link.active {
+  color: var(--accent-main);
+  border-left-color: var(--accent-main);
+  background: var(--accent-soft);
+  font-weight: var(--weight-medium);
+}
+
+/* ── Main Content ─────────────────────────────────────────────────── */
+.content {
+  margin-top: 52px;
+  margin-left: 220px;
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-8) var(--space-10);
+  max-width: 960px;
+}
+
+/* ── Section ──────────────────────────────────────────────────────── */
+.section {
+  margin-bottom: var(--space-16);
+}
+.section-title {
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  margin-bottom: var(--space-2);
+  letter-spacing: -0.02em;
+}
+.section-desc {
+  color: var(--text-secondary);
+  font-size: var(--text-md);
+  margin-bottom: var(--space-6);
+  line-height: var(--leading-loose);
+}
+.subsection {
+  margin-bottom: var(--space-8);
+}
+.subsection-title {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semi);
+  margin-bottom: var(--space-3);
+}
+
+/* ── Demo Row ─────────────────────────────────────────────────────── */
+.demo-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  margin-bottom: var(--space-4);
+}
+.demo-box {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xl);
+  padding: var(--space-5);
+  margin-bottom: var(--space-4);
+}
+.demo-label {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-1);
+  font-family: var(--font-mono);
+}
+
+/* ── Token Table ──────────────────────────────────────────────────── */
+.token-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-4);
+}
+.token-table th {
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border-default);
+  color: var(--text-tertiary);
+  font-weight: var(--weight-medium);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.token-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border-faint);
+  vertical-align: middle;
+}
+.token-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--accent-main);
+}
+
+/* ── Color Swatch ─────────────────────────────────────────────────── */
+.swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+.swatch {
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+}
+.swatch-color {
+  height: 56px;
+}
+.swatch-info {
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-surface);
+}
+.swatch-var {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--accent-main);
+  display: block;
+}
+.swatch-value {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   COMPONENTS
+   ════════════════════════════════════════════════════════════════════ */
+
+/* ── Buttons ──────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: var(--radius-lg);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: background var(--duration-normal), opacity var(--duration-normal), box-shadow var(--duration-normal);
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn:focus-visible { outline: 2px solid var(--accent-main); outline-offset: 2px; }
+
+.btn-primary { background: var(--accent-main); color: var(--text-inverse); }
+.btn-primary:hover:not(:disabled) { background: var(--accent-hover); box-shadow: 0 0 12px var(--accent-glow); }
+
+.btn-secondary { background: var(--accent2); color: #fff; }
+.btn-secondary:hover:not(:disabled) { background: #7c4fe0; }
+
+.btn-success { background: var(--success); color: var(--text-inverse); }
+.btn-success:hover:not(:disabled) { filter: brightness(0.9); }
+
+.btn-warn { background: var(--warning); color: var(--text-inverse); }
+
+.btn-danger { background: var(--error); color: #fff; }
+.btn-danger:hover:not(:disabled) { filter: brightness(0.9); }
+
+.btn-ghost { background: transparent; color: var(--text-primary); border: 1px solid var(--border-default); }
+.btn-ghost:hover:not(:disabled) { background: var(--bg-elevated); }
+
+.btn-text { background: transparent; color: var(--accent-main); border: none; padding: 8px 12px; }
+.btn-text:hover:not(:disabled) { background: var(--accent-soft); }
+
+.btn-sm { padding: 4px 10px; font-size: var(--text-sm); }
+.btn-lg { padding: 12px 24px; font-size: var(--text-lg); }
+.btn-icon { padding: 8px; aspect-ratio: 1; }
+
+/* ── Form Controls ────────────────────────────────────────────────── */
+.form-group { margin-bottom: var(--space-4); }
+.form-label {
+  display: block;
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-1);
+  font-weight: var(--weight-medium);
+}
+.form-input, .form-select, .form-textarea {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--bg-base);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  font-family: var(--font-sans);
+  outline: none;
+  transition: border-color var(--duration-normal);
+}
+.form-input:focus, .form-select:focus, .form-textarea:focus {
+  border-color: var(--accent-main);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.form-input::placeholder { color: var(--text-tertiary); }
+.form-textarea { min-height: 80px; resize: vertical; }
+.form-select { appearance: none; cursor: pointer; }
+.form-hint { font-size: var(--text-xs); color: var(--text-tertiary); margin-top: var(--space-1); }
+.form-error { font-size: var(--text-xs); color: var(--error); margin-top: var(--space-1); }
+.form-input.has-error { border-color: var(--error); }
+.form-input.has-error:focus { box-shadow: 0 0 0 3px var(--error-soft); }
+.form-row { display: flex; gap: var(--space-3); align-items: flex-end; }
+
+/* ── Toggle Switch ────────────────────────────────────────────────── */
+.toggle {
+  position: relative;
+  width: 40px; height: 22px;
+  background: var(--border-strong);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: background var(--duration-normal);
+  border: none;
+}
+.toggle::after {
+  content: '';
+  position: absolute;
+  top: 3px; left: 3px;
+  width: 16px; height: 16px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform var(--duration-normal) var(--ease-bounce);
+}
+.toggle.active { background: var(--accent-main); }
+.toggle.active::after { transform: translateX(18px); }
+
+/* ── Cards ────────────────────────────────────────────────────────── */
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xl);
+  padding: var(--space-5);
+  transition: border-color var(--duration-normal), box-shadow var(--duration-normal);
+}
+.card:hover { border-color: var(--border-strong); }
+.card-header {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semi);
+  margin-bottom: var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.card-body { color: var(--text-secondary); font-size: var(--text-base); }
+.card-footer {
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-faint);
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+.stat-card {
+  text-align: center;
+  padding: var(--space-6);
+}
+.stat-value {
+  font-size: var(--text-3xl);
+  font-weight: var(--weight-bold);
+  font-family: var(--font-mono);
+}
+.stat-label {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  margin-top: var(--space-1);
+}
+
+/* ── Badges & Tags ────────────────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-2xl);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  line-height: 1.6;
+}
+.badge-info    { background: var(--info-soft);    color: var(--info);    border: 1px solid var(--info); }
+.badge-success { background: var(--success-soft); color: var(--success); border: 1px solid var(--success); }
+.badge-warn    { background: var(--warning-soft); color: var(--warning); border: 1px solid var(--warning); }
+.badge-danger  { background: var(--error-soft);   color: var(--error);   border: 1px solid var(--error); }
+.badge-accent  { background: var(--accent-soft);  color: var(--accent-main); border: 1px solid var(--accent-main); }
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-faint);
+}
+.tag-removable { cursor: pointer; }
+.tag-removable:hover { border-color: var(--error); color: var(--error); }
+
+/* ── Progress ─────────────────────────────────────────────────────── */
+.progress-bar {
+  width: 100%;
+  height: 6px;
+  background: var(--bg-elevated);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent-main);
+  transition: width var(--duration-slow) var(--ease-default);
+}
+.progress-fill.success { background: var(--success); }
+.progress-fill.warn    { background: var(--warning); }
+.progress-fill.danger  { background: var(--error); }
+
+/* ── Tabs ─────────────────────────────────────────────────────────── */
+.tabs {
+  display: flex;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--border-default);
+  margin-bottom: var(--space-5);
+}
+.tab {
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-base);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border: none;
+  background: none;
+  font-family: var(--font-sans);
+  font-weight: var(--weight-medium);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color var(--duration-fast), border-color var(--duration-fast);
+}
+.tab:hover { color: var(--text-primary); }
+.tab.active {
+  color: var(--accent-main);
+  border-bottom-color: var(--accent-main);
+}
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ── Toast ────────────────────────────────────────────────────────── */
+.toast-demo {
+  padding: 10px 16px;
+  border-radius: var(--radius-lg);
+  font-size: var(--text-base);
+  max-width: 400px;
+  box-shadow: var(--shadow-md);
+  background: var(--bg-elevated);
+  margin-bottom: var(--space-2);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.toast-info    { border-left: 3px solid var(--info);    color: var(--text-primary); }
+.toast-success { border-left: 3px solid var(--success); color: var(--success); }
+.toast-warn    { border-left: 3px solid var(--warning); color: var(--warning); }
+.toast-error   { border-left: 3px solid var(--error);   color: var(--error); }
+
+/* ── Modal ────────────────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--duration-slow), visibility var(--duration-slow);
+}
+.modal-overlay.open { opacity: 1; visibility: visible; }
+.modal {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xl);
+  width: 420px;
+  max-width: 90vw;
+  box-shadow: var(--shadow-xl);
+  transform: scale(0.95) translateY(10px);
+  transition: transform var(--duration-slow) var(--ease-out);
+}
+.modal-overlay.open .modal { transform: scale(1) translateY(0); }
+.modal-header {
+  padding: var(--space-5);
+  border-bottom: 1px solid var(--border-faint);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semi);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.modal-close {
+  background: none; border: none; color: var(--text-tertiary);
+  cursor: pointer; font-size: 18px; padding: 4px;
+}
+.modal-close:hover { color: var(--text-primary); }
+.modal-body { padding: var(--space-5); color: var(--text-secondary); }
+.modal-footer {
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--border-faint);
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+/* ── Data Table ───────────────────────────────────────────────────── */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-base);
+}
+.data-table th {
+  text-align: left;
+  padding: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  font-weight: var(--weight-medium);
+  border-bottom: 1px solid var(--border-default);
+  cursor: pointer;
+  user-select: none;
+}
+.data-table th:hover { color: var(--text-primary); }
+.data-table td {
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--border-faint);
+}
+.data-table tr:hover td { background: var(--accent-soft); }
+.data-table .row-selected td { background: var(--accent-soft); }
+
+/* ── Tooltip ──────────────────────────────────────────────────────── */
+.tooltip-wrap { position: relative; display: inline-block; }
+.tooltip-text {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) scale(0.9);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--border-default);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-fast), transform var(--duration-fast);
+}
+.tooltip-wrap:hover .tooltip-text {
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+}
+
+/* ── Skeleton ─────────────────────────────────────────────────────── */
+.skeleton {
+  background: linear-gradient(90deg, var(--bg-elevated) 25%, var(--border-faint) 50%, var(--bg-elevated) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s infinite;
+  border-radius: var(--radius-md);
+}
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Empty State ──────────────────────────────────────────────────── */
+.empty-state {
+  text-align: center;
+  padding: var(--space-12) var(--space-6);
+  color: var(--text-tertiary);
+}
+.empty-state-icon { font-size: 48px; margin-bottom: var(--space-3); opacity: 0.5; }
+.empty-state-title { font-size: var(--text-lg); font-weight: var(--weight-semi); color: var(--text-secondary); margin-bottom: var(--space-2); }
+.empty-state-desc { font-size: var(--text-base); max-width: 320px; margin: 0 auto var(--space-4); }
+
+/* ── Asset Card (Business Component) ──────────────────────────────── */
+.asset-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color var(--duration-normal), box-shadow var(--duration-normal), transform var(--duration-normal);
+}
+.asset-card:hover {
+  border-color: var(--accent-main);
+  box-shadow: 0 0 0 1px var(--accent-main);
+  transform: translateY(-1px);
+}
+.asset-thumbnail {
+  width: 100%;
+  aspect-ratio: 16/9;
+  background: var(--bg-inset);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  font-size: var(--text-3xl);
+  position: relative;
+}
+.asset-duration {
+  position: absolute;
+  bottom: 6px; right: 6px;
+  background: rgba(0,0,0,0.7);
+  color: #fff;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  font-family: var(--font-mono);
+}
+.asset-info { padding: var(--space-3); }
+.asset-name {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.asset-meta {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  margin-top: var(--space-1);
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* ── Workflow Stepper (Business Component) ─────────────────────────── */
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-3) 0;
+}
+.step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+}
+.step-number {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  flex-shrink: 0;
+}
+.step.completed .step-number {
+  background: var(--success);
+  color: var(--text-inverse);
+  border-color: var(--success);
+}
+.step.active .step-number {
+  background: var(--accent-main);
+  color: var(--text-inverse);
+  border-color: var(--accent-main);
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+.step.active { color: var(--text-primary); font-weight: var(--weight-medium); }
+.step-connector {
+  width: 32px; height: 1px;
+  background: var(--border-default);
+  flex-shrink: 0;
+}
+.step.completed + .step-connector { background: var(--success); }
+
+/* ── Checklist ────────────────────────────────────────────────────── */
+.checklist { list-style: none; }
+.checklist-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  cursor: pointer;
+  user-select: none;
+}
+.checklist-box {
+  width: 18px; height: 18px;
+  border: 2px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--duration-fast);
+}
+.checklist-item.checked .checklist-box {
+  background: var(--accent-main);
+  border-color: var(--accent-main);
+}
+.checklist-item.checked .checklist-box::after {
+  content: '✓';
+  color: #fff;
+  font-size: 12px;
+}
+.checklist-text { font-size: var(--text-base); line-height: 1.5; }
+.checklist-item.checked .checklist-text {
+  text-decoration: line-through;
+  color: var(--text-tertiary);
+}
+
+/* ── Spacing Visual ───────────────────────────────────────────────── */
+.spacing-demo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+.spacing-block {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-main);
+  border-radius: 2px;
+  height: 24px;
+}
+
+/* ── Radius Visual ────────────────────────────────────────────────── */
+.radius-demo {
+  width: 64px; height: 64px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-main);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  color: var(--accent-main);
+}
+
+/* ── Shadow Visual ────────────────────────────────────────────────── */
+.shadow-demo {
+  width: 100px; height: 60px;
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  color: var(--text-tertiary);
+}
+
+/* ── Animation Demo ───────────────────────────────────────────────── */
+.anim-demo {
+  display: flex;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.anim-box {
+  width: 80px;
+  height: 80px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-main);
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  color: var(--accent-main);
+  cursor: pointer;
+  transition-property: transform, background, box-shadow;
+}
+.anim-box[data-ease="default"]  { transition-timing-function: var(--ease-default); transition-duration: var(--duration-normal); }
+.anim-box[data-ease="bounce"]   { transition-timing-function: var(--ease-bounce);  transition-duration: var(--duration-slow); }
+.anim-box[data-ease="ease-out"] { transition-timing-function: var(--ease-out);     transition-duration: var(--duration-slow); }
+.anim-box:hover {
+  transform: scale(1.08);
+  background: var(--accent-main);
+  color: var(--text-inverse);
+  box-shadow: 0 0 16px var(--accent-glow);
+}
+
+/* ── Layout Demo ──────────────────────────────────────────────────── */
+.layout-demo {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  height: 200px;
+  display: flex;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+.layout-sidebar-demo {
+  width: 60px;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-default);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  writing-mode: vertical-rl;
+}
+.layout-main-demo {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.layout-topbar-demo {
+  height: 32px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-default);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.layout-content-demo {
+  flex: 1;
+  background: var(--bg-base);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.layout-panel-demo {
+  width: 80px;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border-default);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  writing-mode: vertical-rl;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .sidebar { display: none; }
+  .content { margin-left: 0; padding: var(--space-4); }
+}
+
+@keyframes toast-in {
+  from { transform: translateY(-12px); opacity: 0; }
+  to   { transform: translateY(0);     opacity: 1; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     TOP BAR
+     ═══════════════════════════════════════════════════════════════════ -->
+<div class="topbar">
+  <span class="topbar-title">VideoEditor Design System</span>
+  <span class="topbar-version">v1.0</span>
+  <div class="topbar-actions">
+    <button class="btn btn-ghost btn-sm" id="theme-toggle" onclick="toggleTheme()">
+      <span id="theme-icon">☀️</span> Light
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     SIDEBAR NAVIGATION
+     ═══════════════════════════════════════════════════════════════════ -->
+<nav class="sidebar" id="sidebar">
+  <div class="sidebar-group">
+    <div class="sidebar-group-label">Foundation</div>
+    <a class="sidebar-link" href="#colors">Color System</a>
+    <a class="sidebar-link" href="#typography">Typography</a>
+    <a class="sidebar-link" href="#spacing">Spacing</a>
+    <a class="sidebar-link" href="#borders">Borders & Shadows</a>
+  </div>
+  <div class="sidebar-group">
+    <div class="sidebar-group-label">Components</div>
+    <a class="sidebar-link" href="#buttons">Buttons</a>
+    <a class="sidebar-link" href="#forms">Form Inputs</a>
+    <a class="sidebar-link" href="#cards">Cards</a>
+    <a class="sidebar-link" href="#badges">Tags & Badges</a>
+    <a class="sidebar-link" href="#progress">Progress & Status</a>
+    <a class="sidebar-link" href="#tabs-section">Tabs</a>
+    <a class="sidebar-link" href="#toasts">Toast Messages</a>
+    <a class="sidebar-link" href="#modals">Modals & Dialogs</a>
+    <a class="sidebar-link" href="#tables">Data Tables</a>
+  </div>
+  <div class="sidebar-group">
+    <div class="sidebar-group-label">Business</div>
+    <a class="sidebar-link" href="#asset-cards">Asset Card</a>
+    <a class="sidebar-link" href="#stepper-section">Workflow Stepper</a>
+  </div>
+  <div class="sidebar-group">
+    <div class="sidebar-group-label">Feedback</div>
+    <a class="sidebar-link" href="#empty-loading">Loading & Empty</a>
+    <a class="sidebar-link" href="#animations">Animations</a>
+  </div>
+  <div class="sidebar-group">
+    <div class="sidebar-group-label">Patterns</div>
+    <a class="sidebar-link" href="#layout">Layout System</a>
+  </div>
+  <div class="sidebar-group">
+    <div class="sidebar-group-label">Philosophy</div>
+    <a class="sidebar-link" href="#principles">Design Principles</a>
+    <a class="sidebar-link" href="#checklist">Self-Check</a>
+  </div>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     MAIN CONTENT
+     ═══════════════════════════════════════════════════════════════════ -->
+<main class="content" id="content">
+
+  <!-- ── 1. COLOR SYSTEM ──────────────────────────────────────────── -->
+  <section class="section" id="colors">
+    <h2 class="section-title">Color System</h2>
+    <p class="section-desc">双主题 CSS Custom Properties 色彩体系。所有组件只引用 Token，不硬编码色值。</p>
+
+    <div class="subsection">
+      <h3 class="subsection-title">Background</h3>
+      <div class="swatch-grid">
+        <div class="swatch"><div class="swatch-color" style="background:var(--bg-base)"></div><div class="swatch-info"><span class="swatch-var">--bg-base</span><span class="swatch-value">Dark: #0f0f0f</span></div></div>
+        <div class="swatch"><div class="swatch-color" style="background:var(--bg-surface)"></div><div class="swatch-info"><span class="swatch-var">--bg-surface</span><span class="swatch-value">Dark: #1a1a1a</span></div></div>
+        <div class="swatch"><div class="swatch-color" style="background:var(--bg-elevated)"></div><div class="swatch-info"><span class="swatch-var">--bg-elevated</span><span class="swatch-value">Dark: #222222</span></div></div>
+        <div class="swatch"><div class="swatch-color" style="background:var(--bg-inset)"></div><div class="swatch-info"><span class="swatch-var">--bg-inset</span><span class="swatch-value">Dark: #0a0a0a</span></div></div>
+        <div class="swatch"><div class="swatch-color" style="background:var(--bg-canvas)"></div><div class="swatch-info"><span class="swatch-var">--bg-canvas</span><span class="swatch-value">Dark: #111111</span></div></div>
+      </div>
+    </div>
+
+    <div class="subsection">
+      <h3 class="subsection-title">Accent</h3>
+      <div class="swatch-grid">
+        <div class="swatch"><div class="swatch-color" style="background:var(--accent-main)"></div><div class="swatch-info"><span class="swatch-var">--accent-main</span><span class="swatch-value">Dark: #5a8dee</span></div></div>
+        <div class="swatch"><div class="swatch-color" style="background:var(--accent-hover)"></div><div class="swatch-info"><span class="swatch-var">--accent-hover</span><span class="swatch-value">Dark: #4b7ddb</span></div></div>
+        <div class="swatch"><div class="swatch-color" style="background:var(--accent2)"></div><div class="swatch-info"><span class="swatch-var">--accent2</span><span class="swatch-value">Dark: #8b5cf6</span></div></div>
+      </div>
+    </div>
+
+    <div class="subsection">
+      <h3 class="subsection-title">Semantic</h3>
+      <div class="swatch-grid">
+        <div class="swatch"><div class="swatch-color" style="background:var(--success)"></div><div class="swatch-info"><span class="swatch-var">--success</span><span class="swatch-value">Dark: #34d399</span></div></div>
+        <div class="swatch"><div class="swatch-color" style="background:var(--warning)"></div><div class="swatch-info"><span class="swatch-var">--warning</span><span class="swatch-value">Dark: #fbbf24</span></div></div>
+        <div class="swatch"><div class="swatch-color" style="background:var(--error)"></div><div class="swatch-info"><span class="swatch-var">--error</span><span class="swatch-value">Dark: #f87171</span></div></div>
+        <div class="swatch"><div class="swatch-color" style="background:var(--info)"></div><div class="swatch-info"><span class="swatch-var">--info</span><span class="swatch-value">Dark: #60a5fa</span></div></div>
+      </div>
+    </div>
+
+    <div class="subsection">
+      <h3 class="subsection-title">Text</h3>
+      <div class="swatch-grid">
+        <div class="swatch"><div class="swatch-color" style="background:var(--text-primary)"></div><div class="swatch-info"><span class="swatch-var">--text-primary</span><span class="swatch-value">Dark: #e8e8e8</span></div></div>
+        <div class="swatch"><div class="swatch-color" style="background:var(--text-secondary)"></div><div class="swatch-info"><span class="swatch-var">--text-secondary</span><span class="swatch-value">Dark: #a0a0a0</span></div></div>
+        <div class="swatch"><div class="swatch-color" style="background:var(--text-tertiary)"></div><div class="swatch-info"><span class="swatch-var">--text-tertiary</span><span class="swatch-value">Dark: #6b7280</span></div></div>
+      </div>
+    </div>
+
+    <div class="subsection">
+      <h3 class="subsection-title">Border</h3>
+      <div class="swatch-grid">
+        <div class="swatch"><div class="swatch-color" style="background:var(--border-faint)"></div><div class="swatch-info"><span class="swatch-var">--border-faint</span><span class="swatch-value">Dark: #1e1e1e</span></div></div>
+        <div class="swatch"><div class="swatch-color" style="background:var(--border-default)"></div><div class="swatch-info"><span class="swatch-var">--border-default</span><span class="swatch-value">Dark: #2e2e2e</span></div></div>
+        <div class="swatch"><div class="swatch-color" style="background:var(--border-strong)"></div><div class="swatch-info"><span class="swatch-var">--border-strong</span><span class="swatch-value">Dark: #404040</span></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 2. TYPOGRAPHY ────────────────────────────────────────────── -->
+  <section class="section" id="typography">
+    <h2 class="section-title">Typography</h2>
+    <p class="section-desc">Sans 字体族用于界面文本，Mono 字体族用于代码和数据展示。</p>
+
+    <div class="demo-box">
+      <div style="font-size:var(--text-4xl);font-weight:var(--weight-bold);margin-bottom:8px;letter-spacing:-0.02em">Heading 4XL</div>
+      <div style="font-size:var(--text-3xl);font-weight:var(--weight-bold);margin-bottom:8px;letter-spacing:-0.02em">Heading 3XL — 标题</div>
+      <div style="font-size:var(--text-2xl);font-weight:var(--weight-semi);margin-bottom:8px">Heading 2XL — 二级标题</div>
+      <div style="font-size:var(--text-xl);font-weight:var(--weight-semi);margin-bottom:8px">Heading XL</div>
+      <div style="font-size:var(--text-lg);font-weight:var(--weight-semi);margin-bottom:8px">Heading LG — 小节标题</div>
+      <div style="font-size:var(--text-md);margin-bottom:8px">Body MD — 正文（默认）14px</div>
+      <div style="font-size:var(--text-base);margin-bottom:8px">Body Base — 组件文字 13px</div>
+      <div style="font-size:var(--text-sm);color:var(--text-secondary);margin-bottom:8px">Small SM — 辅助文字 12px</div>
+      <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-bottom:8px">Extra Small XS — 标签 11px</div>
+      <div style="font-family:var(--font-mono);font-size:var(--text-base);color:var(--accent-main);margin-bottom:4px">Mono — const timeline = useTimeline()</div>
+      <div style="font-family:var(--font-mono);font-size:var(--text-sm);color:var(--text-tertiary)">Mono SM — 00:03:24.150</div>
+    </div>
+
+    <table class="token-table">
+      <tr><th>Token</th><th>Size</th><th>Usage</th></tr>
+      <tr><td class="token-name">--text-4xl</td><td>36px</td><td>Hero / 启动页标题</td></tr>
+      <tr><td class="token-name">--text-3xl</td><td>28px</td><td>页面标题</td></tr>
+      <tr><td class="token-name">--text-2xl</td><td>22px</td><td>Section 标题</td></tr>
+      <tr><td class="token-name">--text-xl</td><td>18px</td><td>卡片标题</td></tr>
+      <tr><td class="token-name">--text-lg</td><td>15px</td><td>导航项 / 小节标题</td></tr>
+      <tr><td class="token-name">--text-md</td><td>14px</td><td>正文（默认）</td></tr>
+      <tr><td class="token-name">--text-base</td><td>13px</td><td>组件内文本</td></tr>
+      <tr><td class="token-name">--text-sm</td><td>12px</td><td>表单标签 / 辅助文字</td></tr>
+      <tr><td class="token-name">--text-xs</td><td>11px</td><td>徽章 / 时间码</td></tr>
+    </table>
+  </section>
+
+  <!-- ── 3. SPACING ───────────────────────────────────────────────── -->
+  <section class="section" id="spacing">
+    <h2 class="section-title">Spacing</h2>
+    <p class="section-desc">4px 基准间距系统。所有间距只使用 Token，不使用随意数值。</p>
+
+    <div class="demo-box">
+      <div class="spacing-demo"><div class="spacing-block" style="width:4px"></div><span class="token-name" style="min-width:90px">--space-1</span><span style="font-size:var(--text-sm);color:var(--text-tertiary)">4px — 图标与文字间距</span></div>
+      <div class="spacing-demo"><div class="spacing-block" style="width:8px"></div><span class="token-name" style="min-width:90px">--space-2</span><span style="font-size:var(--text-sm);color:var(--text-tertiary)">8px — 紧凑组件内部</span></div>
+      <div class="spacing-demo"><div class="spacing-block" style="width:12px"></div><span class="token-name" style="min-width:90px">--space-3</span><span style="font-size:var(--text-sm);color:var(--text-tertiary)">12px — 组件间距</span></div>
+      <div class="spacing-demo"><div class="spacing-block" style="width:16px"></div><span class="token-name" style="min-width:90px">--space-4</span><span style="font-size:var(--text-sm);color:var(--text-tertiary)">16px — 卡片内部 / 表单间距</span></div>
+      <div class="spacing-demo"><div class="spacing-block" style="width:20px"></div><span class="token-name" style="min-width:90px">--space-5</span><span style="font-size:var(--text-sm);color:var(--text-tertiary)">20px — 卡片 padding</span></div>
+      <div class="spacing-demo"><div class="spacing-block" style="width:24px"></div><span class="token-name" style="min-width:90px">--space-6</span><span style="font-size:var(--text-sm);color:var(--text-tertiary)">24px — 区域分隔</span></div>
+      <div class="spacing-demo"><div class="spacing-block" style="width:32px"></div><span class="token-name" style="min-width:90px">--space-8</span><span style="font-size:var(--text-sm);color:var(--text-tertiary)">32px — 页面内容 padding</span></div>
+      <div class="spacing-demo"><div class="spacing-block" style="width:48px"></div><span class="token-name" style="min-width:90px">--space-12</span><span style="font-size:var(--text-sm);color:var(--text-tertiary)">48px — Section 间距</span></div>
+      <div class="spacing-demo"><div class="spacing-block" style="width:64px"></div><span class="token-name" style="min-width:90px">--space-16</span><span style="font-size:var(--text-sm);color:var(--text-tertiary)">64px — 页面 Section 间距</span></div>
+    </div>
+  </section>
+
+  <!-- ── 4. BORDERS & SHADOWS ─────────────────────────────────────── -->
+  <section class="section" id="borders">
+    <h2 class="section-title">Borders & Shadows</h2>
+
+    <div class="subsection">
+      <h3 class="subsection-title">Border Radius</h3>
+      <div class="demo-row">
+        <div class="radius-demo" style="border-radius:var(--radius-sm)">sm 4</div>
+        <div class="radius-demo" style="border-radius:var(--radius-md)">md 6</div>
+        <div class="radius-demo" style="border-radius:var(--radius-lg)">lg 8</div>
+        <div class="radius-demo" style="border-radius:var(--radius-xl)">xl 10</div>
+        <div class="radius-demo" style="border-radius:var(--radius-2xl)">2xl 12</div>
+        <div class="radius-demo" style="border-radius:var(--radius-full)">full</div>
+      </div>
+    </div>
+
+    <div class="subsection">
+      <h3 class="subsection-title">Shadows</h3>
+      <div class="demo-row">
+        <div class="shadow-demo" style="box-shadow:var(--shadow-sm)">sm</div>
+        <div class="shadow-demo" style="box-shadow:var(--shadow-md)">md</div>
+        <div class="shadow-demo" style="box-shadow:var(--shadow-lg)">lg</div>
+        <div class="shadow-demo" style="box-shadow:var(--shadow-xl)">xl</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 5. BUTTONS ───────────────────────────────────────────────── -->
+  <section class="section" id="buttons">
+    <h2 class="section-title">Buttons</h2>
+    <p class="section-desc">按钮变体 × 尺寸 × 状态。使用 .btn 基类 + 修饰类。</p>
+
+    <div class="subsection">
+      <h3 class="subsection-title">Variants</h3>
+      <div class="demo-row">
+        <button class="btn btn-primary">Primary</button>
+        <button class="btn btn-secondary">Secondary</button>
+        <button class="btn btn-success">Success</button>
+        <button class="btn btn-warn">Warning</button>
+        <button class="btn btn-danger">Danger</button>
+        <button class="btn btn-ghost">Ghost</button>
+        <button class="btn btn-text">Text</button>
+      </div>
+    </div>
+
+    <div class="subsection">
+      <h3 class="subsection-title">Sizes</h3>
+      <div class="demo-row">
+        <button class="btn btn-primary btn-sm">Small</button>
+        <button class="btn btn-primary">Default</button>
+        <button class="btn btn-primary btn-lg">Large</button>
+      </div>
+    </div>
+
+    <div class="subsection">
+      <h3 class="subsection-title">States</h3>
+      <div class="demo-row">
+        <button class="btn btn-primary">Normal</button>
+        <button class="btn btn-primary" disabled>Disabled</button>
+        <button class="btn btn-ghost" disabled>Ghost Disabled</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 6. FORM INPUTS ───────────────────────────────────────────── -->
+  <section class="section" id="forms">
+    <h2 class="section-title">Form Inputs</h2>
+
+    <div class="demo-box">
+      <div class="form-row" style="margin-bottom:16px">
+        <div class="form-group" style="flex:1;margin-bottom:0">
+          <label class="form-label">项目名称</label>
+          <input class="form-input" type="text" placeholder="输入项目名称…">
+          <span class="form-hint">项目将保存在 ~/VideoEditor/projects/ 下</span>
+        </div>
+        <div class="form-group" style="flex:1;margin-bottom:0">
+          <label class="form-label">输出分辨率</label>
+          <select class="form-select">
+            <option>1920×1080 (FHD)</option>
+            <option>3840×2160 (4K)</option>
+            <option>1280×720 (HD)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">脚本内容</label>
+        <textarea class="form-textarea" placeholder="输入视频脚本…"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">标题（有错误）</label>
+        <input class="form-input has-error" type="text" value="@#$%">
+        <span class="form-error">标题包含非法字符</span>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:12px;margin-top:16px">
+        <label class="form-label" style="margin:0">自动转码</label>
+        <button class="toggle active" onclick="this.classList.toggle('active')"></button>
+        <label class="form-label" style="margin:0;margin-left:24px">启用 AI 分析</label>
+        <button class="toggle" onclick="this.classList.toggle('active')"></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 7. CARDS ─────────────────────────────────────────────────── -->
+  <section class="section" id="cards">
+    <h2 class="section-title">Cards</h2>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px">
+      <div class="card stat-card">
+        <div class="stat-value" style="color:var(--accent-main)">153</div>
+        <div class="stat-label">素材总数</div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-value" style="color:var(--success)">42:18</div>
+        <div class="stat-label">总时长</div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-value" style="color:var(--accent2)">3</div>
+        <div class="stat-label">进行中项目</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">📁 加拿大旅行 Vlog</div>
+      <div class="card-body">使用 153 个素材，AI 已完成语义分析。包含户外风景、美食、街拍三个主题。预计输出 3 条短视频。</div>
+      <div class="card-footer">
+        <button class="btn btn-ghost btn-sm">详情</button>
+        <button class="btn btn-primary btn-sm">开始编辑</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 8. BADGES & TAGS ─────────────────────────────────────────── -->
+  <section class="section" id="badges">
+    <h2 class="section-title">Tags & Badges</h2>
+
+    <div class="subsection">
+      <h3 class="subsection-title">Badges</h3>
+      <div class="demo-row">
+        <span class="badge badge-info">分析中</span>
+        <span class="badge badge-success">已完成</span>
+        <span class="badge badge-warn">待审核</span>
+        <span class="badge badge-danger">错误</span>
+        <span class="badge badge-accent">v0.10.0</span>
+      </div>
+    </div>
+
+    <div class="subsection">
+      <h3 class="subsection-title">Tags</h3>
+      <div class="demo-row">
+        <span class="tag">户外</span>
+        <span class="tag">风景</span>
+        <span class="tag">4K</span>
+        <span class="tag tag-removable" onclick="this.remove()">美食 ×</span>
+        <span class="tag tag-removable" onclick="this.remove()">城市 ×</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 9. PROGRESS ──────────────────────────────────────────────── -->
+  <section class="section" id="progress">
+    <h2 class="section-title">Progress & Status</h2>
+
+    <div class="demo-box">
+      <div style="margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;font-size:var(--text-sm);margin-bottom:4px">
+          <span>素材导入</span><span style="color:var(--text-tertiary)">78%</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" style="width:78%"></div></div>
+      </div>
+      <div style="margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;font-size:var(--text-sm);margin-bottom:4px">
+          <span>AI 分析</span><span style="color:var(--success)">完成</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill success" style="width:100%"></div></div>
+      </div>
+      <div>
+        <div style="display:flex;justify-content:space-between;font-size:var(--text-sm);margin-bottom:4px">
+          <span>磁盘空间</span><span style="color:var(--error)">92%</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill danger" style="width:92%"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 10. TABS ─────────────────────────────────────────────────── -->
+  <section class="section" id="tabs-section">
+    <h2 class="section-title">Tabs</h2>
+
+    <div class="demo-box" style="padding:0">
+      <div class="tabs" style="padding:0 20px">
+        <button class="tab active" onclick="switchTab(this, 'tab-1')">素材库</button>
+        <button class="tab" onclick="switchTab(this, 'tab-2')">时间线</button>
+        <button class="tab" onclick="switchTab(this, 'tab-3')">导出设置</button>
+      </div>
+      <div class="tab-panel active" id="tab-1" style="padding:20px">
+        <p style="color:var(--text-secondary)">素材库面板 — 显示所有已导入的视频、图片和音频素材。支持网格/列表视图切换。</p>
+      </div>
+      <div class="tab-panel" id="tab-2" style="padding:20px">
+        <p style="color:var(--text-secondary)">时间线面板 — 多轨道时间线编辑器，支持拖拽排列、裁剪、分割操作。</p>
+      </div>
+      <div class="tab-panel" id="tab-3" style="padding:20px">
+        <p style="color:var(--text-secondary)">导出设置 — 选择编码格式、分辨率、码率，预估输出文件大小。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 11. TOAST MESSAGES ───────────────────────────────────────── -->
+  <section class="section" id="toasts">
+    <h2 class="section-title">Toast Messages</h2>
+
+    <div class="toast-demo toast-info">ℹ️ 正在分析 153 个素材，预计需要 3 分钟</div>
+    <div class="toast-demo toast-success">✅ 视频导出完成：加拿大旅行_final.mp4</div>
+    <div class="toast-demo toast-warn">⚠️ 磁盘空间不足 1GB，建议清理缓存</div>
+    <div class="toast-demo toast-error">❌ FFmpeg 转码失败：不支持的编码格式</div>
+  </section>
+
+  <!-- ── 12. MODALS ───────────────────────────────────────────────── -->
+  <section class="section" id="modals">
+    <h2 class="section-title">Modals & Dialogs</h2>
+
+    <div class="demo-row">
+      <button class="btn btn-primary" onclick="openModal('modal-confirm')">确认弹窗</button>
+      <button class="btn btn-danger" onclick="openModal('modal-danger')">危险操作弹窗</button>
+    </div>
+  </section>
+
+  <!-- ── 13. DATA TABLES ──────────────────────────────────────────── -->
+  <section class="section" id="tables">
+    <h2 class="section-title">Data Tables</h2>
+
+    <div class="demo-box" style="padding:0;overflow:hidden">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>文件名</th>
+            <th>时长</th>
+            <th>分辨率</th>
+            <th>编码</th>
+            <th>状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>IMG_1307.MOV</td><td style="font-family:var(--font-mono)">00:32</td><td>1920×1440</td><td>HEVC</td><td><span class="badge badge-success">已分析</span></td></tr>
+          <tr><td>IMG_1326.MOV</td><td style="font-family:var(--font-mono)">01:14</td><td>1920×1080</td><td>HEVC</td><td><span class="badge badge-success">已分析</span></td></tr>
+          <tr><td>IMG_1512.MOV</td><td style="font-family:var(--font-mono)">00:08</td><td>1920×1440</td><td>HEVC</td><td><span class="badge badge-warn">分析中</span></td></tr>
+          <tr><td>sunset_timelapse.mp4</td><td style="font-family:var(--font-mono)">02:45</td><td>3840×2160</td><td>H.264</td><td><span class="badge badge-info">排队中</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── 14. ASSET CARD (Business) ────────────────────────────────── -->
+  <section class="section" id="asset-cards">
+    <h2 class="section-title">Asset Card</h2>
+    <p class="section-desc">素材卡片 — 视频素材库的核心展示单元。hover 有边框高亮 + 微上移。</p>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
+      <div class="asset-card">
+        <div class="asset-thumbnail">🎬<span class="asset-duration">00:32</span></div>
+        <div class="asset-info">
+          <div class="asset-name">IMG_1307.MOV</div>
+          <div class="asset-meta"><span>1920×1440</span><span>HEVC</span><span>15.2MB</span></div>
+        </div>
+      </div>
+      <div class="asset-card">
+        <div class="asset-thumbnail">🏔<span class="asset-duration">01:14</span></div>
+        <div class="asset-info">
+          <div class="asset-name">mountain_scenic.MOV</div>
+          <div class="asset-meta"><span>3840×2160</span><span>H.264</span><span>87.4MB</span></div>
+        </div>
+      </div>
+      <div class="asset-card">
+        <div class="asset-thumbnail">🍜<span class="asset-duration">00:45</span></div>
+        <div class="asset-info">
+          <div class="asset-name">food_closeup.MOV</div>
+          <div class="asset-meta"><span>1920×1080</span><span>HEVC</span><span>23.1MB</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 15. WORKFLOW STEPPER (Business) ──────────────────────────── -->
+  <section class="section" id="stepper-section">
+    <h2 class="section-title">Workflow Stepper</h2>
+    <p class="section-desc">7 步工作流步进器 — 展示当前生产进度，已完成步骤显示绿色勾选。</p>
+
+    <div class="demo-box">
+      <div class="stepper">
+        <div class="step completed"><div class="step-number">✓</div><span>素材</span></div>
+        <div class="step-connector" style="background:var(--success)"></div>
+        <div class="step completed"><div class="step-number">✓</div><span>选题</span></div>
+        <div class="step-connector" style="background:var(--success)"></div>
+        <div class="step active"><div class="step-number">3</div><span>脚本</span></div>
+        <div class="step-connector"></div>
+        <div class="step"><div class="step-number">4</div><span>匹配</span></div>
+        <div class="step-connector"></div>
+        <div class="step"><div class="step-number">5</div><span>预览</span></div>
+        <div class="step-connector"></div>
+        <div class="step"><div class="step-number">6</div><span>粗剪</span></div>
+        <div class="step-connector"></div>
+        <div class="step"><div class="step-number">7</div><span>渲染</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 16. LOADING & EMPTY STATES ───────────────────────────────── -->
+  <section class="section" id="empty-loading">
+    <h2 class="section-title">Loading & Empty States</h2>
+
+    <div class="subsection">
+      <h3 class="subsection-title">Skeleton Loading</h3>
+      <div class="demo-box">
+        <div style="display:flex;gap:12px;margin-bottom:12px">
+          <div class="skeleton" style="width:48px;height:48px;border-radius:50%"></div>
+          <div style="flex:1">
+            <div class="skeleton" style="height:14px;width:60%;margin-bottom:8px"></div>
+            <div class="skeleton" style="height:12px;width:40%"></div>
+          </div>
+        </div>
+        <div class="skeleton" style="height:120px;width:100%;margin-bottom:8px"></div>
+        <div class="skeleton" style="height:12px;width:80%"></div>
+      </div>
+    </div>
+
+    <div class="subsection">
+      <h3 class="subsection-title">Empty State</h3>
+      <div class="demo-box">
+        <div class="empty-state">
+          <div class="empty-state-icon">📂</div>
+          <div class="empty-state-title">还没有素材</div>
+          <div class="empty-state-desc">将视频文件拖入此区域，或点击下方按钮选择素材文件夹</div>
+          <button class="btn btn-primary">选择素材文件夹</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="subsection">
+      <h3 class="subsection-title">Tooltip</h3>
+      <div class="demo-row">
+        <div class="tooltip-wrap">
+          <button class="btn btn-ghost">Hover me</button>
+          <span class="tooltip-text">这是一个提示信息</span>
+        </div>
+        <div class="tooltip-wrap">
+          <span class="badge badge-info">AI 分析</span>
+          <span class="tooltip-text">使用 CLIP + Whisper 进行语义分析</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 17. ANIMATIONS ───────────────────────────────────────────── -->
+  <section class="section" id="animations">
+    <h2 class="section-title">Animations & Motion</h2>
+    <p class="section-desc">Hover 各方块体验不同缓动曲线。</p>
+
+    <table class="token-table" style="margin-bottom:24px">
+      <tr><th>Token</th><th>Value</th><th>Usage</th></tr>
+      <tr><td class="token-name">--duration-fast</td><td>0.1s</td><td>Focus ring / 微交互</td></tr>
+      <tr><td class="token-name">--duration-normal</td><td>0.15s</td><td>按钮 hover / 边框变化</td></tr>
+      <tr><td class="token-name">--duration-slow</td><td>0.25s</td><td>面板展开 / Modal 出入</td></tr>
+      <tr><td class="token-name">--ease-default</td><td>cubic-bezier(0.4,0,0.2,1)</td><td>通用缓动</td></tr>
+      <tr><td class="token-name">--ease-bounce</td><td>cubic-bezier(0.34,1.56,0.64,1)</td><td>弹性效果（Toggle / 按钮反馈）</td></tr>
+      <tr><td class="token-name">--ease-out</td><td>cubic-bezier(0,0,0.2,1)</td><td>元素出现 / 滑入</td></tr>
+    </table>
+
+    <div class="anim-demo">
+      <div class="anim-box" data-ease="default">default</div>
+      <div class="anim-box" data-ease="bounce">bounce</div>
+      <div class="anim-box" data-ease="ease-out">ease-out</div>
+    </div>
+  </section>
+
+  <!-- ── 18. LAYOUT SYSTEM ────────────────────────────────────────── -->
+  <section class="section" id="layout">
+    <h2 class="section-title">Layout System</h2>
+    <p class="section-desc">VideoEditor 的核心布局：顶部标题栏 + 左侧导航 + 主内容区 + 可选右侧面板。</p>
+
+    <div class="layout-demo" style="margin-bottom:24px">
+      <div class="layout-sidebar-demo">Nav (200px)</div>
+      <div class="layout-main-demo">
+        <div class="layout-topbar-demo">Titlebar (48px)</div>
+        <div style="display:flex;flex:1">
+          <div class="layout-content-demo">Content (flex:1)</div>
+          <div class="layout-panel-demo">Panel (optional)</div>
+        </div>
+      </div>
+    </div>
+
+    <table class="token-table">
+      <tr><th>区域</th><th>尺寸</th><th>Token</th></tr>
+      <tr><td>Titlebar 高度</td><td>48px</td><td class="token-name">固定值</td></tr>
+      <tr><td>Sidebar 宽度</td><td>200px</td><td class="token-name">--sidebar-w</td></tr>
+      <tr><td>Content padding</td><td>32px × 40px</td><td class="token-name">--space-8 × --space-10</td></tr>
+      <tr><td>Content max-width</td><td>960px</td><td class="token-name">按需</td></tr>
+    </table>
+  </section>
+
+  <!-- ── 19. DESIGN PRINCIPLES ────────────────────────────────────── -->
+  <section class="section" id="principles">
+    <h2 class="section-title">Design Principles</h2>
+
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header">1. 注意力经济</div>
+      <div class="card-body">每个页面只有一个主角。视频编辑器的核心区域是时间线和预览窗，其他面板为辅助。避免多个元素同时竞争视觉焦点。使用色彩层级（accent 强调 → text-secondary 降级）引导注意力流向。</div>
+    </div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header">2. 信息层级</div>
+      <div class="card-body">3 秒内理解页面核心任务。标题用 --text-lg/semi，正文用 --text-md/regular，辅助用 --text-sm/tertiary。间距同样传递层级：同组元素用 --space-2，不同组用 --space-6。</div>
+    </div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header">3. 最少惊讶</div>
+      <div class="card-body">交互行为可预期。所有按钮 hover 有 background 变化，所有输入框 focus 有 border-color 变化。拖拽操作始终有辅助线反馈。不使用会让用户困惑的隐式手势。</div>
+    </div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header">4. 渐进式披露</div>
+      <div class="card-body">只在需要时展示复杂度。初始界面简洁（工作流 7 步只显示当前步骤详情），高级选项折叠在「更多设置」中。AI 分析结果先展示摘要，点击展开详情。</div>
+    </div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header">5. 即时反馈</div>
+      <div class="card-body">每次操作都有回应。素材导入有进度条 + 百分比，AI 分析有 skeleton loading，导出完成有 toast 通知。长时间操作（>2s）必须有进度指示。</div>
+    </div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header">6. 容错设计</div>
+      <div class="card-body">提供撤销而不只是确认弹窗。时间线操作支持 Ctrl+Z。删除素材后有 5s 的 undo toast。仅在不可逆操作（清空项目、删除原始文件）使用确认弹窗。</div>
+    </div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header">7. 一致性</div>
+      <div class="card-body">同操作在所有页面行为一致。.btn-primary 永远是蓝色 (#5a8dee)，.badge-success 永远是绿色 (#34d399)。表单验证错误永远用红色边框 + 红色提示文字。</div>
+    </div>
+    <div class="card">
+      <div class="card-header">8. 留白即信息</div>
+      <div class="card-body">间距是结构化手段，不是装饰。组件间用 --space-3 (12px) 表示「相关」，用 --space-8 (32px) 表示「不同组」，用 --space-16 (64px) 表示「不同 Section」。合理的留白比装饰性分隔线更有效。</div>
+    </div>
+  </section>
+
+  <!-- ── 20. SELF-CHECK CHECKLIST ─────────────────────────────────── -->
+  <section class="section" id="checklist">
+    <h2 class="section-title">Self-Check Checklist</h2>
+    <p class="section-desc">点击可标记。开发新页面/组件时逐项自查。</p>
+
+    <div class="demo-box">
+      <h3 class="subsection-title" style="margin-bottom:12px">注意力与层级</h3>
+      <ul class="checklist">
+        <li class="checklist-item" onclick="this.classList.toggle('checked')"><div class="checklist-box"></div><span class="checklist-text">页面是否有且只有一个视觉主角？</span></li>
+        <li class="checklist-item" onclick="this.classList.toggle('checked')"><div class="checklist-box"></div><span class="checklist-text">3 秒内能否理解页面核心任务？</span></li>
+        <li class="checklist-item" onclick="this.classList.toggle('checked')"><div class="checklist-box"></div><span class="checklist-text">标题 / 正文 / 辅助文字是否使用了正确的字号层级？</span></li>
+      </ul>
+
+      <h3 class="subsection-title" style="margin-top:20px;margin-bottom:12px">交互反馈</h3>
+      <ul class="checklist">
+        <li class="checklist-item" onclick="this.classList.toggle('checked')"><div class="checklist-box"></div><span class="checklist-text">所有按钮是否有 hover / active / disabled 状态？</span></li>
+        <li class="checklist-item" onclick="this.classList.toggle('checked')"><div class="checklist-box"></div><span class="checklist-text">所有输入框是否有 focus 指示？</span></li>
+        <li class="checklist-item" onclick="this.classList.toggle('checked')"><div class="checklist-box"></div><span class="checklist-text">长时间操作（>2s）是否有进度反馈？</span></li>
+        <li class="checklist-item" onclick="this.classList.toggle('checked')"><div class="checklist-box"></div><span class="checklist-text">操作完成是否有 Toast 通知？</span></li>
+      </ul>
+
+      <h3 class="subsection-title" style="margin-top:20px;margin-bottom:12px">状态覆盖</h3>
+      <ul class="checklist">
+        <li class="checklist-item" onclick="this.classList.toggle('checked')"><div class="checklist-box"></div><span class="checklist-text">是否考虑了空状态（无数据）？</span></li>
+        <li class="checklist-item" onclick="this.classList.toggle('checked')"><div class="checklist-box"></div><span class="checklist-text">是否考虑了加载状态（Skeleton）？</span></li>
+        <li class="checklist-item" onclick="this.classList.toggle('checked')"><div class="checklist-box"></div><span class="checklist-text">是否考虑了错误状态？</span></li>
+        <li class="checklist-item" onclick="this.classList.toggle('checked')"><div class="checklist-box"></div><span class="checklist-text">列表是否考虑了超长文本截断？</span></li>
+      </ul>
+
+      <h3 class="subsection-title" style="margin-top:20px;margin-bottom:12px">容错与安全</h3>
+      <ul class="checklist">
+        <li class="checklist-item" onclick="this.classList.toggle('checked')"><div class="checklist-box"></div><span class="checklist-text">不可逆操作是否有确认弹窗？</span></li>
+        <li class="checklist-item" onclick="this.classList.toggle('checked')"><div class="checklist-box"></div><span class="checklist-text">可逆操作是否支持 Undo？</span></li>
+        <li class="checklist-item" onclick="this.classList.toggle('checked')"><div class="checklist-box"></div><span class="checklist-text">表单提交是否有防重复点击？</span></li>
+      </ul>
+
+      <h3 class="subsection-title" style="margin-top:20px;margin-bottom:12px">一致性</h3>
+      <ul class="checklist">
+        <li class="checklist-item" onclick="this.classList.toggle('checked')"><div class="checklist-box"></div><span class="checklist-text">颜色是否全部使用 CSS Token 而非硬编码？</span></li>
+        <li class="checklist-item" onclick="this.classList.toggle('checked')"><div class="checklist-box"></div><span class="checklist-text">间距是否全部使用 --space-* Token？</span></li>
+        <li class="checklist-item" onclick="this.classList.toggle('checked')"><div class="checklist-box"></div><span class="checklist-text">相同语义的组件是否使用相同的样式？</span></li>
+        <li class="checklist-item" onclick="this.classList.toggle('checked')"><div class="checklist-box"></div><span class="checklist-text">深色/浅色主题下是否都能正常显示？</span></li>
+      </ul>
+    </div>
+  </section>
+
+</main>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     MODALS
+     ═══════════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-confirm" onclick="if(event.target===this)closeModal(this.id)">
+  <div class="modal">
+    <div class="modal-header">确认操作<button class="modal-close" onclick="closeModal('modal-confirm')">×</button></div>
+    <div class="modal-body">确定要开始渲染？这将使用当前时间线设置生成最终视频文件。</div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-confirm')">取消</button>
+      <button class="btn btn-primary" onclick="closeModal('modal-confirm')">确认渲染</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-danger" onclick="if(event.target===this)closeModal(this.id)">
+  <div class="modal">
+    <div class="modal-header" style="color:var(--error)">⚠️ 危险操作<button class="modal-close" onclick="closeModal('modal-danger')">×</button></div>
+    <div class="modal-body">确定要删除项目「加拿大旅行 Vlog」及其所有工作数据？此操作不可撤销。</div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-danger')">取消</button>
+      <button class="btn btn-danger" onclick="closeModal('modal-danger')">确认删除</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     SCRIPTS
+     ═══════════════════════════════════════════════════════════════════ -->
+<script>
+// Theme Toggle
+function toggleTheme() {
+  const html = document.documentElement;
+  const btn = document.getElementById('theme-toggle');
+  const icon = document.getElementById('theme-icon');
+  if (html.getAttribute('data-theme') === 'dark') {
+    html.setAttribute('data-theme', 'light');
+    icon.textContent = '🌙';
+    btn.lastChild.textContent = ' Dark';
+  } else {
+    html.setAttribute('data-theme', 'dark');
+    icon.textContent = '☀️';
+    btn.lastChild.textContent = ' Light';
+  }
+}
+
+// Tab Switching
+function switchTab(el, panelId) {
+  const container = el.closest('.demo-box') || el.closest('.section');
+  container.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  container.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById(panelId).classList.add('active');
+}
+
+// Modal
+function openModal(id) {
+  document.getElementById(id).classList.add('open');
+}
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+
+// Scroll Spy
+const content = document.getElementById('content');
+const links = document.querySelectorAll('.sidebar-link');
+const sections = [];
+
+links.forEach(link => {
+  const id = link.getAttribute('href')?.replace('#', '');
+  if (id) {
+    const section = document.getElementById(id);
+    if (section) sections.push({ id, el: section, link });
+  }
+});
+
+content.addEventListener('scroll', () => {
+  const scrollTop = content.scrollTop + 100;
+  let current = sections[0];
+  for (const s of sections) {
+    if (s.el.offsetTop <= scrollTop) current = s;
+  }
+  links.forEach(l => l.classList.remove('active'));
+  if (current) current.link.classList.add('active');
+});
+
+// Smooth scroll for sidebar links
+links.forEach(link => {
+  link.addEventListener('click', (e) => {
+    e.preventDefault();
+    const id = link.getAttribute('href')?.replace('#', '');
+    const target = document.getElementById(id);
+    if (target) {
+      content.scrollTo({ top: target.offsetTop - 20, behavior: 'smooth' });
+    }
+  });
+});
+
+// Initialize first link as active
+if (links[0]) links[0].classList.add('active');
+</script>
+</body>
+</html>
