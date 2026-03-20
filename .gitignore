@@ -57,3 +57,11 @@ test_videos/
 # Config with API keys
 config.json
 .env
+
+# === 迁移后新增 (project/ 工作区) ===
+project/.venv/
+project/.video_library/
+project/app_state.db
+project/logs/
+project/**/__pycache__/
+project/.pytest_cache/

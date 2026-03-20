@@ -4,6 +4,23 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/) 规范。
 
+## [0.10.0] - 2026-03-20
+
+### 修改 (Changed)
+- 项目目录重组：开发代码（modules/, apps/, tests/, tools/, .agents/）迁入 project/ 子目录
+- 技术文档（docs/tech-specs/）迁入 project/docs/tech-specs/
+- 开发报告和计划文档迁入 project/docs/
+- 版本文件（VERSION, CHANGELOG.md, requirements.txt, LICENSE）迁入 project/
+- CLAUDE.md 所有路径引用更新为 project/ 前缀
+
+### 新增 (Added)
+- project/.claude/CLAUDE.md — Claude Code 开发工作区入口指令
+- .gitignore 追加 project/ 工作区忽略规则
+
+### 技术说明
+- 零 Python 代码变更：内部相对路径（parents[N]）自动适配新目录层级
+- 全量回归测试通过：764 passed, 50 skipped, 0 failures, 0 errors
+
 ## [0.9.1] - 2026-03-20
 
 ### 修复 (Fixed)
