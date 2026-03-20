@@ -1,0 +1,314 @@
+<template>
+  <div
+    class="canvas-node"
+    :class="{ selected: isSelected, 'node-condition': node.node_type === 'condition', 'node-disabled': node.enabled === false }"
+    :style="nodeStyle"
+    @mousedown.stop="onMouseDown"
+    @click.stop="onClick"
+    @contextmenu.prevent.stop="onContextMenu"
+  >
+    <!-- Input port (top) -->
+    <div
+      class="port port-in"
+      @mousedown.stop
+      @mouseup.stop="$emit('port-drop', node.id)"
+    ></div>
+
+    <div class="node-body" @dblclick.stop="startRename">
+      <span class="node-icon">{{ icon }}</span>
+      <div class="node-info">
+        <input
+          v-if="editing"
+          ref="renameInput"
+          v-model="editLabel"
+          class="node-label-input"
+          @keyup.enter="commitRename"
+          @keyup.escape="editing = false"
+          @blur="commitRename"
+          @click.stop
+          @mousedown.stop
+        />
+        <div v-else class="node-label">{{ node.label }}</div>
+        <div class="node-cap">{{ hint }}</div>
+      </div>
+    </div>
+
+    <!-- Output port (bottom) -->
+    <div
+      class="port port-out"
+      @mousedown.stop="$emit('port-drag-start', node.id)"
+    ></div>
+
+    <!-- Context menu -->
+    <Teleport to="body">
+      <div v-if="showMenu" class="node-context-menu" :style="menuStyle" @click.stop>
+        <div class="ctx-item" @click="ctxDuplicate">复制节点</div>
+        <div class="ctx-item" @click="ctxDisconnect">断开连接</div>
+        <div class="ctx-item ctx-danger" @click="ctxDelete">删除节点</div>
+      </div>
+      <div v-if="showMenu" class="ctx-backdrop" @click="showMenu = false" @contextmenu.prevent="showMenu = false"></div>
+    </Teleport>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, nextTick } from 'vue'
+import { useCanvasStore } from '../../stores/canvas.js'
+
+const props = defineProps({
+  node: { type: Object, required: true },
+})
+
+const emit = defineEmits(['port-drag-start', 'port-drop'])
+
+const canvas = useCanvasStore()
+
+const icons = {
+  topic_library: '💡', topic_copy: '📝', article_expand: '📰',
+  text_rough: '✂️', short_clip: '⚡', refinement: '✨',
+  audio_voice: '🎵', subtitle_calibration: '📋', image_semantic: '🖼️',
+  publish_prep: '📤', social_export: '🌐', content_publish: '🚀',
+}
+
+const hints = {
+  topic_library: '浏览和管理选题模板',
+  topic_copy: '为选题生成文案草稿',
+  article_expand: '文章结构化扩写',
+  text_rough: '按句子删减控制时长',
+  short_clip: '快速规划精华片段',
+  refinement: '与剪辑软件协作交接',
+  audio_voice: '旁白、BGM 和混音',
+  subtitle_calibration: '中英文字幕和时间轴',
+  image_semantic: '图像分析与语义检索',
+  publish_prep: '分平台标题和描述',
+  social_export: '社媒导出',
+  content_publish: '内容发布',
+}
+
+const icon = computed(() => props.node.node_type === 'condition' ? '❓' : (icons[props.node.capability_id] || '🔧'))
+const hint = computed(() => hints[props.node.capability_id] || props.node.capability_id)
+const isSelected = computed(() => canvas.selectedNodeId === props.node.id)
+
+const nodeStyle = computed(() => ({
+  left: `${props.node.x}px`,
+  top: `${props.node.y}px`,
+  width: `${props.node.width}px`,
+}))
+
+function onClick() {
+  canvas.selectNode(props.node.id)
+}
+
+// ── Inline rename ──
+const editing = ref(false)
+const editLabel = ref('')
+const renameInput = ref(null)
+
+function startRename() {
+  editLabel.value = props.node.label
+  editing.value = true
+  nextTick(() => { renameInput.value?.select() })
+}
+
+function commitRename() {
+  if (editing.value && editLabel.value.trim()) {
+    canvas.renameNode(props.node.id, editLabel.value)
+  }
+  editing.value = false
+}
+
+// ── Context menu ──
+const showMenu = ref(false)
+const menuStyle = ref({})
+
+function onContextMenu(e) {
+  canvas.selectNode(props.node.id)
+  menuStyle.value = { left: `${e.clientX}px`, top: `${e.clientY}px` }
+  showMenu.value = true
+}
+
+function ctxDuplicate() {
+  canvas.duplicateNode(props.node.id)
+  showMenu.value = false
+}
+
+function ctxDisconnect() {
+  canvas.disconnectNode(props.node.id)
+  showMenu.value = false
+}
+
+function ctxDelete() {
+  canvas.removeNode(props.node.id)
+  showMenu.value = false
+}
+
+let dragStartX = 0
+let dragStartY = 0
+let nodeStartX = 0
+let nodeStartY = 0
+
+function onMouseDown(e) {
+  if (e.target.classList.contains('port') || e.target.classList.contains('port-in') || e.target.classList.contains('port-out')) return
+  canvas.selectNode(props.node.id)
+  dragStartX = e.clientX
+  dragStartY = e.clientY
+  nodeStartX = props.node.x
+  nodeStartY = props.node.y
+  document.addEventListener('mousemove', onMouseMove)
+  document.addEventListener('mouseup', onMouseUp)
+}
+
+function onMouseMove(e) {
+  const zoom = canvas.viewport.zoom
+  const dx = (e.clientX - dragStartX) / zoom
+  const dy = (e.clientY - dragStartY) / zoom
+  canvas.moveNode(props.node.id, nodeStartX + dx, nodeStartY + dy)
+}
+
+function onMouseUp() {
+  document.removeEventListener('mousemove', onMouseMove)
+  document.removeEventListener('mouseup', onMouseUp)
+  canvas.commitMove()
+}
+</script>
+
+<style scoped>
+.canvas-node {
+  position: absolute;
+  background: var(--surface, #1a1a2e);
+  border: 1.5px solid var(--border, #333);
+  border-radius: 10px;
+  cursor: grab;
+  user-select: none;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+
+.canvas-node:hover {
+  border-color: var(--accent, #5a8dee);
+  box-shadow: 0 2px 12px rgba(90, 141, 238, 0.15);
+}
+
+.canvas-node.selected {
+  border-color: var(--accent, #5a8dee);
+  box-shadow: 0 0 0 2px rgba(90, 141, 238, 0.3), 0 4px 16px rgba(90, 141, 238, 0.2);
+}
+
+.canvas-node:active {
+  cursor: grabbing;
+}
+
+.canvas-node.node-condition {
+  border-style: dashed;
+  border-color: var(--warning, #f0ad4e);
+}
+
+.canvas-node.node-disabled {
+  opacity: 0.4;
+}
+
+.node-body {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+}
+
+.node-icon {
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.node-info {
+  overflow: hidden;
+}
+
+.node-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-label-input {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--bg, #111);
+  border: 1px solid var(--accent, #5a8dee);
+  border-radius: 3px;
+  padding: 1px 4px;
+  outline: none;
+  width: 100%;
+}
+
+.node-cap {
+  font-size: 10px;
+  color: var(--muted, #888);
+  margin-top: 2px;
+}
+
+/* Ports */
+.port {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--surface2, #252540);
+  border: 2px solid var(--border, #333);
+  left: 50%;
+  transform: translateX(-50%);
+  cursor: crosshair;
+  z-index: 2;
+  transition: background 0.12s, transform 0.12s;
+}
+
+.port:hover {
+  background: var(--accent, #5a8dee);
+  border-color: var(--accent, #5a8dee);
+  transform: translateX(-50%) scale(1.3);
+}
+
+.port-in {
+  top: -6px;
+}
+
+.port-out {
+  bottom: -6px;
+}
+
+/* Context menu */
+.node-context-menu {
+  position: fixed;
+  z-index: 9999;
+  background: var(--surface, #1a1a2e);
+  border: 1px solid var(--border, #333);
+  border-radius: 8px;
+  padding: 4px 0;
+  min-width: 140px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.ctx-item {
+  padding: 7px 14px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--text);
+  transition: background 0.1s;
+}
+
+.ctx-item:hover {
+  background: var(--surface2, rgba(255,255,255,0.06));
+}
+
+.ctx-danger {
+  color: var(--danger, #f87171);
+}
+
+.ctx-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+}
+</style>

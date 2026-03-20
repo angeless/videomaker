@@ -81,11 +81,21 @@ class VideoSearch:
                     "file_info": {
                         "size": video_data["file_info"]["file_size_human"],
                         "created": video_data["file_info"]["created_time"][:10]
-                    }
+                    },
+                    "usability_score": video_data.get("usability_score"),
+                    "usability_tier": video_data.get("usability_tier"),
+                    "material_type": video_data.get("material_type"),
+                    "trash_level": video_data.get("trash_level"),
                 })
         
-        # 按匹配分数排序
-        results.sort(key=lambda x: x["match_score"], reverse=True)
+        # 按匹配分数排序，usability_score 作为同分 tiebreak
+        results.sort(
+            key=lambda x: (
+                x["match_score"],
+                x.get("usability_score", 0) or 0,
+            ),
+            reverse=True,
+        )
         return results
     
     def search_by_tags(self, tags):

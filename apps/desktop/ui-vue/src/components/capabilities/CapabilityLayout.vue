@@ -2,6 +2,7 @@
   <div class="capability-layout">
     <!-- 左侧导航 -->
     <aside class="capability-nav">
+      <div class="cap-nav-hint">独立使用单个工具，不走工作流。需要按步骤创作请前往「创作」。</div>
       <div v-for="group in allGroups" :key="group.key" class="cap-group">
         <div class="cap-group-title">{{ group.title }}</div>
         <div
@@ -56,6 +57,8 @@ import ArticleExpand from './ArticleExpand.vue'
 import PublishPrep from './PublishPrep.vue'
 import SocialExport from './SocialExport.vue'
 import ContentPublish from './ContentPublish.vue'
+import AgentTemplates from './AgentTemplates.vue'
+import AgentObservability from './AgentObservability.vue'
 
 const panelMap = {
   topic_library: TopicLibrary,
@@ -70,6 +73,8 @@ const panelMap = {
   publish_prep: PublishPrep,
   social_export: SocialExport,
   content_publish: ContentPublish,
+  agent_templates: AgentTemplates,
+  agent_observability: AgentObservability,
 }
 
 const route = useRoute()
@@ -122,6 +127,15 @@ function selectTab(tab) {
 
 .cap-group {
   margin-bottom: 16px;
+}
+
+.cap-nav-hint {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+  padding: 8px 16px 12px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
 }
 
 .cap-group-title {

@@ -1,7 +1,7 @@
 <template>
   <div class="titlebar">
     <span class="title">{{ labels.appTitle }}</span>
-    <span class="project-path" :title="appStore.projectDir">{{ projectDisplayName }}</span>
+    <ProjectTitle />
     <AppNav />
   </div>
 
@@ -9,10 +9,10 @@
     <div class="content">
       <div class="content-narrow">
         <!-- 搜索栏 -->
-        <div class="library-toolbar">
+        <div class="library-toolbar" :class="{ 'toolbar-muted': isLibraryEmpty }">
           <SearchAutocomplete
             v-model="libraryStore.query"
-            :placeholder="labels.library.search"
+            :placeholder="isLibraryEmpty ? '请先导入素材后再搜索' : labels.library.search"
             @search="onToolbarSearch"
             @select-tag="onSelectTag"
           />
@@ -129,6 +129,7 @@
             :key="asset.uid"
             :asset="asset"
             @show-evidence="openEvidence"
+            @select="openDetail"
           />
         </div>
 
@@ -147,6 +148,7 @@
             v-for="asset in libraryStore.results"
             :key="asset.uid"
             :asset="asset"
+            @select="openDetail"
           />
         </div>
 
@@ -157,6 +159,14 @@
       </div>
     </div>
   </div>
+
+  <!-- 素材详情侧边栏 -->
+  <AssetDetailPanel
+    :visible="detailVisible"
+    :asset="detailAsset"
+    @close="detailVisible = false"
+    @show-evidence="(e) => { detailVisible = false; openEvidence(e) }"
+  />
 
   <!-- P4-3: 证据链面板 -->
   <EvidencePanel
@@ -174,11 +184,13 @@ import { useAppStore } from '../stores/app.js'
 import { useLibraryStore } from '../stores/library.js'
 import labels from '../i18n/labels.js'
 import AppNav from '../components/layout/AppNav.vue'
+import ProjectTitle from '../components/common/ProjectTitle.vue'
 import IngestPanel from '../components/library/IngestPanel.vue'
 import LibraryAssetCard from '../components/library/LibraryAssetCard.vue'
 import LibraryAssetRow from '../components/library/LibraryAssetRow.vue'
 import SearchAutocomplete from '../components/library/SearchAutocomplete.vue'
 import EvidencePanel from '../components/library/EvidencePanel.vue'
+import AssetDetailPanel from '../components/library/AssetDetailPanel.vue'
 import TagBrowser from '../components/library/TagBrowser.vue'
 import CustomTagPanel from '../components/library/CustomTagPanel.vue'
 import SearchAnalyticsPanel from '../components/library/SearchAnalyticsPanel.vue'
@@ -190,15 +202,6 @@ import ProjectRelinkPanel from '../components/library/ProjectRelinkPanel.vue'
 
 const appStore = useAppStore()
 const libraryStore = useLibraryStore()
-
-const projectDisplayName = computed(() => {
-  const dir = appStore.projectDir
-  if (!dir) return '未打开项目'
-  const name = dir.split('/').filter(Boolean).pop() || dir
-  const m = name.match(/^proj_selected_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})/)
-  if (m) return `项目 ${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}`
-  return name
-})
 
 // Panel group switcher — local ref, resets to 'browse' on each visit
 const panelGroup = ref('browse')
@@ -214,6 +217,15 @@ const evidenceVisible = ref(false)
 const evidenceAssetId = ref('')
 const evidenceFilename = ref('')
 
+// Asset detail panel state
+const detailVisible = ref(false)
+const detailAsset = ref({})
+
+function openDetail(asset) {
+  detailAsset.value = asset
+  detailVisible.value = true
+}
+
 // Empty library detection
 const isLibraryEmpty = computed(() => libraryStore.stats.total_assets === 0)
 
@@ -224,9 +236,11 @@ function openEvidence({ assetId, filename }) {
 }
 
 async function onToolbarSearch() {
+  // L-03: 搜索时自动关闭素材详情面板，避免遮挡结果
+  detailVisible.value = false
   await libraryStore.search()
-  // 搜索有结果时自动隐藏面板以让结果立即可见
-  if (libraryStore.results.length > 0 && libraryStore.query) {
+  // 搜索时自动隐藏面板以让结果立即可见（不论当前在哪个面板组）
+  if (libraryStore.query) {
     panelGroup.value = '_search_results'
   }
   scrollToResults()
@@ -287,6 +301,11 @@ onMounted(async () => {
   gap: 12px;
   align-items: center;
   margin-bottom: 16px;
+}
+
+.library-toolbar.toolbar-muted {
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 .toolbar-controls {

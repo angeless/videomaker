@@ -1,93 +1,8 @@
 #!/usr/bin/env python3
-"""
-Flask API 服务器 —— 为 pywebview GUI 提供后端接口
+"""Flask API 服务器 —— 为 pywebview GUI 提供后端接口。
 
-端点:
-  GET  /api/status               → 当前 workflow 状态
-  GET  /api/system/load          → 系统负载与运行任务
-  GET  /api/system/preflight     → 启动前自检/诊断报告
-  GET  /api/settings/ai          → 读取 AI 配置
-  POST /api/settings/ai          → 保存 AI 配置
-  GET  /api/settings/ui          → 读取 UI/引导配置
-  POST /api/settings/ui          → 保存 UI/引导配置
-  GET  /api/settings/publish     → 读取发布连接器配置
-  POST /api/settings/publish     → 保存发布连接器配置
-  GET  /api/session/bootstrap    → 获取本地 API 会话 token
-  POST /api/library/preview/local/images → 预览本地图片目录
-  POST /api/library/ingest/local/images  → 异步分析本地图片语义并入库
-  POST /api/init                 → 初始化新项目
-  POST /api/open_project         → 打开已有项目
-  POST /api/approve/<int:step>   → 审核通过某步骤（含表单数据）
-  POST /api/run_step             → 后台运行当前步骤（返回 job_id）
-  GET  /api/job/<job_id>         → 轮询后台任务状态
-  POST /api/job/<job_id>/cancel  → 取消后台任务
-  GET  /api/files/<path:rel>     → 提供项目文件（视频/图片）
-  GET  /api/frames               → 列出帧预览图片
-  GET  /api/stage_files          → 列出 Step 7 各 stage 文件存在情况
-  GET  /api/capabilities         → 能力模块注册信息
-  GET  /api/capabilities/idempotency/cache
-  POST /api/capabilities/idempotency/cache/prune
-  GET/POST /api/capabilities/topic_library
-  POST /api/capabilities/topic_library/bootstrap
-  POST /api/capabilities/topic_copy/draft
-  GET  /api/capabilities/text_rough_cut/source
-  POST /api/capabilities/text_rough_cut/plan
-  POST /api/capabilities/short_clip/plan
-  POST /api/capabilities/refinement/plan
-  POST /api/capabilities/refinement/handoff
-  POST /api/capabilities/refinement/execute
-  POST /api/capabilities/refinement/collect_master
-  GET  /api/capabilities/refinement/connectors
-  GET/POST /api/capabilities/publish_prep/profiles
-  POST /api/capabilities/publish_prep/generate
-  POST /api/capabilities/subtitle_calibration/plan
-  POST /api/capabilities/subtitle_calibration/run
-  POST /api/capabilities/image_semantic/analyze
-  POST /api/capabilities/image_semantic/search
-  POST /api/capabilities/article_expand/generate
-  GET  /api/capabilities/content_publish/platforms
-  POST /api/capabilities/content_publish/session/bootstrap
-  POST /api/capabilities/content_publish/plan
-  POST /api/capabilities/content_publish/run
-  POST /api/capabilities/content_publish/rerun
-  GET  /api/capabilities/social_export/profiles
-  GET  /api/capabilities/social_export/specs
-  GET/POST /api/capabilities/social_export/templates
-  DELETE /api/capabilities/social_export/templates/<template_id>
-  GET  /api/capabilities/social_export/history
-  POST /api/capabilities/social_export/validate_source
-  POST /api/capabilities/social_export/plan
-  POST /api/capabilities/social_export/run
-  POST /api/capabilities/social_export/rerun
-  POST /api/capabilities/audio_voice/plan
-  POST /api/capabilities/audio_voice/pick_bgm
-  POST /api/capabilities/audio_voice/synthesize
-  POST /api/capabilities/audio_voice/build_track
-  POST /api/capabilities/audio_voice/mix_master
-  POST /api/capabilities/audio_voice/run
-  GET  /api/agent/capabilities
-  POST /api/agent/tasks/plan
-  POST /api/agent/tasks/run
-  GET  /api/agent/tasks/<job_id>
-  GET  /api/agent/tasks/history
-  POST /api/agent/tasks/<job_id>/export
-  POST /api/agent/tasks/<job_id>/replay
-  GET  /api/agent/observability
-  POST /api/agent/observability/export
-  GET/POST /api/agent/templates
-  DELETE /api/agent/templates/<template_id>
-  POST /api/agent/skills/invoke
-  GET  /api/workflows/catalog
-  GET/POST /api/workflows
-  DELETE /api/workflows/<workflow_id>
-  POST /api/workflows/plan
-  POST /api/workflows/run
-  GET  /api/workflows/runs
-  GET  /api/workflows/runs/<run_id>
-  POST /api/workflows/runs/<run_id>/rerun
-  POST /api/open_in_finder       → 在 Finder 中打开文件/目录
-  POST /api/dialog/folder        → 触发 pywebview 文件夹选择对话框
-  POST /api/dialog/file          → 触发 pywebview 文件选择对话框
+Core module: job store, queue management, blueprint registration, and create_app().
+Business logic is extracted into services/ and middleware/ sub-packages.
 """
 
 import sys
@@ -120,62 +35,6 @@ from modules.app_api.secure_store import build_secret_store, SecretStore
 from modules.app_api.services.idempotency_store import CapabilityIdempotencyStore
 from modules.app_api.services.job_runtime import JobRuntime, ManagedJob as _ManagedJob, ManagedJobLog as _ManagedJobLog
 from modules.app_api.services.preflight_service import run_startup_preflight
-from modules.app_api.services.agent_governance import (  # L1 extract
-    AGENT_GOVERNANCE_DEFAULT,
-    AGENT_GOVERNANCE_USAGE_DEFAULT,
-    AGENT_USAGE_RECENT_RUNS_MAX,
-    AGENT_TASK_HISTORY_MAX,
-    AGENT_COST_MODEL_DEFAULT,
-    normalize_skill_retry_policy as _normalize_skill_retry_policy,
-    normalize_skill_timeout_seconds as _normalize_skill_timeout_seconds,
-    normalize_skill_budget_limit as _normalize_skill_budget_limit,
-    normalize_governance_limit_item as _normalize_governance_limit_item,
-    normalize_governance_string_list as _normalize_governance_string_list,
-    normalize_agent_governance_policy as _normalize_agent_governance_policy,
-    normalize_cost_rate_item as _normalize_cost_rate_item,
-    normalize_agent_cost_model_config as _normalize_agent_cost_model_config,
-    extract_pricing_hint_from_response as _extract_pricing_hint_from_response,
-    resolve_cost_rates as _resolve_cost_rates,
-    extract_usage_tokens_from_response as _extract_usage_tokens_from_response,
-    estimate_step_cost_metrics as _estimate_step_cost_metrics,
-    normalize_usage_bucket as _normalize_usage_bucket,
-    compute_usage_suggested_limits as _compute_usage_suggested_limits,
-    update_usage_bucket as _update_usage_bucket,
-    extract_dynamic_limits_from_usage as _extract_dynamic_limits_from_usage,
-    pick_actor_rule as _pick_actor_rule,
-    tighten_governance_limit as _tighten_governance_limit,
-    resolve_agent_governance_for_skill_flow as _resolve_agent_governance_for_skill_flow,
-    apply_governance_to_skill_flow as _apply_governance_to_skill_flow,
-    normalize_agent_skill_condition as _normalize_agent_skill_condition,
-)
-from modules.app_api.services.settings_helpers import (  # L1 extract
-    normalize_production_view as _normalize_production_view,
-    normalize_font_scale as _normalize_font_scale,
-    mask_secret as _mask_secret,
-    normalize_publish_connectors as _normalize_publish_connectors,
-    merge_publish_connectors_with_existing as _merge_publish_connectors_with_existing,
-    mask_publish_connectors as _mask_publish_connectors,
-    normalize_ai_provider as _normalize_ai_provider,
-    recommended_ai_base_url as _recommended_ai_base_url,
-    ai_catalog_payload as _ai_catalog_payload,
-    ai_secret_ref_name as _ai_secret_ref_name,
-    _DEFAULT_EMBEDDING_MODEL,
-    _AI_PROVIDER_ALIASES,
-)
-from modules.app_api.services.custom_workflow_helpers import (  # L1 extract
-    normalize_custom_workflow_id as _normalize_custom_workflow_id,
-    parse_custom_workflow_tags as _parse_custom_workflow_tags,
-    normalize_custom_workflow_step as _normalize_custom_workflow_step,
-    normalize_custom_workflow_payload as _normalize_custom_workflow_payload,
-    workflow_get_path_value as _workflow_get_path_value,
-    resolve_workflow_templates as _resolve_workflow_templates,
-    workflow_truthy as _workflow_truthy,
-    workflow_pick_next_step_id as _workflow_pick_next_step_id,
-    workflow_pick_target_with_source as _workflow_pick_target_with_source,
-    workflow_graph_has_cycle as _workflow_graph_has_cycle,
-    build_custom_workflow_graph as _build_custom_workflow_graph,
-    build_failed_only_workflow_subset as _build_failed_only_workflow_subset,
-)
 from modules.app_api.routes.agent_template_routes import create_agent_template_blueprint
 from modules.app_api.routes.agent_capability_routes import create_agent_capability_blueprint
 from modules.app_api.routes.agent_observability_routes import create_agent_observability_blueprint
@@ -259,6 +118,7 @@ app.register_blueprint(
         load_publish_settings=lambda: _load_publish_settings(),
         save_publish_settings=lambda payload: _save_publish_settings(payload),
         mask_publish_connectors=lambda payload: _mask_publish_connectors(payload),
+        secret_store_getter=lambda: _secret_store,
     )
 )
 app.register_blueprint(
@@ -528,11 +388,7 @@ app.register_blueprint(
             default_timeout_seconds=default_timeout_seconds,
         ),
         normalize_skill_timeout_seconds=lambda value, default=120.0: _normalize_skill_timeout_seconds(value, default=default),
-        apply_governance_to_skill_flow=lambda **kwargs: _apply_governance_to_skill_flow(
-            policy=_read_agent_governance_policy(),
-            usage=_read_agent_governance_usage(),
-            **kwargs,
-        ),
+        apply_governance_to_skill_flow=lambda **kwargs: _apply_governance_to_skill_flow(**kwargs),
         apply_agent_capability_input_defaults=lambda capability_id, input_payload: _apply_agent_capability_input_defaults(
             capability_id,
             input_payload,
@@ -616,116 +472,35 @@ app.register_blueprint(
     )
 )
 
+# ── Middleware: error handlers (extracted to middleware/error_handler.py) ──
+from modules.app_api.middleware.error_handler import (  # noqa: E402
+    handle_request_entity_too_large,
+    handle_not_found,
+    handle_method_not_allowed,
+    handle_unexpected_error,
+)
+from modules.app_api.middleware import error_handler as _err_handler_mod  # noqa: E402
+_err_handler_mod.init(app=app)
+app.errorhandler(RequestEntityTooLarge)(handle_request_entity_too_large)
+app.errorhandler(404)(handle_not_found)
+app.errorhandler(405)(handle_method_not_allowed)
+app.errorhandler(Exception)(handle_unexpected_error)
 
-@app.errorhandler(RequestEntityTooLarge)
-def handle_request_entity_too_large(_exc):
-    limit_mb = int(max(app.config.get("MAX_CONTENT_LENGTH", 0), 0) / (1024 * 1024))
-    return (
-        jsonify(
-            {
-                "error": f"请求内容过大（上限约 {limit_mb}MB）。请减少单次提交内容，或按批次执行。"
-            }
-        ),
-        413,
-    )
-
-
-@app.errorhandler(404)
-def handle_not_found(_exc):
-    return jsonify({"error": "路由不存在", "code": "not_found"}), 404
-
-
-@app.errorhandler(405)
-def handle_method_not_allowed(_exc):
-    return jsonify({"error": "HTTP 方法不允许", "code": "method_not_allowed"}), 405
-
-
-@app.errorhandler(Exception)
-def handle_unexpected_error(exc):
-    if isinstance(exc, HTTPException):
-        return jsonify({"error": str(exc.description), "code": exc.name}), exc.code
-    logger.exception("未捕获异常: %s", exc)
-    return (
-        jsonify(
-            {
-                "error": "系统发生异常，已记录日志。请重试；若持续失败，请在设置中导出诊断信息。"
-            }
-        ),
-        500,
-    )
-
-
-def _request_is_local() -> bool:
-    remote = str(request.remote_addr or "").strip()
-    if remote in {"127.0.0.1", "::1", "localhost", ""}:
-        return True
-    return False
-
-
-def _is_mutating_method(method: str) -> bool:
-    return str(method or "").strip().upper() in {"POST", "PUT", "PATCH", "DELETE"}
-
-
-def _is_allowed_local_origin(origin: str) -> bool:
-    text = str(origin or "").strip().lower()
-    if not text:
-        return True
-    if text in {"null", "file://"}:
-        return True
-    allowed_prefixes = (
-        "http://127.0.0.1",
-        "https://127.0.0.1",
-        "http://localhost",
-        "https://localhost",
-    )
-    return any(text.startswith(prefix) for prefix in allowed_prefixes)
-
-
-@app.before_request
-def _guard_local_api_token():
-    if request.method == "OPTIONS":
-        return None
-    path = str(request.path or "")
-    if not path.startswith("/api/"):
-        return None
-    enforce_csrf = bool(_REQUIRE_CSRF_PROTECTION and _REQUIRE_LOCAL_API_TOKEN)
-    origin = str(request.headers.get("Origin", "") or "").strip()
-    if enforce_csrf and _is_mutating_method(request.method) and not _is_allowed_local_origin(origin):
-        return jsonify({"error": "非法来源，请在本地应用内发起请求。", "code": "origin_forbidden"}), 403
-    if path == "/api/session/bootstrap":
-        return None
-    if enforce_csrf and _is_mutating_method(request.method):
-        provided_csrf = str(request.headers.get("X-VideoEditor-CSRF", "") or "").strip()
-        if not provided_csrf:
-            provided_csrf = str(request.args.get("_csrf", "") or "").strip()
-        if provided_csrf != _LOCAL_CSRF_TOKEN:
-            return (
-                jsonify(
-                    {
-                        "error": "请求缺少安全校验，请刷新应用后重试。",
-                        "code": "csrf_required",
-                    }
-                ),
-                403,
-            )
-    if not _REQUIRE_LOCAL_API_TOKEN:
-        return None
-    if not _request_is_local():
-        return jsonify({"error": "仅允许本机访问该 API"}), 403
-    provided = str(request.headers.get("X-VideoEditor-Token", "") or "").strip()
-    if not provided:
-        provided = str(request.args.get("_vt", "") or "").strip()
-    if provided != _LOCAL_API_TOKEN:
-        return (
-            jsonify(
-                {
-                    "error": "未授权请求，请先完成本地会话握手。",
-                    "code": "local_auth_required",
-                }
-            ),
-            401,
-        )
-    return None
+# ── Middleware: security (extracted to middleware/security.py) ──
+from modules.app_api.middleware.security import (  # noqa: E402
+    _request_is_local,
+    _is_mutating_method,
+    _is_allowed_local_origin,
+    _guard_local_api_token,
+)
+from modules.app_api.middleware import security as _security_mod  # noqa: E402
+_security_mod.init(
+    require_local_api_token=_REQUIRE_LOCAL_API_TOKEN,
+    require_csrf_protection=_REQUIRE_CSRF_PROTECTION,
+    local_api_token=_LOCAL_API_TOKEN,
+    local_csrf_token=_LOCAL_CSRF_TOKEN,
+)
+app.before_request(_guard_local_api_token)
 
 _heavy_job_submit_lock = threading.Lock()
 _agent_history_lock = threading.Lock()
@@ -742,7 +517,6 @@ _HEAVY_JOB_KINDS = {
 }
 _HEAVY_QUEUE_MAX_RUNNING = max(1, min(int(os.environ.get("VIDEOEDITOR_HEAVY_QUEUE_MAX_RUNNING", "2") or 2), 4))
 _job_runtime: Optional[JobRuntime] = None
-
 
 def _set_heavy_queue_max_running(val: int):
     global _HEAVY_QUEUE_MAX_RUNNING
@@ -766,13 +540,11 @@ _preflight_cache: Dict[str, Any] = {
 }
 _PREFLIGHT_CACHE_TTL_SECONDS = 15.0
 
-
 def _app_state_db_path() -> Path:
     base = _library.db_path.parent if hasattr(_library, "db_path") else (REPO_ROOT / ".video_library")
     path = Path(base) / "app_state.db"
     path.parent.mkdir(parents=True, exist_ok=True)
     return path
-
 
 def _ensure_job_store() -> JobStore:
     global _job_store, _job_store_path
@@ -782,13 +554,11 @@ def _ensure_job_store() -> JobStore:
         _job_store_path = target
     return _job_store
 
-
 def _safe_copy(value: Any, fallback: Any):
     try:
         return deepcopy(value)
     except Exception:
         return fallback
-
 
 def _job_payload_for_store(job: Dict[str, Any]) -> Dict[str, Any]:
     meta = job.get("meta", {}) if isinstance(job.get("meta"), dict) else {}
@@ -810,7 +580,6 @@ def _job_payload_for_store(job: Dict[str, Any]) -> Dict[str, Any]:
         "created_at": str(job.get("created_at", "") or "") or str(job.get("queued_at", "") or ""),
     }
     return payload
-
 
 def _persist_job_snapshot(job_id: str, event_type: str = ""):
     jid = str(job_id or "").strip()
@@ -839,12 +608,10 @@ def _persist_job_snapshot(job_id: str, event_type: str = ""):
                 continue
             return
 
-
 def _make_managed_job(job_id: str, payload: Dict[str, Any]) -> _ManagedJob:
     if _job_runtime is None:
         return _ManagedJob(str(job_id or ""), dict(payload or {}))
     return _job_runtime.make_managed_job(job_id, payload)
-
 
 def _restore_jobs_from_store():
     global _jobs
@@ -858,7 +625,6 @@ def _restore_jobs_from_store():
     _job_runtime.restore_jobs(rows)
     _jobs = _job_runtime.jobs
 
-
 def _load_job_from_store(job_id: str) -> Optional[Dict[str, Any]]:
     jid = str(job_id or "").strip()
     if not jid or _job_runtime is None:
@@ -871,7 +637,6 @@ def _load_job_from_store(job_id: str) -> Optional[Dict[str, Any]]:
     if not isinstance(row, dict):
         return None
     return _job_runtime.adopt_job(jid, row)
-
 
 def _reset_job_store_for_tests():
     global _job_store, _job_store_path
@@ -1086,19 +851,41 @@ _AGENT_SKILL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "default_input": {"input_mode": "auto"},
     },
 }
-# L1: constants moved to services/agent_governance.py — aliased for backward compat
-_AGENT_GOVERNANCE_DEFAULT = AGENT_GOVERNANCE_DEFAULT
-_AGENT_GOVERNANCE_USAGE_DEFAULT = AGENT_GOVERNANCE_USAGE_DEFAULT
-_AGENT_USAGE_RECENT_RUNS_MAX = AGENT_USAGE_RECENT_RUNS_MAX
-_AGENT_TASK_HISTORY_MAX = AGENT_TASK_HISTORY_MAX
-_AGENT_COST_MODEL_DEFAULT = AGENT_COST_MODEL_DEFAULT
-
+_AGENT_GOVERNANCE_DEFAULT: Dict[str, Any] = {
+    "default_limits": {
+        "max_steps": 40,
+        "max_failures": 12,
+        "max_duration_seconds": 1800,
+        "max_parallel": 4,
+    },
+    "actor_limits": {},
+    "capability_limits": {},
+    "actor_capability_limits": {},
+    "blocked_skills": [],
+    "blocked_capabilities": [],
+    "blocked_skills_by_actor": {},
+    "blocked_capabilities_by_actor": {},
+}
+_AGENT_GOVERNANCE_USAGE_DEFAULT: Dict[str, Any] = {
+    "version": 1,
+    "updated_at": "",
+    "actors": {},
+}
+_AGENT_USAGE_RECENT_RUNS_MAX = 16
+_AGENT_TASK_HISTORY_MAX = 600
+_AGENT_COST_MODEL_DEFAULT: Dict[str, Any] = {
+    "default_rates": {
+        "prompt_usd_per_1k_tokens": 0.002,
+        "completion_usd_per_1k_tokens": 0.006,
+        "compute_usd_per_second": 0.00005,
+    },
+    "providers": {},
+}
 
 class JobCancelledError(RuntimeError):
     def __init__(self, message: str = "任务已取消", result=None):
         super().__init__(message)
         self.result = result
-
 
 def _on_job_runtime_finished(job_id: str, job: Dict[str, Any]):
     kind = str((job or {}).get("kind", "") or "")
@@ -1112,7 +899,6 @@ def _on_job_runtime_finished(job_id: str, job: Dict[str, Any]):
             _ws.load()
         except Exception:
             pass
-
 
 _job_runtime = JobRuntime(
     heavy_job_kinds=_HEAVY_JOB_KINDS,
@@ -1163,7 +949,6 @@ def _load_state(project_dir: Path) -> WorkflowState:
     _ws.load()
     return _ws
 
-
 def _state_dict() -> dict:
     if _ws is None:
         return {"ready": False}
@@ -1195,28 +980,23 @@ def _state_dict() -> dict:
         "task_queue": _task_queue_snapshot(),
     }
 
-
 def _is_heavy_kind(kind: Any) -> bool:
     return bool(_job_runtime and _job_runtime.is_heavy_kind(kind))
-
 
 def _count_running_heavy_jobs_locked() -> int:
     if _job_runtime is None:
         return 0
     return _job_runtime._count_running_heavy_jobs_locked()
 
-
 def _queued_heavy_jobs_locked() -> List[Dict[str, Any]]:
     if _job_runtime is None:
         return []
     return _job_runtime._queued_heavy_jobs_locked()
 
-
 def _task_queue_snapshot() -> Dict[str, Any]:
     if _job_runtime is None:
         return {"max_running": _HEAVY_QUEUE_MAX_RUNNING, "running_count": 0, "queued_count": 0, "running": [], "queued": []}
     return _job_runtime.task_queue_snapshot()
-
 
 def _start_job_worker_thread(
     job_id: str,
@@ -1228,12 +1008,10 @@ def _start_job_worker_thread(
         return
     _job_runtime._start_job_worker_thread(job_id, fn, args, kwargs)
 
-
 def _dispatch_heavy_queue_locked():
     if _job_runtime is None:
         return
     _job_runtime.dispatch_heavy_queue_locked()
-
 
 def _run_in_bg(job_id: str, fn, *args, kind: str = "generic", job_meta: Optional[Dict[str, Any]] = None, **kwargs):
     """在后台线程运行 fn，捕获 stdout 并更新 _jobs[job_id]。重任务自动进入队列。"""
@@ -1241,12 +1019,10 @@ def _run_in_bg(job_id: str, fn, *args, kind: str = "generic", job_meta: Optional
         return job_id
     return _job_runtime.run_in_bg(job_id, fn, *args, kind=kind, job_meta=job_meta, **kwargs)
 
-
 def _running_heavy_jobs() -> list:
     if _job_runtime is None:
         return []
     return _job_runtime.running_heavy_jobs()
-
 
 def _system_load_snapshot() -> Dict:
     cpu_count = os.cpu_count() or 1
@@ -1261,7 +1037,6 @@ def _system_load_snapshot() -> Dict:
         "load_15m": round(float(l15), 3),
         "load_ratio_1m": round(float(l1) / max(cpu_count, 1), 3),
     }
-
 
 def _system_preflight_snapshot(force: bool = False) -> Dict[str, Any]:
     now_ts = time.time()
@@ -1317,1922 +1092,78 @@ def _system_preflight_snapshot(force: bool = False) -> Dict[str, Any]:
         _preflight_cache["report"] = deepcopy(report)
     return report
 
-
 def _is_overloaded() -> bool:
     snap = _system_load_snapshot()
     # 比较保守：1分钟 load 超过 CPU 核心数的 1.6 倍时拒绝启动新的重任务
     return snap.get("load_ratio_1m", 0.0) >= 1.6
 
-
-def _prepare_project_dirs(project_path: Path):
-    for sub in ("data", "reviews", "preview", "output"):
-        (project_path / sub).mkdir(parents=True, exist_ok=True)
-
-
-def _settings_path() -> Path:
-    p = _library.db_path.parent / "app_settings.json"
-    p.parent.mkdir(parents=True, exist_ok=True)
-    return p
-
-
-def _read_settings() -> Dict:
-    p = _settings_path()
-    if not p.exists():
-        return {}
-    try:
-        return json.loads(p.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-
-
-def _write_settings(data: Dict):
-    p = _settings_path()
-    p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-
-
-_DEFAULT_UI_SETTINGS: Dict[str, Any] = {
-    "onboarding_completed": False,
-    "creator_mode": True,
-    "font_scale": 1.0,
-    "preferred_production_view": "hub",
-    "default_videos_dir": "",
-    "default_project_dir": "",
-    "auto_open_last_project": True,
-    "last_project_dir": "",
-}
-def _load_ui_settings() -> Dict[str, Any]:
-    src = _read_settings().get("ui", {})
-    if not isinstance(src, dict):
-        src = {}
-    out = dict(_DEFAULT_UI_SETTINGS)
-    out["onboarding_completed"] = bool(src.get("onboarding_completed", out["onboarding_completed"]))
-    out["creator_mode"] = bool(src.get("creator_mode", out["creator_mode"]))
-    out["font_scale"] = _normalize_font_scale(src.get("font_scale", out["font_scale"]))
-    out["preferred_production_view"] = _normalize_production_view(
-        src.get("preferred_production_view", out["preferred_production_view"])
-    )
-    out["default_videos_dir"] = str(src.get("default_videos_dir", out["default_videos_dir"]) or "").strip()
-    out["default_project_dir"] = str(src.get("default_project_dir", out["default_project_dir"]) or "").strip()
-    out["auto_open_last_project"] = bool(src.get("auto_open_last_project", out["auto_open_last_project"]))
-    out["last_project_dir"] = str(src.get("last_project_dir", out["last_project_dir"]) or "").strip()
-    return out
-
-
-def _save_ui_settings(payload: Dict[str, Any]) -> Dict[str, Any]:
-    src = payload if isinstance(payload, dict) else {}
-    settings = _read_settings()
-    ui = settings.get("ui", {})
-    if not isinstance(ui, dict):
-        ui = {}
-
-    if "onboarding_completed" in src:
-        ui["onboarding_completed"] = bool(src.get("onboarding_completed"))
-    if "creator_mode" in src:
-        ui["creator_mode"] = bool(src.get("creator_mode"))
-    if "font_scale" in src:
-        ui["font_scale"] = _normalize_font_scale(src.get("font_scale"))
-    if "preferred_production_view" in src:
-        ui["preferred_production_view"] = _normalize_production_view(src.get("preferred_production_view"))
-    if "default_videos_dir" in src:
-        ui["default_videos_dir"] = str(src.get("default_videos_dir", "") or "").strip()
-    if "default_project_dir" in src:
-        ui["default_project_dir"] = str(src.get("default_project_dir", "") or "").strip()
-    if "auto_open_last_project" in src:
-        ui["auto_open_last_project"] = bool(src.get("auto_open_last_project"))
-    if "last_project_dir" in src:
-        ui["last_project_dir"] = str(src.get("last_project_dir", "") or "").strip()
-
-    settings["ui"] = ui
-    _write_settings(settings)
-    return _load_ui_settings()
-
-
-def _remember_last_project(project_path: Path):
-    if not isinstance(project_path, Path):
-        return
-    try:
-        resolved = str(project_path.resolve())
-        _save_ui_settings({"last_project_dir": resolved})
-        # Also maintain recent_projects list
-        _add_to_recent_projects(resolved, project_path.name)
-    except Exception:
-        pass
-
-
-def _add_to_recent_projects(path_str: str, name: str):
-    """Maintain a recent_projects list (max 20) in settings."""
-    try:
-        settings = _read_settings()
-        recents = settings.get("recent_projects", [])
-        if not isinstance(recents, list):
-            recents = []
-        # Remove existing entry for this path
-        recents = [r for r in recents if r.get("path") != path_str]
-        # Prepend new entry
-        recents.insert(0, {
-            "path": path_str,
-            "name": name,
-            "opened_at": datetime.now().isoformat(timespec="seconds"),
-        })
-        # Trim to 20
-        recents = recents[:20]
-        settings["recent_projects"] = recents
-        _write_settings(settings)
-    except Exception:
-        pass
-
-
-def _get_recent_projects() -> List[Dict[str, Any]]:
-    """Return recent projects with status info."""
-    settings = _read_settings()
-    recents = settings.get("recent_projects", [])
-    if not isinstance(recents, list):
-        return []
-    result = []
-    for entry in recents[:20]:
-        if not isinstance(entry, dict):
-            continue
-        p = entry.get("path", "")
-        if not p:
-            continue
-        proj_path = Path(p)
-        wf_file = proj_path / "workflow.json"
-        status = "unknown"
-        current_step = 0
-        total_steps = 7
-        completed_steps = 0
-        if wf_file.exists():
-            try:
-                wf = json.loads(wf_file.read_text(encoding="utf-8"))
-                current_step = int(wf.get("current_step", 0))
-                total_steps = int(wf.get("total_steps", 7))
-                completed_steps = len(wf.get("completed_steps", []))
-                if completed_steps >= total_steps:
-                    status = "completed"
-                elif current_step > 0:
-                    status = "in_progress"
-                else:
-                    status = "draft"
-            except Exception:
-                status = "draft"
-        else:
-            status = "missing"
-        result.append({
-            "path": p,
-            "name": entry.get("name", proj_path.name),
-            "opened_at": entry.get("opened_at", ""),
-            "status": status,
-            "current_step": current_step,
-            "total_steps": total_steps,
-            "completed_steps": completed_steps,
-            "exists": proj_path.exists(),
-        })
-    return result
-
-
-_DEFAULT_PUBLISH_SETTINGS: Dict[str, Any] = {
-    "connectors": {},
-}
-_PUBLISH_SECRET_KEEP_SENTINEL = "__KEEP__"
-def _load_publish_settings() -> Dict[str, Any]:
-    src = _read_settings().get("publish", {})
-    if not isinstance(src, dict):
-        src = {}
-    connectors = _normalize_publish_connectors(src.get("connectors", {}))
-    return {
-        "connectors": connectors,
-    }
-
-
-def _save_publish_settings(payload: Dict[str, Any]) -> Dict[str, Any]:
-    src = payload if isinstance(payload, dict) else {}
-    settings = _read_settings()
-    publish = settings.get("publish", {})
-    if not isinstance(publish, dict):
-        publish = {}
-    if "connectors" in src:
-        existing_connectors = _normalize_publish_connectors(publish.get("connectors", {}))
-        incoming_connectors = _normalize_publish_connectors(src.get("connectors", {}))
-        publish["connectors"] = _merge_publish_connectors_with_existing(existing_connectors, incoming_connectors)
-    settings["publish"] = publish
-    _write_settings(settings)
-    return _load_publish_settings()
-def _read_ai_secret_field(settings_ai: Dict[str, Any], field_name: str) -> str:
-    if not isinstance(settings_ai, dict):
-        return ""
-    ref_key = f"{field_name}_ref"
-    ref_name = str(settings_ai.get(ref_key, "") or "").strip()
-    store_meta = _secret_store.info()
-    if ref_name and bool(store_meta.available):
-        try:
-            from_store = _secret_store.get(ref_name)
-        except Exception:
-            from_store = ""
-        if from_store:
-            return str(from_store).strip()
-    return str(settings_ai.get(field_name, "") or "").strip()
-
-
-def _persist_ai_secret_field(settings_ai: Dict[str, Any], field_name: str, incoming_value: str, clear_flag: bool) -> None:
-    if not isinstance(settings_ai, dict):
-        return
-    name = str(field_name or "").strip()
-    if not name:
-        return
-    ref_key = f"{name}_ref"
-    ref_name = str(settings_ai.get(ref_key, "") or _ai_secret_ref_name(name)).strip() or _ai_secret_ref_name(name)
-    store_meta = _secret_store.info()
-
-    if clear_flag:
-        if ref_name and bool(store_meta.available):
-            try:
-                _secret_store.delete(ref_name)
-            except Exception:
-                pass
-        settings_ai.pop(name, None)
-        settings_ai.pop(ref_key, None)
-        return
-
-    value = str(incoming_value or "").strip()
-    if value:
-        if ref_name and bool(store_meta.available):
-            try:
-                stored = _secret_store.set(ref_name, value)
-            except Exception:
-                stored = False
-            if stored:
-                settings_ai[ref_key] = ref_name
-                settings_ai.pop(name, None)
-                return
-        settings_ai[name] = value
-        settings_ai.pop(ref_key, None)
-        return
-
-    # No new value passed: try to migrate existing legacy plaintext key into secret store.
-    legacy_value = str(settings_ai.get(name, "") or "").strip()
-    if legacy_value and ref_name and bool(store_meta.available):
-        try:
-            migrated = _secret_store.set(ref_name, legacy_value)
-        except Exception:
-            migrated = False
-        if migrated:
-            settings_ai[ref_key] = ref_name
-            settings_ai.pop(name, None)
-
-
-def _load_ai_settings() -> Dict:
-    data = _read_settings().get("ai", {})
-    if not isinstance(data, dict):
-        data = {}
-    provider = _normalize_ai_provider(data.get("provider", ""))
-    return {
-        "provider": provider or "openai",
-        "ai_model": str(data.get("ai_model", "") or "").strip(),
-        "embedding_model": str(data.get("embedding_model", "") or "").strip(),
-        "ai_base_url": str(data.get("ai_base_url", "") or "").strip(),
-        "openai_api_key": _read_ai_secret_field(data, "openai_api_key"),
-        "anthropic_api_key": _read_ai_secret_field(data, "anthropic_api_key"),
-    }
-
-
-def _save_ai_settings(payload: Dict) -> Dict:
-    settings = _read_settings()
-    ai = settings.get("ai", {})
-    if not isinstance(ai, dict):
-        ai = {}
-
-    provider = _normalize_ai_provider(payload.get("provider", ""))
-    model = str(payload.get("ai_model", "") or "").strip()
-    embedding_model = str(payload.get("embedding_model", "") or "").strip()
-    base_url = str(payload.get("ai_base_url", "") or "").strip()
-    if provider:
-        ai["provider"] = provider
-    elif "provider" in payload:
-        ai.pop("provider", None)
-    if model:
-        ai["ai_model"] = model
-    elif "ai_model" in payload:
-        ai.pop("ai_model", None)
-    if embedding_model:
-        ai["embedding_model"] = embedding_model
-    elif "embedding_model" in payload:
-        ai.pop("embedding_model", None)
-    if base_url:
-        ai["ai_base_url"] = base_url
-    elif "ai_base_url" in payload:
-        ai.pop("ai_base_url", None)
-
-    openai_api_key = str(payload.get("openai_api_key", "") or "").strip()
-    anthropic_api_key = str(payload.get("anthropic_api_key", "") or "").strip()
-    clear_openai = bool(payload.get("clear_openai_api_key", False))
-    clear_anthropic = bool(payload.get("clear_anthropic_api_key", False))
-    _persist_ai_secret_field(ai, "openai_api_key", openai_api_key, clear_openai)
-    _persist_ai_secret_field(ai, "anthropic_api_key", anthropic_api_key, clear_anthropic)
-
-    settings["ai"] = ai
-    _write_settings(settings)
-    return _load_ai_settings()
-
-
-def _apply_ai_env(ai: Dict):
-    provider = _normalize_ai_provider(ai.get("provider", ""))
-    openai_api_key = str(ai.get("openai_api_key", "") or "").strip()
-    anthropic_api_key = str(ai.get("anthropic_api_key", "") or "").strip()
-    ai_base_url = str(ai.get("ai_base_url", "") or "").strip()
-    ai_model = str(ai.get("ai_model", "") or "").strip()
-    embedding_model = str(ai.get("embedding_model", "") or "").strip()
-
-    if openai_api_key:
-        os.environ["OPENAI_API_KEY"] = openai_api_key
-    else:
-        os.environ.pop("OPENAI_API_KEY", None)
-    if anthropic_api_key:
-        os.environ["ANTHROPIC_API_KEY"] = anthropic_api_key
-    else:
-        os.environ.pop("ANTHROPIC_API_KEY", None)
-    openai_compatible_provider = provider in {"", "openai", "moonshot", "qwen", "gemini", "maxmini"}
-    if ai_base_url and openai_compatible_provider:
-        os.environ["OPENAI_BASE_URL"] = ai_base_url
-    else:
-        os.environ.pop("OPENAI_BASE_URL", None)
-    if ai_model and openai_compatible_provider:
-        os.environ["OPENAI_MODEL"] = ai_model
-    else:
-        os.environ.pop("OPENAI_MODEL", None)
-    if embedding_model:
-        os.environ["OPENAI_EMBEDDING_MODEL"] = embedding_model
-    else:
-        os.environ.pop("OPENAI_EMBEDDING_MODEL", None)
-
-
-def _public_ai_settings(ai: Dict) -> Dict:
-    provider = _normalize_ai_provider(ai.get("provider", "")) or "openai"
-    model = str(ai.get("ai_model", "") or "").strip()
-    base_url = str(ai.get("ai_base_url", "") or "").strip()
-    embedding_model = str(ai.get("embedding_model", "") or "").strip()
-    secret_status = _secret_store.public_status()
-    return {
-        "provider": provider,
-        "ai_model": model,
-        "embedding_model": embedding_model,
-        "embedding_model_resolved": embedding_model or _DEFAULT_EMBEDDING_MODEL,
-        "ai_base_url": base_url,
-        "recommended_base_url": _recommended_ai_base_url(provider, model),
-        "openai_api_key_set": bool(ai.get("openai_api_key")),
-        "anthropic_api_key_set": bool(ai.get("anthropic_api_key")),
-        "openai_api_key_masked": _mask_secret(ai.get("openai_api_key", "")),
-        "anthropic_api_key_masked": _mask_secret(ai.get("anthropic_api_key", "")),
-        "secret_storage": secret_status,
-        "catalog": _ai_catalog_payload(),
-    }
-
-
-def _default_project_config(extra: Optional[Dict] = None) -> Dict:
-    ai = _load_ai_settings()
-    config = {
-        "use_semantic_index": False,
-        "ai_provider": ai.get("provider") or None,
-        "ai_base_url": ai.get("ai_base_url") or None,
-        "ai_model": ai.get("ai_model") or None,
-        "render": dict(RENDER_DEFAULTS),
-    }
-    if extra:
-        config.update(extra)
-    return config
-
-
-def _project_data_path(filename: str) -> Optional[Path]:
-    if _project_dir is None:
-        return None
-    return _project_dir / "data" / filename
-
-
-def _read_project_json(filename: str, fallback=None):
-    p = _project_data_path(filename)
-    if p is None or not p.exists():
-        return fallback if fallback is not None else {}
-    try:
-        return json.loads(p.read_text(encoding="utf-8"))
-    except Exception:
-        return fallback if fallback is not None else {}
-
-
-def _read_agent_task_history() -> List[Dict[str, Any]]:
-    raw = _read_project_json("agent_task_history.json", fallback=[])
-    if not isinstance(raw, list):
-        return []
-    out: List[Dict[str, Any]] = []
-    for item in raw:
-        if isinstance(item, dict):
-            out.append(item)
-    if len(out) > _AGENT_TASK_HISTORY_MAX:
-        out = out[-_AGENT_TASK_HISTORY_MAX:]
-    return out
-
-
-def _save_agent_task_history(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    out: List[Dict[str, Any]] = []
-    if isinstance(items, list):
-        for item in items:
-            if isinstance(item, dict):
-                out.append(item)
-    if len(out) > _AGENT_TASK_HISTORY_MAX:
-        out = out[-_AGENT_TASK_HISTORY_MAX:]
-    p = _project_data_path("agent_task_history.json")
-    if p is not None:
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
-    return out
-
-
-def _find_agent_task_history_record(job_id: str) -> Optional[Dict[str, Any]]:
-    jid = str(job_id or "").strip()
-    if not jid:
-        return None
-    history = _read_agent_task_history()
-    for item in reversed(history):
-        if not isinstance(item, dict):
-            continue
-        if str(item.get("job_id", "") or "").strip() == jid:
-            return deepcopy(item)
-    return None
-
-
-def _custom_workflow_store_path() -> Optional[Path]:
-    return _project_data_path("custom_workflows.json")
-
-
-def _custom_workflow_runs_path() -> Optional[Path]:
-    return _project_data_path("custom_workflow_runs.json")
-def _read_custom_workflow_store() -> Dict[str, Dict[str, Any]]:
-    if _project_dir is None:
-        return deepcopy(_custom_workflow_store_mem)
-
-    p = _custom_workflow_store_path()
-    raw: Any = {}
-    if p is not None and p.exists():
-        try:
-            raw = json.loads(p.read_text(encoding="utf-8"))
-        except Exception:
-            raw = {}
-    if raw is None:
-        raw = {}
-
-    candidates: List[Dict[str, Any]] = []
-    if isinstance(raw, dict):
-        workflows_raw = raw.get("workflows")
-        if isinstance(workflows_raw, list):
-            candidates.extend([x for x in workflows_raw if isinstance(x, dict)])
-        else:
-            for key, value in raw.items():
-                if not isinstance(value, dict):
-                    continue
-                item = deepcopy(value)
-                item.setdefault("workflow_id", str(key))
-                candidates.append(item)
-    elif isinstance(raw, list):
-        candidates.extend([x for x in raw if isinstance(x, dict)])
-
-    out: Dict[str, Dict[str, Any]] = {}
-    for item in candidates:
-        try:
-            normalized = _normalize_custom_workflow_payload(item)
-        except Exception:
-            continue
-        out[normalized["workflow_id"]] = normalized
-    return out
-
-
-def _save_custom_workflow_store(store: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
-    out: Dict[str, Dict[str, Any]] = {}
-    if isinstance(store, dict):
-        for key, value in store.items():
-            if not isinstance(value, dict):
-                continue
-            candidate = deepcopy(value)
-            if not str(candidate.get("workflow_id", "") or "").strip():
-                candidate["workflow_id"] = str(key or "")
-            try:
-                normalized = _normalize_custom_workflow_payload(candidate, existing=value)
-            except Exception:
-                continue
-            out[normalized["workflow_id"]] = normalized
-
-    _custom_workflow_store_mem.clear()
-    _custom_workflow_store_mem.update(deepcopy(out))
-
-    p = _custom_workflow_store_path()
-    if p is not None:
-        p.parent.mkdir(parents=True, exist_ok=True)
-        data = {"version": 1, "updated_at": datetime.now().isoformat(timespec="seconds"), "workflows": list(out.values())}
-        p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    return out
-
-
-def _read_custom_workflow_runs() -> List[Dict[str, Any]]:
-    if _project_dir is None:
-        return deepcopy(_custom_workflow_runs_mem)
-    p = _custom_workflow_runs_path()
-    if p is None or not p.exists():
-        return []
-    try:
-        raw = json.loads(p.read_text(encoding="utf-8"))
-    except Exception:
-        return []
-    if not isinstance(raw, list):
-        return []
-    out: List[Dict[str, Any]] = []
-    for item in raw:
-        if isinstance(item, dict):
-            out.append(item)
-    if len(out) > _CUSTOM_WORKFLOW_HISTORY_MAX:
-        out = out[-_CUSTOM_WORKFLOW_HISTORY_MAX:]
-    return out
-
-
-def _save_custom_workflow_runs(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    out: List[Dict[str, Any]] = []
-    if isinstance(items, list):
-        for item in items:
-            if isinstance(item, dict):
-                out.append(item)
-    if len(out) > _CUSTOM_WORKFLOW_HISTORY_MAX:
-        out = out[-_CUSTOM_WORKFLOW_HISTORY_MAX:]
-
-    _custom_workflow_runs_mem.clear()
-    _custom_workflow_runs_mem.extend(deepcopy(out))
-
-    p = _custom_workflow_runs_path()
-    if p is not None:
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
-    return out
-
-
-def _append_custom_workflow_run(record: Dict[str, Any]) -> List[Dict[str, Any]]:
-    with _custom_workflow_lock:
-        history = _read_custom_workflow_runs()
-        history.append(record if isinstance(record, dict) else {})
-        return _save_custom_workflow_runs(history)
-
-
-def _find_custom_workflow_run(run_id: str) -> Optional[Dict[str, Any]]:
-    rid = str(run_id or "").strip()
-    if not rid:
-        return None
-    runs = _read_custom_workflow_runs()
-    for item in reversed(runs):
-        if not isinstance(item, dict):
-            continue
-        if str(item.get("run_id", "") or "").strip() == rid:
-            return deepcopy(item)
-    return None
-
-
-def _build_custom_workflow_catalog() -> List[Dict[str, Any]]:
-    route_map = _agent_capability_route_map()
-    catalog: List[Dict[str, Any]] = []
-    for capability_id in sorted(route_map.keys()):
-        routes = route_map.get(capability_id, {})
-        if not isinstance(routes, dict) or not routes:
-            continue
-        actions: List[Dict[str, str]] = []
-        for action, route in routes.items():
-            route_text = str(route or "").strip()
-            if not route_text:
-                continue
-            method, endpoint = route_text.split(" ", 1) if " " in route_text else ("POST", route_text)
-            actions.append(
-                {
-                    "action": str(action or "").strip().lower(),
-                    "method": str(method or "POST").strip().upper(),
-                    "endpoint": str(endpoint or "").strip(),
-                }
-            )
-        if not actions:
-            continue
-        try:
-            primary = _resolve_agent_primary_call(capability_id=capability_id, routes=routes, action="auto")
-        except Exception:
-            primary = {"method": actions[0]["method"], "endpoint": actions[0]["endpoint"]}
-        catalog.append(
-            {
-                "capability_id": capability_id,
-                "actions": actions,
-                "default_action": "auto",
-                "primary_call": primary,
-                "supports_input_mode": _capability_supports_input_mode(capability_id),
-            }
-        )
-    return catalog
-
-
-def _extract_agent_replay_spec(replay_raw: Any) -> Dict[str, Any]:
-    raw = replay_raw if isinstance(replay_raw, dict) else {}
-    endpoint = str(raw.get("endpoint", "") or "").strip()
-    if not endpoint:
-        return {}
-    method = str(raw.get("method", "POST") or "POST").strip().upper()
-    if method not in {"GET", "POST"}:
-        method = "POST"
-    payload = deepcopy(raw.get("payload", {})) if isinstance(raw.get("payload"), dict) else {}
-    request_context = _normalize_agent_replay_context(raw.get("request_context", {}))
-    return {
-        "method": method,
-        "endpoint": endpoint,
-        "payload": payload,
-        "request_context": request_context,
-    }
-
-
-def _extract_template_ids_from_value(value: Any, max_count: int = 64) -> List[str]:
-    found: List[str] = []
-    seen = set()
-
-    def _push(text: str):
-        tid = _normalize_agent_template_id(str(text or "").strip())
-        if not tid or tid in seen:
-            return
-        seen.add(tid)
-        found.append(tid)
-
-    def _walk(node: Any):
-        if len(found) >= max_count:
-            return
-        if isinstance(node, dict):
-            for key, val in node.items():
-                key_text = str(key or "").strip().lower()
-                if key_text in {"template_id", "base_template_id"}:
-                    if isinstance(val, str):
-                        _push(val)
-                    elif isinstance(val, list):
-                        for x in val:
-                            if isinstance(x, str):
-                                _push(x)
-                elif key_text in {"template_ids", "templates"} and isinstance(val, list):
-                    for x in val:
-                        if isinstance(x, str):
-                            _push(x)
-                        elif isinstance(x, dict):
-                            inner_tid = x.get("template_id")
-                            if isinstance(inner_tid, str):
-                                _push(inner_tid)
-                _walk(val)
-                if len(found) >= max_count:
-                    return
-        elif isinstance(node, list):
-            for item in node:
-                _walk(item)
-                if len(found) >= max_count:
-                    return
-
-    _walk(value)
-    return found
-
-
-def _parse_iso_datetime(value: Any) -> Optional[datetime]:
-    text = str(value or "").strip()
-    if not text:
-        return None
-    try:
-        return datetime.fromisoformat(text)
-    except Exception:
-        return None
-
-
-def _duration_from_iso_range(started_at: Any, finished_at: Any) -> float:
-    begin = _parse_iso_datetime(started_at)
-    end = _parse_iso_datetime(finished_at)
-    if begin is None or end is None:
-        return 0.0
-    return max((end - begin).total_seconds(), 0.0)
-
-
-def _trimmed_avg(values: List[float]) -> float:
-    nums = sorted(float(x) for x in values if float(x) > 0.0)
-    if not nums:
-        return 0.0
-    if len(nums) >= 10:
-        trim = max(1, int(len(nums) * 0.1))
-        nums = nums[trim:-trim] or nums
-    return max(sum(nums) / max(len(nums), 1), 0.0)
-
-
-def _refresh_eta_history_cache(*, limit: int = 800, ttl_seconds: float = 30.0) -> Dict[str, Any]:
-    now_ts = time.time()
-    with _eta_history_lock:
-        updated_at = float(_eta_history_cache.get("updated_at", 0.0) or 0.0)
-        if now_ts - updated_at <= max(float(ttl_seconds), 1.0):
-            return deepcopy(_eta_history_cache)
-
-    try:
-        rows = _ensure_job_store().list_jobs(limit=limit)
-    except Exception:
-        rows = []
-    if not isinstance(rows, list):
-        rows = []
-
-    durations_by_kind: Dict[str, List[float]] = {}
-    all_durations: List[float] = []
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        if str(row.get("status", "") or "").strip().lower() != "done":
-            continue
-        d = _duration_from_iso_range(row.get("started_at"), row.get("finished_at"))
-        if d < 2.0:
-            continue
-        kind = str(row.get("kind", "") or "").strip()
-        all_durations.append(d)
-        bucket = durations_by_kind.setdefault(kind, [])
-        if len(bucket) < 200:
-            bucket.append(d)
-
-    avg_by_kind = {kind: _trimmed_avg(vals) for kind, vals in durations_by_kind.items()}
-    payload = {
-        "updated_at": now_ts,
-        "avg_by_kind": avg_by_kind,
-        "fallback_avg": _trimmed_avg(all_durations),
-    }
-    with _eta_history_lock:
-        _eta_history_cache.update(payload)
-        return deepcopy(_eta_history_cache)
-
-
-def _historical_avg_duration_for_kind(kind: Any, *, ttl_seconds: float = 30.0) -> float:
-    snapshot = _refresh_eta_history_cache(ttl_seconds=ttl_seconds)
-    avg_by_kind = snapshot.get("avg_by_kind", {})
-    if not isinstance(avg_by_kind, dict):
-        avg_by_kind = {}
-    kind_text = str(kind or "").strip()
-    if kind_text:
-        exact = avg_by_kind.get(kind_text)
-        if isinstance(exact, (int, float)) and float(exact) > 0:
-            return float(exact)
-    fallback_avg = snapshot.get("fallback_avg", 0.0)
-    try:
-        return max(float(fallback_avg), 0.0)
-    except Exception:
-        return 0.0
-
-
-def _estimate_job_eta(job: Dict[str, Any]) -> Dict[str, Any]:
-    if not isinstance(job, dict):
-        return {"available": False, "remaining_seconds": None, "source": "none", "confidence": 0.0}
-
-    status = str(job.get("status", "") or "").strip().lower()
-    kind = str(job.get("kind", "") or "").strip()
-    avg_history = _historical_avg_duration_for_kind(kind)
-
-    if status in {"done", "error", "cancelled", "interrupted"}:
-        return {
-            "available": False,
-            "remaining_seconds": 0,
-            "source": "finished",
-            "confidence": 1.0,
-            "historical_avg_seconds": int(round(avg_history)) if avg_history > 0 else None,
-        }
-
-    if status == "queued":
-        try:
-            queue_position = int(job.get("queue_position", 0) or 0)
-        except Exception:
-            queue_position = 0
-        if avg_history <= 0:
-            return {
-                "available": False,
-                "remaining_seconds": None,
-                "source": "queue_unknown",
-                "confidence": 0.0,
-                "historical_avg_seconds": None,
-                "queue_position": queue_position,
-            }
-        wait_seconds = avg_history * max(queue_position - 1, 0)
-        return {
-            "available": True,
-            "remaining_seconds": int(max(round(wait_seconds), 0)),
-            "source": "history_queue",
-            "confidence": 0.55,
-            "historical_avg_seconds": int(round(avg_history)),
-            "queue_position": queue_position,
-        }
-
-    if status != "running":
-        return {"available": False, "remaining_seconds": None, "source": "unknown", "confidence": 0.0}
-
-    started = _parse_iso_datetime(job.get("started_at"))
-    elapsed = 0.0
-    if started is not None:
-        elapsed = max((datetime.now() - started).total_seconds(), 0.0)
-
-    try:
-        progress = int(job.get("progress", 0) or 0)
-    except Exception:
-        progress = 0
-    progress = max(0, min(progress, 100))
-
-    by_progress: Optional[float] = None
-    if elapsed > 0 and progress >= 2 and progress < 100:
-        by_progress = elapsed * max(100 - progress, 0) / max(progress, 1)
-
-    by_history: Optional[float] = None
-    if avg_history > 0:
-        by_history = max(avg_history - elapsed, 0.0)
-
-    remaining = None
-    source = "none"
-    confidence = 0.0
-
-    if by_progress is not None and by_history is not None:
-        # Blend historical signal and live progress; progress gets more weight once >20%.
-        progress_weight = 0.7 if progress >= 20 else 0.5
-        history_weight = 1.0 - progress_weight
-        remaining = (by_progress * progress_weight) + (by_history * history_weight)
-        source = "blended"
-        confidence = 0.78 if progress >= 20 else 0.62
-    elif by_progress is not None:
-        remaining = by_progress
-        source = "progress"
-        confidence = 0.58 if progress >= 20 else 0.42
-    elif by_history is not None:
-        remaining = by_history
-        source = "history"
-        confidence = 0.5
-
-    if remaining is None:
-        return {
-            "available": False,
-            "remaining_seconds": None,
-            "source": source,
-            "confidence": confidence,
-            "elapsed_seconds": int(round(elapsed)),
-            "historical_avg_seconds": int(round(avg_history)) if avg_history > 0 else None,
-        }
-
-    remaining = max(min(float(remaining), 72 * 3600), 0.0)
-    return {
-        "available": True,
-        "remaining_seconds": int(round(remaining)),
-        "source": source,
-        "confidence": round(confidence, 3),
-        "elapsed_seconds": int(round(elapsed)),
-        "historical_avg_seconds": int(round(avg_history)) if avg_history > 0 else None,
-        "progress": progress,
-    }
-
-
-def _build_agent_task_history_record(job_id: str, job: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    if _project_dir is None or not isinstance(job, dict):
-        return None
-    kind = str(job.get("kind", "") or "")
-    if kind not in {"agent_task", "agent_skill"}:
-        return None
-    meta = job.get("meta", {}) if isinstance(job.get("meta"), dict) else {}
-    result = job.get("result", {}) if isinstance(job.get("result"), dict) else {}
-    status = str(job.get("status", "unknown") or "unknown").strip().lower()
-    started_at = str(job.get("started_at", "") or "")
-    finished_at = str(job.get("finished_at", "") or "")
-    error_text = str(job.get("error", "") or "")
-
-    def _safe_int(v: Any) -> int:
-        try:
-            parsed = int(v)
-        except Exception:
-            parsed = 0
-        return max(parsed, 0)
-
-    def _safe_float(v: Any) -> float:
-        try:
-            parsed = float(v)
-        except Exception:
-            parsed = 0.0
-        return max(parsed, 0.0)
-
-    task_mode = "single_capability"
-    strategy = ""
-    capability_ids: List[str] = []
-    skill_ids: List[str] = []
-    total_steps = 1
-    success_steps = 0
-    failed_steps = 0
-    skipped_steps = 0
-    retry_count = 0
-    prompt_tokens = 0
-    completion_tokens = 0
-    total_cost = 0.0
-    failed_nodes: List[Dict[str, str]] = []
-    step_summaries: List[Dict[str, Any]] = []
-
-    if kind == "agent_skill":
-        task_mode = "skill_invoke"
-        sid = str(result.get("skill_id", "") or "").strip()
-        cid = str(result.get("capability_id", "") or "").strip()
-        if sid:
-            skill_ids.append(sid)
-        if cid:
-            capability_ids.append(cid)
-        attempts = _safe_int(result.get("attempts", 1))
-        retry_count = max(attempts - 1, 0)
-        usage_tokens = result.get("usage_tokens", {}) if isinstance(result.get("usage_tokens"), dict) else {}
-        prompt_tokens += _safe_int(usage_tokens.get("prompt_tokens", 0))
-        completion_tokens += _safe_int(usage_tokens.get("completion_tokens", 0))
-        estimated = result.get("estimated_cost", {}) if isinstance(result.get("estimated_cost"), dict) else {}
-        total_cost += _safe_float(estimated.get("total_cost_usd", 0.0))
-        step_summaries.append({
-            "step_id": str(result.get("invoke_id", "") or "invoke"),
-            "index": 1,
-            "skill_id": sid,
-            "capability_id": cid,
-            "status": status if status in {"done", "error", "cancelled"} else "unknown",
-            "error": error_text or str(result.get("error", "") or ""),
-            "continue_on_error": False,
-            "duration_seconds": round(_safe_float(result.get("duration_seconds", 0.0)), 4),
-            "prompt_tokens": _safe_int(usage_tokens.get("prompt_tokens", 0)),
-            "completion_tokens": _safe_int(usage_tokens.get("completion_tokens", 0)),
-            "estimated_cost_usd": round(_safe_float(estimated.get("total_cost_usd", 0.0)), 8),
-            "condition": {},
-        })
-        if status == "done":
-            success_steps = 1
-        elif status == "cancelled":
-            skipped_steps = 1
-        else:
-            failed_steps = 1
-            failed_nodes.append({
-                "skill_id": sid,
-                "capability_id": cid,
-                "error": error_text or str(result.get("error", "") or ""),
-            })
-    elif str(result.get("mode", "") or "").strip().lower() == "skill_sequence":
-        task_mode = "skill_sequence"
-        strategy = str(result.get("strategy", "") or "").strip().lower()
-        total_steps = _safe_int(result.get("total_steps", 0))
-        success_steps = _safe_int(result.get("success_steps", 0))
-        failed_steps = _safe_int(result.get("failed_steps", 0))
-        skipped_steps = _safe_int(result.get("skipped_steps", 0))
-        steps = result.get("steps", []) if isinstance(result.get("steps"), list) else []
-        if total_steps <= 0:
-            total_steps = len(steps)
-        for item in steps:
-            if not isinstance(item, dict):
-                continue
-            sid = str(item.get("skill_id", "") or "").strip()
-            cid = str(item.get("capability_id", "") or "").strip()
-            step_status = str(item.get("status", "") or "").strip().lower() or "unknown"
-            if sid and sid not in skill_ids:
-                skill_ids.append(sid)
-            if cid and cid not in capability_ids:
-                capability_ids.append(cid)
-            retry_count += max(_safe_int(item.get("attempts", 1)) - 1, 0)
-            usage_tokens = item.get("usage_tokens", {}) if isinstance(item.get("usage_tokens"), dict) else {}
-            prompt_tokens += _safe_int(usage_tokens.get("prompt_tokens", 0))
-            completion_tokens += _safe_int(usage_tokens.get("completion_tokens", 0))
-            estimated = item.get("estimated_cost", {}) if isinstance(item.get("estimated_cost"), dict) else {}
-            total_cost += _safe_float(estimated.get("total_cost_usd", 0.0))
-            step_summaries.append({
-                "step_id": str(item.get("step_id", "") or ""),
-                "index": _safe_int(item.get("index", len(step_summaries) + 1)),
-                "skill_id": sid,
-                "capability_id": cid,
-                "status": step_status,
-                "error": str(item.get("error", "") or ""),
-                "continue_on_error": bool(item.get("continue_on_error", False)),
-                "duration_seconds": round(_safe_float(item.get("duration_seconds", 0.0)), 4),
-                "prompt_tokens": _safe_int(usage_tokens.get("prompt_tokens", 0)),
-                "completion_tokens": _safe_int(usage_tokens.get("completion_tokens", 0)),
-                "estimated_cost_usd": round(_safe_float(estimated.get("total_cost_usd", 0.0)), 8),
-                "condition": deepcopy(item.get("condition", {})) if isinstance(item.get("condition"), dict) else {},
-            })
-            if step_status == "error":
-                failed_nodes.append({
-                    "skill_id": sid,
-                    "capability_id": cid,
-                    "error": str(item.get("error", "") or ""),
-                })
-    else:
-        task_mode = "single_capability"
-        cid = str(result.get("capability_id", "") or "").strip()
-        if cid:
-            capability_ids.append(cid)
-        step_summaries.append({
-            "step_id": str(result.get("task_id", "") or "task"),
-            "index": 1,
-            "skill_id": "",
-            "capability_id": cid,
-            "status": status if status in {"done", "error", "cancelled"} else "unknown",
-            "error": error_text or str(result.get("error", "") or ""),
-            "continue_on_error": False,
-            "duration_seconds": round(_safe_float(result.get("duration_seconds", 0.0)), 4),
-            "prompt_tokens": 0,
-            "completion_tokens": 0,
-            "estimated_cost_usd": 0.0,
-            "condition": {},
-        })
-        total_steps = 1
-        if status == "done":
-            success_steps = 1
-        elif status == "cancelled":
-            skipped_steps = 1
-        else:
-            failed_steps = 1
-            failed_nodes.append({
-                "skill_id": "",
-                "capability_id": cid,
-                "error": error_text or str(result.get("error", "") or ""),
-            })
-
-    template_hits = _extract_template_ids_from_value({
-        "meta": meta,
-        "result": result,
-    })
-    replay_spec = _extract_agent_replay_spec(meta.get("replay", {}))
-    duration_seconds = _safe_float(result.get("duration_seconds", 0.0))
-    if duration_seconds <= 0.0:
-        duration_seconds = _duration_from_iso_range(started_at, finished_at)
-
-    return {
-        "job_id": str(job_id or ""),
-        "kind": kind,
-        "status": status,
-        "task_mode": task_mode,
-        "strategy": strategy,
-        "actor_type": str(meta.get("actor_type", "") or ""),
-        "actor_id": str(meta.get("actor_id", "") or ""),
-        "trace_id": str(meta.get("trace_id", "") or ""),
-        "capability_ids": capability_ids,
-        "skill_ids": skill_ids,
-        "total_steps": max(total_steps, 0),
-        "success_steps": max(success_steps, 0),
-        "failed_steps": max(failed_steps, 0),
-        "skipped_steps": max(skipped_steps, 0),
-        "retry_count": max(retry_count, 0),
-        "prompt_tokens": max(prompt_tokens, 0),
-        "completion_tokens": max(completion_tokens, 0),
-        "total_tokens": max(prompt_tokens + completion_tokens, 0),
-        "estimated_cost_usd": round(max(total_cost, 0.0), 8),
-        "duration_seconds": round(max(duration_seconds, 0.0), 4),
-        "template_hits": template_hits,
-        "template_hit_count": len(template_hits),
-        "replay_supported": bool(replay_spec),
-        "replay": replay_spec,
-        "failed_nodes": failed_nodes,
-        "step_summaries": step_summaries,
-        "error": error_text,
-        "started_at": started_at,
-        "finished_at": finished_at,
-        "recorded_at": datetime.now().isoformat(timespec="seconds"),
-    }
-
-
-def _record_agent_task_history_from_job(job_id: str):
-    if _project_dir is None:
-        return
-    job = _jobs.get(job_id)
-    if not isinstance(job, dict):
-        return
-    record = _build_agent_task_history_record(job_id, job)
-    if not isinstance(record, dict):
-        return
-    with _agent_history_lock:
-        history = _read_agent_task_history()
-        history.append(record)
-        _save_agent_task_history(history)
-
-
-def _parse_agent_history_filter_tokens(raw: Any) -> List[str]:
-    text = str(raw or "").replace("，", ",")
-    out: List[str] = []
-    seen = set()
-    for token in text.split(","):
-        item = str(token or "").strip().lower()
-        if not item or item in seen:
-            continue
-        seen.add(item)
-        out.append(item)
-    return out
-
-
-def _agent_history_anchor_time(item: Dict[str, Any]) -> Optional[datetime]:
-    if not isinstance(item, dict):
-        return None
-    for key in ("finished_at", "started_at", "recorded_at"):
-        dt = _parse_iso_datetime(item.get(key))
-        if dt is not None:
-            return dt
-    return None
-
-
-def _filter_agent_task_history(
-    history: List[Dict[str, Any]],
-    *,
-    actor_id: str = "",
-    statuses: Optional[List[str]] = None,
-    task_modes: Optional[List[str]] = None,
-    kinds: Optional[List[str]] = None,
-    capability_id: str = "",
-    skill_id: str = "",
-    trace_id: str = "",
-    replay_supported: Optional[bool] = None,
-    since: Any = None,
-    until: Any = None,
-) -> List[Dict[str, Any]]:
-    items = [x for x in history if isinstance(x, dict)]
-    status_set = {str(x or "").strip().lower() for x in (statuses or []) if str(x or "").strip()}
-    mode_set = {str(x or "").strip().lower() for x in (task_modes or []) if str(x or "").strip()}
-    kind_set = {str(x or "").strip().lower() for x in (kinds or []) if str(x or "").strip()}
-    actor_text = str(actor_id or "").strip()
-    capability_text = str(capability_id or "").strip().lower()
-    skill_text = str(skill_id or "").strip().lower()
-    trace_text = str(trace_id or "").strip()
-    since_dt = _parse_iso_datetime(since)
-    until_dt = _parse_iso_datetime(until)
-
-    out: List[Dict[str, Any]] = []
-    for item in items:
-        if actor_text and str(item.get("actor_id", "") or "").strip() != actor_text:
-            continue
-        if status_set:
-            status_val = str(item.get("status", "") or "").strip().lower()
-            if status_val not in status_set:
-                continue
-        if mode_set:
-            mode_val = str(item.get("task_mode", "") or "").strip().lower()
-            if mode_val not in mode_set:
-                continue
-        if kind_set:
-            kind_val = str(item.get("kind", "") or "").strip().lower()
-            if kind_val not in kind_set:
-                continue
-        if capability_text:
-            capability_ids = item.get("capability_ids", [])
-            capability_values = capability_ids if isinstance(capability_ids, list) else []
-            capability_ok = any(str(x or "").strip().lower() == capability_text for x in capability_values)
-            if not capability_ok:
-                continue
-        if skill_text:
-            skill_ids = item.get("skill_ids", [])
-            skill_values = skill_ids if isinstance(skill_ids, list) else []
-            skill_ok = any(str(x or "").strip().lower() == skill_text for x in skill_values)
-            if not skill_ok:
-                continue
-        if trace_text and str(item.get("trace_id", "") or "").strip() != trace_text:
-            continue
-        if replay_supported is not None and bool(item.get("replay_supported", False)) != bool(replay_supported):
-            continue
-
-        item_time = _agent_history_anchor_time(item)
-        if since_dt is not None and (item_time is None or item_time < since_dt):
-            continue
-        if until_dt is not None and (item_time is None or item_time > until_dt):
-            continue
-        out.append(item)
-    return out
-
-
-def _build_agent_task_export_snapshot(
-    job_id: str,
-    *,
-    include_logs: bool = True,
-    include_result: bool = True,
-) -> Optional[Dict[str, Any]]:
-    jid = str(job_id or "").strip()
-    if not jid:
-        return None
-
-    live_job = _jobs.get(jid)
-    if isinstance(live_job, dict) and live_job.get("kind") in {"agent_task", "agent_skill"}:
-        summary = _build_agent_task_history_record(jid, live_job)
-        payload: Dict[str, Any] = {
-            "job_id": jid,
-            "source": "memory",
-            "summary": summary if isinstance(summary, dict) else {},
-            "status": str(live_job.get("status", "unknown") or "unknown"),
-            "kind": str(live_job.get("kind", "") or ""),
-            "started_at": live_job.get("started_at"),
-            "finished_at": live_job.get("finished_at"),
-            "error": live_job.get("error"),
-            "meta": deepcopy(live_job.get("meta", {})) if isinstance(live_job.get("meta"), dict) else {},
-        }
-        if include_logs:
-            payload["log"] = list(live_job.get("log", []))
-        if include_result:
-            payload["result"] = deepcopy(live_job.get("result", {})) if isinstance(live_job.get("result"), dict) else {}
-        return payload
-
-    history_item = _find_agent_task_history_record(jid)
-    if not isinstance(history_item, dict):
-        return None
-    return {
-        "job_id": jid,
-        "source": "history",
-        "summary": history_item,
-        "status": str(history_item.get("status", "unknown") or "unknown"),
-        "kind": str(history_item.get("kind", "") or ""),
-        "started_at": history_item.get("started_at"),
-        "finished_at": history_item.get("finished_at"),
-        "error": history_item.get("error", ""),
-    }
-
-
-def _build_chain_view_from_history_item(history_item: Dict[str, Any]) -> Dict[str, Any]:
-    item = history_item if isinstance(history_item, dict) else {}
-    mode = str(item.get("task_mode", "") or "single_capability").strip().lower() or "single_capability"
-    strategy = str(item.get("strategy", "") or "").strip().lower()
-    status = str(item.get("status", "") or "unknown").strip().lower()
-    if status == "done":
-        overall_status = "done"
-    elif status == "error":
-        overall_status = "error"
-    elif status == "cancelled":
-        overall_status = "cancelled"
-    else:
-        overall_status = "unknown"
-
-    step_summaries = item.get("step_summaries", [])
-    steps = step_summaries if isinstance(step_summaries, list) else []
-    nodes: List[Dict[str, Any]] = []
-    edges: List[Dict[str, Any]] = []
-    known_step_ids = set()
-
-    if mode == "skill_sequence" and steps:
-        for idx, step in enumerate(steps, start=1):
-            if not isinstance(step, dict):
-                continue
-            step_id = str(step.get("step_id", "") or f"step_{idx:02d}")
-            known_step_ids.add(step_id)
-            nodes.append({
-                "node_id": step_id,
-                "node_type": "skill",
-                "index": max(int(step.get("index", idx) or idx), 1),
-                "status": str(step.get("status", "unknown") or "unknown").strip().lower() or "unknown",
-                "skill_id": str(step.get("skill_id", "") or ""),
-                "capability_id": str(step.get("capability_id", "") or ""),
-                "continue_on_error": bool(step.get("continue_on_error", False)),
-                "duration_seconds": round(max(float(step.get("duration_seconds", 0.0) or 0.0), 0.0), 4),
-                "prompt_tokens": max(int(step.get("prompt_tokens", 0) or 0), 0),
-                "completion_tokens": max(int(step.get("completion_tokens", 0) or 0), 0),
-                "estimated_cost_usd": round(max(float(step.get("estimated_cost_usd", 0.0) or 0.0), 0.0), 8),
-                "error": str(step.get("error", "") or ""),
-                "condition": deepcopy(step.get("condition", {})) if isinstance(step.get("condition"), dict) else {},
-            })
-
-        for idx, node in enumerate(nodes):
-            node_id = str(node.get("node_id", "") or "")
-            condition = node.get("condition", {}) if isinstance(node.get("condition"), dict) else {}
-            depends_on_raw = condition.get("depends_on", [])
-            depends_on = depends_on_raw if isinstance(depends_on_raw, list) else []
-            deps_added = False
-            for dep in depends_on:
-                dep_id = str(dep or "").strip()
-                if not dep_id or dep_id not in known_step_ids:
-                    continue
-                edges.append({"from": dep_id, "to": node_id, "type": "condition_depends_on"})
-                deps_added = True
-            if not deps_added and strategy in {"sequential", "conditional"} and idx > 0:
-                prev_node_id = str(nodes[idx - 1].get("node_id", "") or "")
-                if prev_node_id:
-                    edges.append({"from": prev_node_id, "to": node_id, "type": "sequence"})
-    elif mode == "skill_sequence":
-        total_steps = max(int(item.get("total_steps", 0) or 0), 0)
-        success_steps = max(int(item.get("success_steps", 0) or 0), 0)
-        failed_steps = max(int(item.get("failed_steps", 0) or 0), 0)
-        skipped_steps = max(int(item.get("skipped_steps", 0) or 0), 0)
-        if total_steps <= 0:
-            total_steps = max(success_steps + failed_steps + skipped_steps, 1)
-        statuses = (["done"] * success_steps) + (["error"] * failed_steps) + (["skipped"] * skipped_steps)
-        if len(statuses) < total_steps:
-            statuses.extend(["unknown"] * (total_steps - len(statuses)))
-        capability_first = str((item.get("capability_ids", [""])[0] if isinstance(item.get("capability_ids"), list) and item.get("capability_ids") else "") or "")
-        skill_first = str((item.get("skill_ids", [""])[0] if isinstance(item.get("skill_ids"), list) and item.get("skill_ids") else "") or "")
-        for idx in range(total_steps):
-            nodes.append({
-                "node_id": f"step_{idx + 1:02d}",
-                "node_type": "skill",
-                "index": idx + 1,
-                "status": statuses[idx],
-                "skill_id": skill_first,
-                "capability_id": capability_first,
-                "continue_on_error": False,
-                "duration_seconds": 0.0,
-                "prompt_tokens": 0,
-                "completion_tokens": 0,
-                "estimated_cost_usd": 0.0,
-                "error": "",
-                "condition": {},
-            })
-        if total_steps > 1 and strategy in {"", "sequential", "conditional"}:
-            for idx in range(1, total_steps):
-                edges.append({"from": f"step_{idx:02d}", "to": f"step_{idx + 1:02d}", "type": "sequence"})
-    elif mode == "skill_invoke":
-        nodes.append({
-            "node_id": str(item.get("job_id", "") or "invoke"),
-            "node_type": "skill",
-            "status": status,
-            "skill_id": str((item.get("skill_ids", [""])[0] if isinstance(item.get("skill_ids"), list) and item.get("skill_ids") else "") or ""),
-            "capability_id": str((item.get("capability_ids", [""])[0] if isinstance(item.get("capability_ids"), list) and item.get("capability_ids") else "") or ""),
-            "duration_seconds": round(max(float(item.get("duration_seconds", 0.0) or 0.0), 0.0), 4),
-            "prompt_tokens": max(int(item.get("prompt_tokens", 0) or 0), 0),
-            "completion_tokens": max(int(item.get("completion_tokens", 0) or 0), 0),
-            "estimated_cost_usd": round(max(float(item.get("estimated_cost_usd", 0.0) or 0.0), 0.0), 8),
-            "error": str(item.get("error", "") or ""),
-        })
-    else:
-        nodes.append({
-            "node_id": str(item.get("job_id", "") or "task"),
-            "node_type": "capability",
-            "status": status,
-            "skill_id": "",
-            "capability_id": str((item.get("capability_ids", [""])[0] if isinstance(item.get("capability_ids"), list) and item.get("capability_ids") else "") or ""),
-            "duration_seconds": round(max(float(item.get("duration_seconds", 0.0) or 0.0), 0.0), 4),
-            "prompt_tokens": max(int(item.get("prompt_tokens", 0) or 0), 0),
-            "completion_tokens": max(int(item.get("completion_tokens", 0) or 0), 0),
-            "estimated_cost_usd": round(max(float(item.get("estimated_cost_usd", 0.0) or 0.0), 0.0), 8),
-            "error": str(item.get("error", "") or ""),
-        })
-
-    status_done = sum(1 for n in nodes if str(n.get("status", "")).lower() == "done")
-    status_error = sum(1 for n in nodes if str(n.get("status", "")).lower() == "error")
-    status_skipped = sum(1 for n in nodes if str(n.get("status", "")).lower() == "skipped")
-    if nodes and status_error > 0:
-        overall_status = "error"
-    elif nodes and status_done == len(nodes):
-        overall_status = "done"
-    elif nodes and (status_done + status_skipped) == len(nodes):
-        overall_status = "partial"
-
-    total_prompt = sum(max(int(n.get("prompt_tokens", 0) or 0), 0) for n in nodes)
-    total_completion = sum(max(int(n.get("completion_tokens", 0) or 0), 0) for n in nodes)
-    total_cost = sum(max(float(n.get("estimated_cost_usd", 0.0) or 0.0), 0.0) for n in nodes)
-
-    item_prompt = max(int(item.get("prompt_tokens", 0) or 0), 0)
-    item_completion = max(int(item.get("completion_tokens", 0) or 0), 0)
-    item_cost = max(float(item.get("estimated_cost_usd", 0.0) or 0.0), 0.0)
-    if total_prompt <= 0 and item_prompt > 0:
-        total_prompt = item_prompt
-    if total_completion <= 0 and item_completion > 0:
-        total_completion = item_completion
-    if total_cost <= 0.0 and item_cost > 0.0:
-        total_cost = item_cost
-
-    return {
-        "mode": mode,
-        "overall_status": overall_status,
-        "node_count": len(nodes),
-        "edge_count": len(edges),
-        "counts": {
-            "done": status_done,
-            "error": status_error,
-            "skipped": status_skipped,
-            "other": max(len(nodes) - status_done - status_error - status_skipped, 0),
-        },
-        "totals": {
-            "prompt_tokens": total_prompt,
-            "completion_tokens": total_completion,
-            "total_tokens": total_prompt + total_completion,
-            "estimated_cost_usd": round(total_cost, 8),
-        },
-        "nodes": nodes,
-        "edges": edges,
-    }
-
-
-def _build_agent_observability_summary(history: List[Dict[str, Any]], *, top_n: int = 5) -> Dict[str, Any]:
-    items = [x for x in history if isinstance(x, dict)]
-    total = len(items)
-    if total <= 0:
-        return {
-            "total_tasks": 0,
-            "status_counts": {"done": 0, "error": 0, "cancelled": 0, "other": 0},
-            "rates": {
-                "success_rate": 0.0,
-                "error_rate": 0.0,
-                "cancel_rate": 0.0,
-                "retry_rate": 0.0,
-                "template_hit_rate": 0.0,
-            },
-            "averages": {
-                "duration_seconds": 0.0,
-                "retry_count": 0.0,
-                "total_tokens": 0.0,
-                "estimated_cost_usd": 0.0,
-            },
-            "mode_counts": {},
-            "top_templates": [],
-            "failed_top": [],
-        }
-
-    status_counts = {"done": 0, "error": 0, "cancelled": 0, "other": 0}
-    mode_counts: Dict[str, int] = {}
-    retry_tasks = 0
-    template_hit_tasks = 0
-    total_retry = 0
-    total_duration = 0.0
-    total_tokens = 0
-    total_cost = 0.0
-    template_counter: Dict[str, int] = {}
-    failed_counter: Dict[str, Dict[str, Any]] = {}
-
-    for item in items:
-        status = str(item.get("status", "") or "").strip().lower()
-        if status in status_counts:
-            status_counts[status] += 1
-        else:
-            status_counts["other"] += 1
-
-        mode = str(item.get("task_mode", "") or "unknown").strip().lower() or "unknown"
-        mode_counts[mode] = int(mode_counts.get(mode, 0)) + 1
-
-        retry_count = max(int(item.get("retry_count", 0) or 0), 0)
-        if retry_count > 0:
-            retry_tasks += 1
-        total_retry += retry_count
-
-        total_duration += max(float(item.get("duration_seconds", 0.0) or 0.0), 0.0)
-        total_tokens += max(int(item.get("total_tokens", 0) or 0), 0)
-        total_cost += max(float(item.get("estimated_cost_usd", 0.0) or 0.0), 0.0)
-
-        template_hits = item.get("template_hits", [])
-        if isinstance(template_hits, list) and template_hits:
-            template_hit_tasks += 1
-            for tid in template_hits:
-                k = str(tid or "").strip()
-                if not k:
-                    continue
-                template_counter[k] = int(template_counter.get(k, 0)) + 1
-
-        failed_nodes = item.get("failed_nodes", [])
-        if isinstance(failed_nodes, list):
-            for node in failed_nodes:
-                if not isinstance(node, dict):
-                    continue
-                sid = str(node.get("skill_id", "") or "").strip()
-                cid = str(node.get("capability_id", "") or "").strip()
-                err = str(node.get("error", "") or "").strip()
-                label = sid or cid or "unknown"
-                if err:
-                    label = f"{label}|{err[:80]}"
-                bucket = failed_counter.get(label)
-                if not isinstance(bucket, dict):
-                    bucket = {
-                        "skill_id": sid,
-                        "capability_id": cid,
-                        "error": err[:120],
-                        "count": 0,
-                    }
-                    failed_counter[label] = bucket
-                bucket["count"] = int(bucket.get("count", 0)) + 1
-
-    top_templates = [
-        {"template_id": k, "count": v}
-        for k, v in sorted(template_counter.items(), key=lambda kv: (-kv[1], kv[0]))[:max(int(top_n), 1)]
-    ]
-    failed_top = sorted(
-        failed_counter.values(),
-        key=lambda x: (-int(x.get("count", 0) or 0), str(x.get("skill_id", "") or ""), str(x.get("capability_id", "") or "")),
-    )[:max(int(top_n), 1)]
-
-    return {
-        "total_tasks": total,
-        "status_counts": status_counts,
-        "rates": {
-            "success_rate": round(float(status_counts["done"]) / float(total), 4),
-            "error_rate": round(float(status_counts["error"]) / float(total), 4),
-            "cancel_rate": round(float(status_counts["cancelled"]) / float(total), 4),
-            "retry_rate": round(float(retry_tasks) / float(total), 4),
-            "template_hit_rate": round(float(template_hit_tasks) / float(total), 4),
-        },
-        "averages": {
-            "duration_seconds": round(float(total_duration) / float(total), 4),
-            "retry_count": round(float(total_retry) / float(total), 4),
-            "total_tokens": round(float(total_tokens) / float(total), 2),
-            "estimated_cost_usd": round(float(total_cost) / float(total), 8),
-        },
-        "totals": {
-            "duration_seconds": round(total_duration, 4),
-            "retry_count": int(total_retry),
-            "total_tokens": int(total_tokens),
-            "estimated_cost_usd": round(total_cost, 8),
-        },
-        "mode_counts": mode_counts,
-        "top_templates": top_templates,
-        "failed_top": failed_top,
-    }
-
-
-def _read_script_json() -> Dict:
-    if _project_dir is None:
-        return {}
-    for name in ("script_matched.json", "script_draft.json"):
-        p = _project_data_path(name)
-        if p is not None and p.exists():
-            try:
-                return json.loads(p.read_text(encoding="utf-8"))
-            except Exception:
-                continue
-    return {}
-
-
-def _slugify(text: str) -> str:
-    raw = str(text or "").strip().lower()
-    cleaned = []
-    for ch in raw:
-        if ch.isalnum():
-            cleaned.append(ch)
-        elif ch in {"-", "_", " ", "/"}:
-            cleaned.append("-")
-    slug = "".join(cleaned).strip("-")
-    while "--" in slug:
-        slug = slug.replace("--", "-")
-    return slug[:64] or "topic"
-
-
-def _extract_material_semantics(materials: Dict, limit: int = 80) -> List[Dict]:
-    out: List[Dict] = []
-    for _, vdata in materials.items():
-        sem = vdata.get("semantic", {}) if isinstance(vdata.get("semantic"), dict) else {}
-        scene = (
-            vdata.get("analysis", {})
-            .get("local_analysis", {})
-            .get("scene", {})
-        )
-        item = {
-            "setting": sem.get("setting") or "",
-            "activity": sem.get("activity") or "",
-            "mood": sem.get("mood") or scene.get("mood") or "",
-            "time_of_day": sem.get("time_of_day") or "",
-            "weather": sem.get("weather") or "",
-            "narrative_role": sem.get("narrative_role") or "",
-        }
-        if any(str(v).strip() for v in item.values()):
-            out.append(item)
-        if len(out) >= max(int(limit), 1):
-            break
-    return out
-
-
-def _parse_platforms(payload_value) -> List[str]:
-    if isinstance(payload_value, list):
-        return [str(x).strip().lower() for x in payload_value if str(x).strip()]
-    text = str(payload_value or "").strip()
-    if not text:
-        return []
-    return [x.strip().lower() for x in text.replace("，", ",").split(",") if x.strip()]
-
-
-def _parse_capability_input_mode(raw_value: Any, default: str = "project") -> str:
-    mode = str(raw_value or default).strip().lower()
-    if mode not in {"inline", "project"}:
-        mode = default if default in {"inline", "project"} else "project"
-    return mode
-
-
-def _request_json_any_method() -> Dict[str, Any]:
-    try:
-        payload = request.get_json(silent=True)
-    except Exception:
-        payload = None
-    return payload if isinstance(payload, dict) else {}
-
-
-def _capability_base_dir(input_mode: str) -> Path:
-    if input_mode == "project" and _project_dir is not None:
-        return _project_dir
-    if _project_dir is not None:
-        return _project_dir
-    return Path.cwd()
-
-
-def _resolve_path_with_base(path_raw: str, *, base_dir: Optional[Path]) -> Path:
-    p = Path(str(path_raw or "").strip()).expanduser()
-    if not p.is_absolute():
-        anchor = base_dir if base_dir is not None else Path.cwd()
-        p = (anchor / p).resolve()
-    return p
-
-
-def _coerce_script_input(payload: Dict[str, Any], *, input_mode: str) -> Dict[str, Any]:
-    script_raw = payload.get("script")
-    if isinstance(script_raw, dict):
-        return script_raw
-    clips_raw = payload.get("clips")
-    subtitles_raw = payload.get("subtitles")
-    if isinstance(clips_raw, list) or isinstance(subtitles_raw, list):
-        return {
-            "clips": clips_raw if isinstance(clips_raw, list) else [],
-            "subtitles": subtitles_raw if isinstance(subtitles_raw, list) else [],
-        }
-    if input_mode == "project":
-        return _read_script_json()
-    return {}
-
-
-def _coerce_materials_input(payload: Dict[str, Any], *, input_mode: str) -> Dict[str, Any]:
-    materials = payload.get("materials")
-    if isinstance(materials, dict):
-        return materials
-    if input_mode == "project":
-        loaded = _read_project_json("materials.json", fallback={})
-        return loaded if isinstance(loaded, dict) else {}
-    return {}
-
-
-def _extract_subtitles_from_script(script: Dict[str, Any]) -> List[Dict[str, Any]]:
-    out: List[Dict[str, Any]] = []
-    subtitles = script.get("subtitles", []) if isinstance(script, dict) else []
-    for idx, item in enumerate(subtitles, start=1):
-        if not isinstance(item, dict):
-            continue
-        text = str(item.get("text") or item.get("cn_text") or "").strip()
-        cn_text = str(item.get("cn_text") or text).strip()
-        en_text = str(item.get("en_text") or "").strip()
-        try:
-            start = float(item.get("start_time"))
-            end = float(item.get("end_time"))
-        except Exception:
-            continue
-        if end <= start:
-            continue
-        out.append(
-            {
-                "index": int(item.get("index", idx) or idx),
-                "start_time": round(start, 3),
-                "end_time": round(end, 3),
-                "text": text,
-                "cn_text": cn_text,
-                "en_text": en_text,
-            }
-        )
-    return out
-
-
-def _script_to_text_blocks(script: Dict[str, Any]) -> Dict[str, str]:
-    clips = script.get("clips", []) if isinstance(script.get("clips"), list) else []
-    subtitles = script.get("subtitles", []) if isinstance(script.get("subtitles"), list) else []
-
-    script_parts: List[str] = []
-    for clip in clips:
-        if not isinstance(clip, dict):
-            continue
-        for key in ("text", "narration", "voiceover", "description", "summary"):
-            val = str(clip.get(key) or "").strip()
-            if val:
-                script_parts.append(val)
-                break
-
-    voice_parts: List[str] = []
-    for sub in subtitles:
-        if not isinstance(sub, dict):
-            continue
-        val = str(sub.get("cn_text") or sub.get("text") or "").strip()
-        if val:
-            voice_parts.append(val)
-
-    return {
-        "script_text": "\n".join(script_parts).strip(),
-        "voiceover_text": "\n".join(voice_parts).strip(),
-    }
-
-
-def _parse_str_list(payload_value) -> List[str]:
-    if isinstance(payload_value, list):
-        return [str(x).strip() for x in payload_value if str(x).strip()]
-    text = str(payload_value or "").strip()
-    if not text:
-        return []
-    return [x.strip() for x in text.replace("，", ",").split(",") if x.strip()]
-
-
-def _default_master_video_path() -> Optional[Path]:
-    if _project_dir is None:
-        return None
-    candidates = [
-        _project_dir / "output" / "final.mp4",
-        _project_dir / "preview" / "rough_cut.mp4",
-    ]
-    for p in candidates:
-        if p.exists():
-            return p
-    return candidates[0]
-
-
-def _default_bgm_library_dirs(custom_dir: str = "", custom_dirs: Optional[List[str]] = None) -> List[Path]:
-    """Resolve candidate BGM library folders with project defaults."""
-    if _project_dir is None:
-        return []
-    seen = set()
-    resolved: List[Path] = []
-
-    candidates: List[str] = []
-    if str(custom_dir or "").strip():
-        candidates.append(str(custom_dir))
-    if isinstance(custom_dirs, list):
-        candidates.extend(str(x) for x in custom_dirs if str(x).strip())
-
-    defaults = [
-        _project_dir / "assets" / "bgm",
-        _project_dir / "assets" / "music",
-        _project_dir / "data" / "bgm",
-        _project_dir / "data" / "music",
-        _project_dir / "bgm",
-        _project_dir / "music",
-    ]
-    candidates.extend(str(x) for x in defaults)
-
-    for raw in candidates:
-        p = Path(str(raw or "").strip()).expanduser()
-        if not p.is_absolute():
-            p = (_project_dir / p).resolve()
-        key = str(p)
-        if key in seen:
-            continue
-        seen.add(key)
-        if p.exists() and p.is_dir():
-            resolved.append(p)
-    return resolved
-
-
-def _default_bgm_output_dir(custom_dir: str = "") -> Optional[Path]:
-    """Resolve BGM download output dir."""
-    if _project_dir is None:
-        return None
-    raw = str(custom_dir or "").strip()
-    if raw:
-        p = Path(raw).expanduser()
-        if not p.is_absolute():
-            p = (_project_dir / p).resolve()
-        return p
-    return (_project_dir / "data" / "audio_voice" / "bgm").resolve()
-
-
-def _is_remote_media_url(value: str) -> bool:
-    text = str(value or "").strip().lower()
-    return text.startswith("http://") or text.startswith("https://")
-
-
-def _append_social_export_history(record: Dict, max_entries: int = 100) -> List[Dict]:
-    """Persist social export batch summary into workflow.json and data file."""
-    if _ws is None or _project_dir is None:
-        return []
-    ws = _ws
-    history = ws.data.get("social_export_history", [])
-    if not isinstance(history, list):
-        history = []
-    history.append(record)
-    if len(history) > max(int(max_entries), 10):
-        history = history[-max(int(max_entries), 10):]
-    ws.data["social_export_history"] = history
-    ws.save()
-
-    p = _project_data_path("social_export_history.json")
-    if p is not None:
-        p.write_text(json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8")
-    return history
-
-
-def _get_social_export_history() -> List[Dict]:
-    if _ws is not None:
-        raw = _ws.data.get("social_export_history", [])
-        if isinstance(raw, list):
-            return raw
-    p = _project_data_path("social_export_history.json")
-    if p is not None and p.exists():
-        try:
-            parsed = json.loads(p.read_text(encoding="utf-8"))
-            if isinstance(parsed, list):
-                return parsed
-        except Exception:
-            return []
-    return []
-
-
-def _normalize_export_template_id(value: str) -> str:
-    raw = str(value or "").strip().lower()
-    if not raw:
-        return ""
-    cleaned = []
-    for ch in raw:
-        if ch.isalnum() or ch == "_":
-            cleaned.append(ch)
-        elif ch in {"-", " ", "/"}:
-            cleaned.append("_")
-    out = "".join(cleaned).strip("_")
-    while "__" in out:
-        out = out.replace("__", "_")
-    return out[:64]
-
-
-def _normalize_export_template_payload(payload: Dict) -> Dict:
-    if not isinstance(payload, dict):
-        raise ValueError("模板参数必须是对象")
-    platform_id_raw = str(payload.get("platform_id", "") or payload.get("template_id", "")).strip()
-    name_raw = str(payload.get("name", "") or "").strip()
-    platform_id = _normalize_export_template_id(platform_id_raw or name_raw)
-    if not platform_id:
-        raise ValueError("模板 ID 不能为空")
-    if not name_raw:
-        raise ValueError("模板名称不能为空")
-
-    def _to_int(value, default: int, min_val: int) -> int:
-        try:
-            parsed = int(value)
-        except Exception:
-            parsed = int(default)
-        return max(parsed, min_val)
-
-    return {
-        "platform_id": platform_id,
-        "name": name_raw,
-        "width": _to_int(payload.get("width", 1080), 1080, 16),
-        "height": _to_int(payload.get("height", 1920), 1920, 16),
-        "fps": _to_int(payload.get("fps", 30), 30, 1),
-        "video_bitrate": str(payload.get("video_bitrate", "10M") or "10M").strip() or "10M",
-        "audio_bitrate": str(payload.get("audio_bitrate", "192k") or "192k").strip() or "192k",
-        "max_duration_s": _to_int(payload.get("max_duration_s", 180), 180, 1),
-    }
-
-
-def _get_social_export_templates() -> Dict[str, Dict]:
-    if _project_dir is None:
-        return {}
-    raw = _read_project_json("social_export_templates.json", fallback={})
-    if not isinstance(raw, dict):
-        return {}
-    out: Dict[str, Dict] = {}
-    for _, item in raw.items():
-        try:
-            normalized = _normalize_export_template_payload(item)
-        except Exception:
-            continue
-        out[normalized["platform_id"]] = normalized
-    return out
-
-
-def _save_social_export_templates(templates: Dict[str, Dict]) -> Dict[str, Dict]:
-    if _project_dir is None:
-        return {}
-    out: Dict[str, Dict] = {}
-    if isinstance(templates, dict):
-        for _, item in templates.items():
-            try:
-                normalized = _normalize_export_template_payload(item)
-            except Exception:
-                continue
-            out[normalized["platform_id"]] = normalized
-    p = _project_data_path("social_export_templates.json")
-    if p is not None:
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
-    return out
-
-
-def _coerce_social_export_overrides(payload: Dict[str, Any], *, input_mode: str) -> Dict[str, Dict]:
-    explicit = payload.get("profile_overrides")
-    if isinstance(explicit, dict):
-        out: Dict[str, Dict] = {}
-        for key, value in explicit.items():
-            if not isinstance(value, dict):
-                continue
-            try:
-                normalized = _normalize_export_template_payload(value)
-            except Exception:
-                continue
-            out[str(normalized.get("platform_id") or key)] = normalized
-        return out
-
-    templates = payload.get("templates")
-    if isinstance(templates, dict):
-        out: Dict[str, Dict] = {}
-        for _, value in templates.items():
-            if not isinstance(value, dict):
-                continue
-            try:
-                normalized = _normalize_export_template_payload(value)
-            except Exception:
-                continue
-            out[normalized["platform_id"]] = normalized
-        if out:
-            return out
-    if isinstance(templates, list):
-        out: Dict[str, Dict] = {}
-        for value in templates:
-            if not isinstance(value, dict):
-                continue
-            try:
-                normalized = _normalize_export_template_payload(value)
-            except Exception:
-                continue
-            out[normalized["platform_id"]] = normalized
-        if out:
-            return out
-
-    if input_mode == "project" and _project_dir is not None:
-        return _get_social_export_templates()
-    return {}
-
+# ── Settings service (extracted to services/settings_service.py L1-6) ──
+from modules.app_api.services.settings_service import (  # noqa: E402
+    _prepare_project_dirs, _settings_path, _read_settings, _write_settings,
+    _normalize_production_view, _normalize_font_scale, _load_ui_settings,
+    _save_ui_settings, _remember_last_project, _add_to_recent_projects,
+    _get_recent_projects, _normalize_publish_connectors,
+    _merge_publish_connectors_with_existing, _mask_publish_connectors,
+    _load_publish_settings, _save_publish_settings, _mask_secret,
+    _normalize_ai_provider, _recommended_ai_base_url, _ai_catalog_payload,
+    _ai_secret_ref_name, _read_ai_secret_field, _persist_ai_secret_field,
+    _load_ai_settings, _save_ai_settings, _apply_ai_env, _public_ai_settings,
+    _default_project_config, _project_data_path, _read_project_json,
+)
+# Early init so module-level calls (e.g. _apply_ai_env) work before create_app()
+from modules.app_api.services import settings_service as _settings_svc_early  # noqa: E402
+_settings_svc_early.init(library=_library, secret_store=_secret_store, project_dir=_project_dir)
+
+# ── Workflow management (extracted to services/workflow_runner.py) ──
+from modules.app_api.services.workflow_runner import (  # noqa: E402
+    _read_agent_task_history, _save_agent_task_history, _find_agent_task_history_record,
+    _custom_workflow_store_path, _custom_workflow_runs_path, _normalize_custom_workflow_id,
+    _parse_custom_workflow_tags, _normalize_custom_workflow_step, _normalize_custom_workflow_payload,
+    _read_custom_workflow_store, _save_custom_workflow_store, _read_custom_workflow_runs,
+    _save_custom_workflow_runs, _append_custom_workflow_run, _find_custom_workflow_run,
+    _build_custom_workflow_catalog, _extract_agent_replay_spec, _extract_template_ids_from_value,
+    _normalize_agent_skill_condition, _capability_supports_input_mode,
+    _normalize_agent_input_mode_value, _apply_agent_capability_input_defaults,
+    _normalize_agent_skill_steps, _resolve_agent_primary_call, _invoke_agent_primary_call,
+    _workflow_get_path_value, _resolve_workflow_templates, _workflow_truthy,
+    _workflow_pick_next_step_id, _workflow_pick_target_with_source, _workflow_graph_has_cycle,
+    _build_custom_workflow_graph, _build_failed_only_workflow_subset,
+    _resolve_custom_workflow_from_payload, _build_custom_workflow_plan,
+    _execute_custom_workflow_plan, _start_custom_workflow_run,
+    _normalize_agent_replay_context, _execute_agent_skill, _should_run_conditional_step,
+)
+
+# ── Job analytics service (extracted to services/job_analytics_service.py) ──
+from modules.app_api.services.job_analytics_service import (  # noqa: E402
+    _parse_iso_datetime, _duration_from_iso_range, _trimmed_avg,
+    _refresh_eta_history_cache, _historical_avg_duration_for_kind, _estimate_job_eta,
+    _build_agent_task_history_record, _record_agent_task_history_from_job,
+    _parse_agent_history_filter_tokens, _agent_history_anchor_time,
+    _filter_agent_task_history, _build_agent_task_export_snapshot,
+    _build_chain_view_from_history_item, _build_agent_observability_summary, _read_script_json,
+)
+from modules.app_api.services import job_analytics_service as _analytics_svc_early  # noqa: E402
+_analytics_svc_early.init(
+    project_dir=_project_dir, eta_history_lock=_eta_history_lock,
+    eta_history_cache=_eta_history_cache, ensure_job_store=lambda: _ensure_job_store(),
+    jobs=_jobs, agent_history_lock=_agent_history_lock,
+)
+# ── Capability helpers (extracted to services/capability_helpers.py) ──
+from modules.app_api.services.capability_helpers import (  # noqa: E402
+    _slugify, _extract_material_semantics, _parse_platforms, _parse_capability_input_mode,
+    _request_json_any_method, _capability_base_dir, _resolve_path_with_base,
+    _coerce_script_input, _coerce_materials_input, _extract_subtitles_from_script,
+    _script_to_text_blocks, _parse_str_list, _default_master_video_path,
+    _default_bgm_library_dirs, _default_bgm_output_dir, _is_remote_media_url,
+    _append_social_export_history, _get_social_export_history, _normalize_export_template_id,
+    _normalize_export_template_payload, _get_social_export_templates,
+    _save_social_export_templates, _coerce_social_export_overrides,
+)
+from modules.app_api.services import capability_helpers as _cap_helpers_early  # noqa: E402
+_cap_helpers_early.init(project_dir=_project_dir, ws=_ws)
 
 def _normalize_agent_template_id(value: str) -> str:
     return _normalize_export_template_id(value)
-
 
 def _coerce_bool(value, default: bool = False) -> bool:
     if value is None:
@@ -3246,7 +1177,6 @@ def _coerce_bool(value, default: bool = False) -> bool:
         return False
     return bool(default)
 
-
 def _deep_merge_dict(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
     out = deepcopy(base) if isinstance(base, dict) else {}
     if not isinstance(override, dict):
@@ -3257,7 +1187,6 @@ def _deep_merge_dict(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str
         else:
             out[key] = deepcopy(value)
     return out
-
 
 def _get_nested_value(data: Dict[str, Any], path: str):
     if not isinstance(data, dict):
@@ -3271,7 +1200,6 @@ def _get_nested_value(data: Dict[str, Any], path: str):
             return False, None
         cur = cur[part]
     return True, cur
-
 
 def _set_nested_value(data: Dict[str, Any], path: str, value: Any):
     if not isinstance(data, dict):
@@ -3288,838 +1216,25 @@ def _set_nested_value(data: Dict[str, Any], path: str, value: Any):
         cur = nxt
     cur[parts[-1]] = deepcopy(value)
 
-
-def _agent_template_value_matches_type(value: Any, slot_type: str) -> bool:
-    t = str(slot_type or "").strip().lower()
-    if t == "string":
-        return isinstance(value, str)
-    if t == "number":
-        return isinstance(value, (int, float)) and not isinstance(value, bool)
-    if t == "integer":
-        return isinstance(value, int) and not isinstance(value, bool)
-    if t == "boolean":
-        return isinstance(value, bool)
-    if t == "array":
-        return isinstance(value, list)
-    if t == "object":
-        return isinstance(value, dict)
-    return True
-
-
-def _validate_agent_template_slot_value(slot: Dict[str, Any], value: Any) -> Optional[str]:
-    slot_type = str(slot.get("type", "string") or "string").strip().lower()
-    if not _agent_template_value_matches_type(value, slot_type):
-        return f"类型不匹配（期望 {slot_type}）"
-
-    enum_raw = slot.get("enum")
-    if isinstance(enum_raw, list) and enum_raw and value not in enum_raw:
-        return f"不在 enum 范围内: {enum_raw}"
-
-    if slot_type in {"number", "integer"} and isinstance(value, (int, float)) and not isinstance(value, bool):
-        minimum = slot.get("minimum")
-        maximum = slot.get("maximum")
-        if isinstance(minimum, (int, float)) and value < minimum:
-            return f"小于最小值 {minimum}"
-        if isinstance(maximum, (int, float)) and value > maximum:
-            return f"大于最大值 {maximum}"
-    return None
-
-
-def _normalize_agent_template_variables(variables_raw: Any) -> List[Dict[str, Any]]:
-    if variables_raw in (None, ""):
-        return []
-    if not isinstance(variables_raw, list):
-        raise ValueError("variables 必须是数组")
-
-    out: List[Dict[str, Any]] = []
-    seen_keys = set()
-    allowed_types = {"string", "number", "integer", "boolean", "array", "object"}
-    for idx, item in enumerate(variables_raw, start=1):
-        if not isinstance(item, dict):
-            raise ValueError(f"variables[{idx}] 必须是对象")
-        key = str(item.get("key", "") or item.get("name", "")).strip()
-        if not key:
-            raise ValueError(f"variables[{idx}].key 不能为空")
-        if key in seen_keys:
-            raise ValueError(f"variables 存在重复 key: {key}")
-        seen_keys.add(key)
-
-        slot_type = str(item.get("type", "string") or "string").strip().lower()
-        if slot_type not in allowed_types:
-            raise ValueError(f"variables[{idx}].type 仅支持 {sorted(allowed_types)}")
-
-        slot: Dict[str, Any] = {
-            "key": key,
-            "type": slot_type,
-            "required": _coerce_bool(item.get("required", False), default=False),
-        }
-        if "description" in item:
-            slot["description"] = str(item.get("description", "") or "").strip()[:240]
-        if "enum" in item and item.get("enum") is not None:
-            if not isinstance(item.get("enum"), list):
-                raise ValueError(f"variables[{idx}].enum 必须是数组")
-            slot["enum"] = list(item.get("enum", []))
-        if "minimum" in item and item.get("minimum") is not None:
-            if not isinstance(item.get("minimum"), (int, float)):
-                raise ValueError(f"variables[{idx}].minimum 必须是数字")
-            slot["minimum"] = item.get("minimum")
-        if "maximum" in item and item.get("maximum") is not None:
-            if not isinstance(item.get("maximum"), (int, float)):
-                raise ValueError(f"variables[{idx}].maximum 必须是数字")
-            slot["maximum"] = item.get("maximum")
-        if "minimum" in slot and "maximum" in slot and slot["minimum"] > slot["maximum"]:
-            raise ValueError(f"variables[{idx}] minimum 不能大于 maximum")
-        if "default" in item:
-            default_val = item.get("default")
-            err = _validate_agent_template_slot_value(slot, default_val)
-            if err:
-                raise ValueError(f"variables[{idx}].default 非法: {err}")
-            slot["default"] = deepcopy(default_val)
-        out.append(slot)
-    return out
-
-
-def _validate_template_slot_values(
-    *,
-    variables: List[Dict[str, Any]],
-    payload: Dict[str, Any],
-    source_label: str,
-) -> List[str]:
-    if not isinstance(payload, dict) or not variables:
-        return []
-    errors: List[str] = []
-    for slot in variables:
-        key = str(slot.get("key", "") or "").strip()
-        if not key:
-            continue
-        exists, value = _get_nested_value(payload, key)
-        if not exists:
-            continue
-        err = _validate_agent_template_slot_value(slot, value)
-        if err:
-            errors.append(f"{source_label}.{key}: {err}")
-    return errors
-
-
-def _hydrate_agent_template_defaults(template_raw: Dict[str, Any]) -> Dict[str, Any]:
-    out = deepcopy(template_raw) if isinstance(template_raw, dict) else {}
-    out["template_id"] = _normalize_agent_template_id(out.get("template_id", ""))
-    out["name"] = str(out.get("name", "") or "").strip()
-    out["capability_id"] = str(out.get("capability_id", "") or "").strip() or "generic"
-    out["scope"] = str(out.get("scope", "") or "").strip().lower()
-    out["actor_id"] = str(out.get("actor_id", "") or "").strip()
-    tags_raw = out.get("tags", [])
-    out["tags"] = [str(x).strip() for x in tags_raw if str(x).strip()] if isinstance(tags_raw, list) else []
-    out["content"] = deepcopy(out.get("content", {})) if isinstance(out.get("content"), dict) else {}
-    out["overrides"] = deepcopy(out.get("overrides", {})) if isinstance(out.get("overrides"), dict) else {}
-    out["base_template_id"] = _normalize_agent_template_id(str(out.get("base_template_id", "") or ""))
-    try:
-        out["variables"] = _normalize_agent_template_variables(out.get("variables", []))
-    except Exception:
-        out["variables"] = []
-    out["updated_at"] = str(out.get("updated_at", "") or "")
-    if out["scope"] != "agent":
-        out["actor_id"] = ""
-    if out["scope"] not in {"system", "project", "agent"}:
-        out["scope"] = "project"
-    if out["base_template_id"] == out["template_id"]:
-        out["base_template_id"] = ""
-    return out
-
-
-def _normalize_agent_template_payload(
-    payload: Dict,
-    *,
-    scope_default: str = "agent",
-    actor_id_default: str = "",
-) -> Dict[str, Any]:
-    if not isinstance(payload, dict):
-        raise ValueError("模板参数必须是对象")
-    template_id_raw = str(payload.get("template_id", "") or payload.get("id", "")).strip()
-    name_raw = str(payload.get("name", "") or "").strip()
-    template_id = _normalize_agent_template_id(template_id_raw or name_raw)
-    if not template_id:
-        raise ValueError("template_id 不能为空")
-    if not name_raw:
-        raise ValueError("name 不能为空")
-
-    scope = str(payload.get("scope", scope_default) or scope_default).strip().lower()
-    if scope not in {"system", "project", "agent"}:
-        raise ValueError("scope 仅支持 system/project/agent")
-
-    actor_id = str(payload.get("actor_id", actor_id_default) or actor_id_default).strip()
-    if scope == "agent" and not actor_id:
-        raise ValueError("agent scope 需要 actor_id")
-    if scope != "agent":
-        actor_id = ""
-
-    capability_id = str(payload.get("capability_id", "") or "").strip() or "generic"
-    base_template_id = _normalize_agent_template_id(str(payload.get("base_template_id", "") or ""))
-    if base_template_id == template_id:
-        raise ValueError("base_template_id 不能指向自己")
-
-    content_raw = payload.get("content", {})
-    if content_raw is None:
-        content_raw = {}
-    if not isinstance(content_raw, dict):
-        raise ValueError("content 必须是对象")
-    overrides_raw = payload.get("overrides", {})
-    if overrides_raw is None:
-        overrides_raw = {}
-    if not isinstance(overrides_raw, dict):
-        raise ValueError("overrides 必须是对象")
-    variables = _normalize_agent_template_variables(payload.get("variables", []))
-    slot_errors = _validate_template_slot_values(
-        variables=variables,
-        payload=content_raw,
-        source_label="content",
-    ) + _validate_template_slot_values(
-        variables=variables,
-        payload=overrides_raw,
-        source_label="overrides",
-    )
-    if slot_errors:
-        raise ValueError(f"变量约束不满足: {'; '.join(slot_errors[:5])}")
-
-    tags_raw = payload.get("tags", [])
-    tags = tags_raw if isinstance(tags_raw, list) else []
-    tags = [str(x).strip() for x in tags if str(x).strip()]
-
-    return {
-        "template_id": template_id,
-        "name": name_raw,
-        "capability_id": capability_id,
-        "scope": scope,
-        "actor_id": actor_id,
-        "tags": tags,
-        "base_template_id": base_template_id,
-        "overrides": deepcopy(overrides_raw),
-        "variables": variables,
-        "content": content_raw,
-        "updated_at": datetime.now().isoformat(timespec="seconds"),
-    }
-
-
-def _read_agent_template_store() -> Dict[str, Any]:
-    raw = _read_project_json("agent_templates.json", fallback={})
-    if not isinstance(raw, dict):
-        return {"project": {}, "agent": {}}
-    project = raw.get("project", {})
-    agent = raw.get("agent", {})
-    return {
-        "project": project if isinstance(project, dict) else {},
-        "agent": agent if isinstance(agent, dict) else {},
-    }
-
-
-def _agent_template_lookup_key(scope: str, actor_id: str, template_id: str) -> str:
-    return f"{str(scope or '').strip().lower()}|{str(actor_id or '').strip()}|{_normalize_agent_template_id(template_id)}"
-
-
-def _agent_template_chain_token(template: Dict[str, Any]) -> str:
-    scope = str(template.get("scope", "") or "").strip().lower()
-    actor_id = str(template.get("actor_id", "") or "").strip()
-    template_id = str(template.get("template_id", "") or "").strip()
-    if scope == "agent" and actor_id:
-        return f"{scope}:{actor_id}:{template_id}"
-    return f"{scope}:{template_id}"
-
-
-def _agent_template_base_candidate_keys(template: Dict[str, Any]) -> List[str]:
-    scope = str(template.get("scope", "") or "").strip().lower()
-    actor_id = str(template.get("actor_id", "") or "").strip()
-    base_id = _normalize_agent_template_id(str(template.get("base_template_id", "") or ""))
-    if not base_id:
-        return []
-    if scope == "agent":
-        return [
-            _agent_template_lookup_key("agent", actor_id, base_id),
-            _agent_template_lookup_key("project", "", base_id),
-            _agent_template_lookup_key("system", "", base_id),
-        ]
-    if scope == "project":
-        return [
-            _agent_template_lookup_key("project", "", base_id),
-            _agent_template_lookup_key("system", "", base_id),
-        ]
-    return [_agent_template_lookup_key("system", "", base_id)]
-
-
-def _resolve_agent_template_effective(
-    template: Dict[str, Any],
-    *,
-    lookup: Dict[str, Dict[str, Any]],
-    cache: Dict[str, Dict[str, Any]],
-    visiting: Optional[set] = None,
-) -> Dict[str, Any]:
-    hydrated = _hydrate_agent_template_defaults(template)
-    own_key = _agent_template_lookup_key(
-        hydrated.get("scope", ""),
-        hydrated.get("actor_id", ""),
-        hydrated.get("template_id", ""),
-    )
-    cached = cache.get(own_key)
-    if isinstance(cached, dict):
-        return cached
-
-    if visiting is None:
-        visiting = set()
-    if own_key in visiting:
-        token = _agent_template_chain_token(hydrated)
-        ret = {
-            "effective_content": deepcopy(hydrated.get("content", {})),
-            "template_chain": [token],
-            "resolve_warnings": [f"模板继承存在循环引用: {token}"],
-        }
-        cache[own_key] = ret
-        return ret
-
-    visiting.add(own_key)
-    warnings: List[str] = []
-    chain: List[str] = []
-    effective: Dict[str, Any] = {}
-
-    base_template = None
-    for candidate_key in _agent_template_base_candidate_keys(hydrated):
-        candidate = lookup.get(candidate_key)
-        if isinstance(candidate, dict):
-            base_template = candidate
-            break
-    if hydrated.get("base_template_id"):
-        if base_template is None:
-            warnings.append(f"base_template_id 不存在或不可见: {hydrated.get('base_template_id')}")
-        else:
-            base_resolved = _resolve_agent_template_effective(
-                base_template,
-                lookup=lookup,
-                cache=cache,
-                visiting=visiting,
-            )
-            effective = deepcopy(base_resolved.get("effective_content", {}))
-            chain.extend(base_resolved.get("template_chain", []))
-            warnings.extend(base_resolved.get("resolve_warnings", []))
-
-    effective = _deep_merge_dict(effective, hydrated.get("content", {}))
-    effective = _deep_merge_dict(effective, hydrated.get("overrides", {}))
-
-    for slot in hydrated.get("variables", []):
-        key = str(slot.get("key", "") or "").strip()
-        if not key:
-            continue
-        exists, _ = _get_nested_value(effective, key)
-        if not exists and "default" in slot:
-            _set_nested_value(effective, key, slot.get("default"))
-
-    for slot in hydrated.get("variables", []):
-        key = str(slot.get("key", "") or "").strip()
-        if not key:
-            continue
-        exists, value = _get_nested_value(effective, key)
-        if not exists:
-            if _coerce_bool(slot.get("required", False), default=False):
-                warnings.append(f"变量缺失(required): {key}")
-            continue
-        err = _validate_agent_template_slot_value(slot, value)
-        if err:
-            warnings.append(f"变量约束不满足 {key}: {err}")
-
-    chain.append(_agent_template_chain_token(hydrated))
-    ret = {
-        "effective_content": effective,
-        "template_chain": list(dict.fromkeys(str(x) for x in chain if str(x).strip())),
-        "resolve_warnings": list(dict.fromkeys(str(x) for x in warnings if str(x).strip())),
-    }
-    cache[own_key] = ret
-    visiting.discard(own_key)
-    return ret
-
-
-def _collect_agent_templates(
-    *,
-    store: Optional[Dict[str, Any]] = None,
-    actor_id: str = "",
-    include_system: bool = True,
-) -> List[Dict[str, Any]]:
-    actor_norm = str(actor_id or "").strip()
-    current_store = store if isinstance(store, dict) else _read_agent_template_store()
-    out: List[Dict[str, Any]] = []
-    if include_system:
-        out.extend(_hydrate_agent_template_defaults(x) for x in _AGENT_SYSTEM_TEMPLATES.values())
-
-    project_templates = current_store.get("project", {})
-    if isinstance(project_templates, dict):
-        for item in project_templates.values():
-            out.append(_hydrate_agent_template_defaults(item))
-
-    if actor_norm:
-        agent_bucket = current_store.get("agent", {})
-        actor_templates = agent_bucket.get(actor_norm, {}) if isinstance(agent_bucket, dict) else {}
-        if isinstance(actor_templates, dict):
-            for item in actor_templates.values():
-                out.append(_hydrate_agent_template_defaults(item))
-    return out
-
-
-def _validate_agent_template_base_reference(template: Dict[str, Any], *, store: Dict[str, Any]) -> Optional[str]:
-    hydrated = _hydrate_agent_template_defaults(template)
-    base_id = str(hydrated.get("base_template_id", "") or "").strip()
-    if not base_id:
-        return None
-
-    actor_id = str(hydrated.get("actor_id", "") or "").strip()
-    pool = _collect_agent_templates(store=store, actor_id=actor_id, include_system=True)
-    lookup: Dict[str, Dict[str, Any]] = {}
-    own_key = _agent_template_lookup_key(
-        hydrated.get("scope", ""),
-        hydrated.get("actor_id", ""),
-        hydrated.get("template_id", ""),
-    )
-    for item in pool:
-        key = _agent_template_lookup_key(item.get("scope", ""), item.get("actor_id", ""), item.get("template_id", ""))
-        if key == own_key:
-            continue
-        lookup[key] = item
-    lookup[own_key] = hydrated
-
-    if not any(candidate_key in lookup for candidate_key in _agent_template_base_candidate_keys(hydrated)):
-        return f"base_template_id 不存在或不可见: {base_id}"
-
-    cache: Dict[str, Dict[str, Any]] = {}
-    resolved = _resolve_agent_template_effective(hydrated, lookup=lookup, cache=cache, visiting=set())
-    for msg in resolved.get("resolve_warnings", []):
-        if "循环引用" in str(msg):
-            return str(msg)
-    return None
-
-
-def _save_agent_template_store(store: Dict[str, Any]) -> Dict[str, Any]:
-    if _project_dir is None:
-        return {"project": {}, "agent": {}}
-    project_raw = store.get("project", {}) if isinstance(store, dict) else {}
-    agent_raw = store.get("agent", {}) if isinstance(store, dict) else {}
-
-    project_out: Dict[str, Dict] = {}
-    if isinstance(project_raw, dict):
-        for _, item in project_raw.items():
-            try:
-                tmpl = _normalize_agent_template_payload(item, scope_default="project")
-            except Exception:
-                continue
-            if tmpl.get("scope") != "project":
-                tmpl["scope"] = "project"
-                tmpl["actor_id"] = ""
-            project_out[tmpl["template_id"]] = tmpl
-
-    agent_out: Dict[str, Dict[str, Dict]] = {}
-    if isinstance(agent_raw, dict):
-        for actor_key, actor_templates in agent_raw.items():
-            actor_id = str(actor_key or "").strip()
-            if not actor_id or not isinstance(actor_templates, dict):
-                continue
-            bucket: Dict[str, Dict] = {}
-            for _, item in actor_templates.items():
-                try:
-                    tmpl = _normalize_agent_template_payload(
-                        item,
-                        scope_default="agent",
-                        actor_id_default=actor_id,
-                    )
-                except Exception:
-                    continue
-                tmpl["scope"] = "agent"
-                tmpl["actor_id"] = actor_id
-                bucket[tmpl["template_id"]] = tmpl
-            if bucket:
-                agent_out[actor_id] = bucket
-
-    out = {"project": project_out, "agent": agent_out}
-    p = _project_data_path("agent_templates.json")
-    if p is not None:
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
-    return out
-
-
-def _list_agent_templates(
-    *,
-    capability_id: str = "",
-    scope: str = "",
-    actor_id: str = "",
-    include_system: bool = True,
-    resolve: bool = True,
-) -> List[Dict[str, Any]]:
-    capability_norm = str(capability_id or "").strip()
-    scope_norm = str(scope or "").strip().lower()
-    actor_norm = str(actor_id or "").strip()
-    store = _read_agent_template_store()
-    full_pool = _collect_agent_templates(store=store, actor_id=actor_norm, include_system=True)
-    out: List[Dict[str, Any]] = []
-    for item in full_pool:
-        scope_item = str(item.get("scope", "") or "").strip().lower()
-        if scope_norm and scope_item != scope_norm:
-            continue
-        if not include_system and scope_item == "system":
-            continue
-        out.append(deepcopy(item))
-
-    if capability_norm:
-        out = [x for x in out if str(x.get("capability_id", "") or "") == capability_norm]
-
-    if resolve:
-        lookup = {
-            _agent_template_lookup_key(item.get("scope", ""), item.get("actor_id", ""), item.get("template_id", "")): item
-            for item in full_pool
-        }
-        cache: Dict[str, Dict[str, Any]] = {}
-        for item in out:
-            resolved = _resolve_agent_template_effective(item, lookup=lookup, cache=cache, visiting=set())
-            item["effective_content"] = deepcopy(resolved.get("effective_content", item.get("content", {})))
-            item["template_chain"] = list(resolved.get("template_chain", []))
-            item["resolve_warnings"] = list(resolved.get("resolve_warnings", []))
-
-    def _sort_key(item: Dict[str, Any]):
-        return (
-            _AGENT_TEMPLATE_SCOPE_ORDER.get(str(item.get("scope", "")).lower(), 99),
-            str(item.get("name", "")).lower(),
-            str(item.get("template_id", "")).lower(),
-        )
-
-    out.sort(key=_sort_key)
-    for item in out:
-        scope_item = str(item.get("scope", "")).lower()
-        item["readonly"] = scope_item == "system"
-    return out
-
-
-def _build_social_export_runner(
-    *,
-    input_video_raw: str,
-    output_dir_raw: str,
-    platforms: List[str],
-    quality: str,
-    ffmpeg_bin: str,
-    ffprobe_bin: str,
-    strict_duration_limit: bool,
-    timeout_seconds: float,
-    job_id: str,
-    profile_overrides: Optional[Dict] = None,
-    input_mode: str = "project",
-    base_dir: Optional[Path] = None,
-    persist_history: bool = True,
-):
-    from modules.capabilities.social_export import build_export_plan, run_export_plan
-
-    def _do_export():
-        anchor = base_dir if base_dir is not None else (_project_dir if _project_dir is not None else Path.cwd())
-        batch_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + job_id
-        started_at = datetime.now().isoformat(timespec="seconds")
-        if input_video_raw:
-            in_path = _resolve_path_with_base(input_video_raw, base_dir=anchor)
-        else:
-            if input_mode == "project":
-                in_path = _default_master_video_path()
-                if in_path is None:
-                    raise RuntimeError("找不到可导出的母版视频")
-            else:
-                raise RuntimeError("inline 模式需要提供 input_video")
-        if not in_path.exists():
-            raise RuntimeError(f"输入视频不存在: {in_path}")
-
-        final_platforms = platforms if platforms else ["douyin", "xiaohongshu", "tiktok"]
-        out_dir = (
-            (anchor / "output" / "social_exports")
-            if not output_dir_raw
-            else _resolve_path_with_base(output_dir_raw, base_dir=anchor)
-        )
-
-        plan = build_export_plan(
-            input_video=str(in_path),
-            output_dir=str(out_dir),
-            platform_ids=final_platforms,
-            quality=quality,
-            ffmpeg_bin=ffmpeg_bin,
-            ffprobe_bin=ffprobe_bin,
-            strict_duration_limit=bool(strict_duration_limit),
-            profile_overrides=profile_overrides,
-        )
-        logger.info("[社媒导出] 总任务 %d，输出目录: %s", len(plan.get("jobs", [])), out_dir)
-        for i, job in enumerate(plan.get("jobs", []), start=1):
-            logger.info("[社媒导出] %d/%d %s -> %s", i, len(plan["jobs"]), job.get("platform_id"), job.get("output_video"))
-        try:
-            result = run_export_plan(plan, timeout_seconds=timeout_seconds)
-        except Exception as exc:
-            failed_record = {
-                "batch_id": batch_id,
-                "job_id": job_id,
-                "status": "failed",
-                "started_at": started_at,
-                "finished_at": datetime.now().isoformat(timespec="seconds"),
-                "input_video": str(in_path),
-                "output_dir": str(out_dir),
-                "platforms": [j.get("platform_id") for j in plan.get("jobs", [])],
-                "quality": quality,
-                "strict_duration_limit": bool(strict_duration_limit),
-                "total": len(plan.get("jobs", [])),
-                "success": 0,
-                "failed": len(plan.get("jobs", [])),
-                "error": str(exc),
-                "output_files": [],
-            }
-            if persist_history and input_mode == "project":
-                _append_social_export_history(failed_record)
-            raise
-
-        done_files = [
-            r.get("output_video")
-            for r in result.get("results", [])
-            if r.get("status") == "done" and r.get("output_video")
-        ]
-        record = {
-            "batch_id": batch_id,
-            "job_id": job_id,
-            "status": "done" if int(result.get("failed", 0)) == 0 else "partial",
-            "started_at": started_at,
-            "finished_at": datetime.now().isoformat(timespec="seconds"),
-            "input_video": str(in_path),
-            "output_dir": str(out_dir),
-            "platforms": [j.get("platform_id") for j in plan.get("jobs", [])],
-            "quality": quality,
-            "strict_duration_limit": bool(strict_duration_limit),
-            "total": int(result.get("total", 0)),
-            "success": int(result.get("success", 0)),
-            "failed": int(result.get("failed", 0)),
-            "output_files": done_files,
-        }
-        if persist_history and input_mode == "project":
-            _append_social_export_history(record)
-        logger.info("[社媒导出] 完成，成功 %d，失败 %d", result.get("success", 0), result.get("failed", 0))
-        return {"plan": plan, "result": result, "batch": record}
-
-    return _do_export
-
-
-def _build_audio_voice_runner(
-    *,
-    payload: Dict,
-    job_id: str,
-    input_mode: str = "project",
-    base_dir: Optional[Path] = None,
-):
-    from modules.capabilities.audio_voice import (
-        build_audio_capability_payload,
-        build_voiceover_timeline,
-        mix_voiceover_to_video,
-        pick_bgm,
-        synthesize_voiceover_segments,
-    )
-
-    def _set_progress(p: int, msg: str = ""):
-        if job_id in _jobs:
-            _jobs[job_id]["progress"] = max(0, min(99, int(p)))
-            if msg:
-                _jobs[job_id]["log"].append(msg)
-                _jobs[job_id]["log"] = _jobs[job_id]["log"][-220:]
-
-    def _do_audio_voice():
-        if input_mode == "project" and _project_dir is None:
-            raise RuntimeError("项目未加载")
-        anchor = base_dir if base_dir is not None else _capability_base_dir(input_mode)
-
-        mood = str(payload.get("mood", "travel_story") or "travel_story")
-        provider = str(payload.get("provider", "elevenlabs") or "elevenlabs")
-        voice_id = str(payload.get("voice_id", "") or "").strip()
-        api_key = str(payload.get("api_key", "") or "").strip()
-        model_id = str(payload.get("model_id", "eleven_multilingual_v2") or "eleven_multilingual_v2")
-        output_format = str(payload.get("output_format", "mp3_44100_128") or "mp3_44100_128")
-        dry_run = bool(payload.get("dry_run", False))
-
-        _set_progress(5, "[配音] 读取脚本与字幕")
-        script = _coerce_script_input(payload, input_mode=input_mode)
-        plan = build_audio_capability_payload(script, mood=mood)
-        segments = payload.get("segments", plan.get("voiceover_segments", []))
-        if not isinstance(segments, list) or not segments:
-            raise RuntimeError("缺少可合成的字幕分段，请先完成脚本/字幕")
-        clip_duration_s = plan.get("music_plan", {}).get("duration_s")
-        if clip_duration_s in {None, 0, 0.0}:
-            clip_duration_s = payload.get("target_duration_s")
-
-        output_dir_raw = str(payload.get("output_dir", "") or "").strip()
-        output_dir = (
-            (anchor / "data" / "audio_voice" / "voiceover")
-            if not output_dir_raw
-            else _resolve_path_with_base(output_dir_raw, base_dir=anchor)
-        )
-
-        _set_progress(20, "[配音] 开始 ElevenLabs 合成")
-        synthesis = synthesize_voiceover_segments(
-            segments,
-            output_dir=str(output_dir),
-            provider=provider,
-            voice_id=voice_id,
-            api_key=api_key,
-            model_id=model_id,
-            output_format=output_format,
-            timeout_seconds=float(payload.get("tts_timeout_seconds", 90) or 90),
-            dry_run=dry_run,
-        )
-
-        output_audio_raw = str(payload.get("output_audio", "") or "").strip()
-        output_audio = (
-            (anchor / "data" / "audio_voice" / "narration_timeline.m4a")
-            if not output_audio_raw
-            else _resolve_path_with_base(output_audio_raw, base_dir=anchor)
-        )
-
-        _set_progress(55, "[配音] 生成旁白时间线轨")
-        timeline = build_voiceover_timeline(
-            synthesis.get("segments", []),
-            output_audio=str(output_audio),
-            ffmpeg_bin=str(payload.get("ffmpeg_bin", "ffmpeg") or "ffmpeg"),
-            timeout_seconds=float(payload.get("track_timeout_seconds", 600) or 600),
-            dry_run=dry_run,
-        )
-
-        input_video_raw = str(payload.get("input_video", "") or "").strip()
-        if input_video_raw:
-            input_video = _resolve_path_with_base(input_video_raw, base_dir=anchor)
-        else:
-            if input_mode == "project":
-                input_video = _default_master_video_path()
-                if input_video is None:
-                    raise RuntimeError("找不到可混音的输入视频")
-            else:
-                raise RuntimeError("inline 模式需要提供 input_video")
-        if not input_video.exists():
-            raise RuntimeError(f"输入视频不存在: {input_video}")
-
-        bgm_audio_raw = str(payload.get("bgm_audio", "") or "").strip()
-        bgm_audio = ""
-        bgm_pick = None
-        if bgm_audio_raw:
-            if _is_remote_media_url(bgm_audio_raw):
-                bgm_audio = bgm_audio_raw
-            else:
-                bgm_path = _resolve_path_with_base(bgm_audio_raw, base_dir=anchor)
-                bgm_audio = str(bgm_path)
-        elif bool(payload.get("auto_pick_bgm", True)):
-            _set_progress(68, "[配乐] 自动匹配 BGM")
-            library_dir = str(payload.get("bgm_library_dir", "") or "").strip()
-            library_dirs = _parse_str_list(payload.get("bgm_library_dirs", []))
-            if input_mode == "project":
-                resolved_dirs = _default_bgm_library_dirs(custom_dir=library_dir, custom_dirs=library_dirs)
-            else:
-                resolved_dirs = []
-                for item in [library_dir, *library_dirs]:
-                    raw = str(item or "").strip()
-                    if not raw:
-                        continue
-                    resolved = _resolve_path_with_base(raw, base_dir=anchor)
-                    if resolved.exists() and resolved.is_dir():
-                        resolved_dirs.append(resolved)
-            bgm_provider = str(payload.get("bgm_provider", "local_library") or "local_library")
-            if input_mode == "project":
-                bgm_output_dir = _default_bgm_output_dir(str(payload.get("bgm_output_dir", "") or "").strip())
-            else:
-                bgm_output_raw = str(payload.get("bgm_output_dir", "") or "").strip()
-                bgm_output_dir = (
-                    (anchor / "data" / "audio_voice" / "bgm")
-                    if not bgm_output_raw
-                    else _resolve_path_with_base(bgm_output_raw, base_dir=anchor)
-                )
-            bgm_force_refresh = bool(payload.get("bgm_force_refresh", False))
-            bgm_cache_max_age_days = float(payload.get("bgm_cache_max_age_days", 0) or 0)
-            bgm_cache_max_age_seconds = max(bgm_cache_max_age_days, 0.0) * 86400.0
-            try:
-                bgm_pick = pick_bgm(
-                    provider=bgm_provider,
-                    mood=mood,
-                    target_duration_s=float(clip_duration_s or 0.0) or None,
-                    library_dirs=[str(x) for x in resolved_dirs],
-                    ffprobe_bin=str(payload.get("ffprobe_bin", "ffprobe") or "ffprobe"),
-                    max_candidates=int(payload.get("bgm_max_candidates", 20) or 20),
-                    api_key=str(payload.get("bgm_api_key", "") or "").strip(),
-                    endpoint=str(payload.get("bgm_endpoint", "") or "").strip(),
-                    timeout_seconds=float(payload.get("bgm_timeout_seconds", 45) or 45),
-                    output_dir=str(bgm_output_dir) if bgm_output_dir is not None else "",
-                    download_audio=bool(payload.get("bgm_download", True)),
-                    strict_schema=bool(payload.get("bgm_strict_schema", False)),
-                    cache_enabled=bool(payload.get("bgm_cache_enabled", True)),
-                    force_refresh=bgm_force_refresh,
-                    cache_max_age_seconds=bgm_cache_max_age_seconds,
-                )
-                maybe_track = str(bgm_pick.get("selected_track", "") or "").strip() if isinstance(bgm_pick, dict) else ""
-                if maybe_track:
-                    bgm_audio = maybe_track
-                    _set_progress(71, f"[配乐] 已选择 BGM: {Path(maybe_track).name}")
-                elif isinstance(bgm_pick, dict) and str(bgm_pick.get("selected_url", "")).strip():
-                    bgm_audio = str(bgm_pick.get("selected_url", "")).strip()
-                    _set_progress(71, "[配乐] 使用远端 BGM URL 参与混音")
-                else:
-                    _set_progress(71, "[配乐] 未找到可用 BGM，将仅混入旁白")
-            except Exception as exc:
-                bgm_pick = {"status": "failed", "error": str(exc), "provider": bgm_provider}
-                _set_progress(71, f"[配乐] 自动匹配失败，改为仅混入旁白: {exc}")
-
-        replace_master = bool(payload.get("replace_master", input_mode == "project"))
-        output_video_raw = str(payload.get("output_video", "") or "").strip()
-        if replace_master:
-            output_video = anchor / "output" / "final.mp4"
-        elif output_video_raw:
-            output_video = _resolve_path_with_base(output_video_raw, base_dir=anchor)
-        else:
-            output_video = anchor / "output" / "final_voice.mp4"
-
-        mix_target = output_video
-        used_temp = False
-        if output_video.resolve() == input_video.resolve():
-            used_temp = True
-            mix_target = output_video.with_suffix(".audio_pipeline_tmp.mp4")
-
-        _set_progress(75, "[配音] 混音到成片")
-        mix = mix_voiceover_to_video(
-            input_video=str(input_video),
-            output_video=str(mix_target),
-            narration_audio=str(output_audio),
-            bgm_audio=bgm_audio,
-            ffmpeg_bin=str(payload.get("ffmpeg_bin", "ffmpeg") or "ffmpeg"),
-            ffprobe_bin=str(payload.get("ffprobe_bin", "ffprobe") or "ffprobe"),
-            origin_volume=float(payload.get("origin_volume", 0.8) or 0.8),
-            narration_volume=float(payload.get("narration_volume", 1.0) or 1.0),
-            bgm_volume=float(payload.get("bgm_volume", 0.25) or 0.25),
-            bgm_loop=bool(payload.get("bgm_loop", True)),
-            bgm_fade_out_s=float(payload.get("bgm_fade_out_s", 2.0) or 0.0),
-            enable_ducking=bool(payload.get("enable_ducking", True)),
-            ducking_threshold=float(payload.get("ducking_threshold", 0.03) or 0.03),
-            ducking_ratio=float(payload.get("ducking_ratio", 8.0) or 8.0),
-            ducking_attack_ms=float(payload.get("ducking_attack_ms", 15.0) or 15.0),
-            ducking_release_ms=float(payload.get("ducking_release_ms", 250.0) or 250.0),
-            audio_bitrate=str(payload.get("audio_bitrate", "192k") or "192k"),
-            timeout_seconds=float(payload.get("mix_timeout_seconds", 900) or 900),
-            dry_run=dry_run,
-        )
-
-        if used_temp and not dry_run and mix.get("status") == "done":
-            mix_target.replace(output_video)
-            mix["output_video"] = str(output_video.resolve())
-
-        _set_progress(95, "[配音] 写入结果摘要")
-        summary = {
-            "requested_at": datetime.now().isoformat(timespec="seconds"),
-            "input_mode": input_mode,
-            "dry_run": dry_run,
-            "plan": plan,
-            "bgm_pick": bgm_pick,
-            "synthesis": synthesis,
-            "timeline": timeline,
-            "mix": mix,
-        }
-        out_path = _project_data_path("audio_voice_pipeline_last.json") if input_mode == "project" else None
-        if out_path is not None:
-            out_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
-        return summary
-
-    return _do_audio_voice
-
+# ── Agent template service (extracted to services/agent_template_service.py L1-6) ──
+from modules.app_api.services.agent_template_service import (  # noqa: E402
+    _agent_template_value_matches_type, _validate_agent_template_slot_value,
+    _normalize_agent_template_variables, _validate_template_slot_values,
+    _hydrate_agent_template_defaults, _normalize_agent_template_payload,
+    _read_agent_template_store, _agent_template_lookup_key, _agent_template_chain_token,
+    _agent_template_base_candidate_keys, _resolve_agent_template_effective,
+    _collect_agent_templates, _validate_agent_template_base_reference,
+    _save_agent_template_store, _list_agent_templates,
+)
+from modules.app_api.services import agent_template_service as _template_svc_early  # noqa: E402
+_template_svc_early.init(project_dir=_project_dir, agent_system_templates=_AGENT_SYSTEM_TEMPLATES,
+                         agent_template_scope_order=_AGENT_TEMPLATE_SCOPE_ORDER)
+
+# -- publish orchestrator: Group A (runners) imported from services/publish_orchestrator.py --
+from modules.app_api.services.publish_orchestrator import (
+    _build_social_export_runner,
+    _build_audio_voice_runner,
+)
 
 def _request_json_payload() -> Dict:
     if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
@@ -4129,7 +1244,6 @@ def _request_json_payload() -> Dict:
     except Exception:
         payload = None
     return payload if isinstance(payload, dict) else {}
-
 
 def _parse_boolish(value, default: bool = False) -> bool:
     if value is None:
@@ -4142,7 +1256,6 @@ def _parse_boolish(value, default: bool = False) -> bool:
     if text in {"0", "false", "no", "n", "off"}:
         return False
     return bool(default)
-
 
 def _parse_request_context() -> Dict[str, str]:
     payload = _request_json_payload()
@@ -4195,7 +1308,6 @@ def _parse_request_context() -> Dict[str, str]:
         "trace_id": trace_id,
     }
 
-
 def _extract_artifacts_from_payload(payload: Dict) -> List[Dict[str, str]]:
     if not isinstance(payload, dict):
         return []
@@ -4245,7 +1357,6 @@ def _extract_artifacts_from_payload(payload: Dict) -> List[Dict[str, str]]:
         dedup.append(item)
     return dedup
 
-
 def _build_capability_plan_summary(payload: Dict) -> Dict:
     if not isinstance(payload, dict):
         return {}
@@ -4270,7 +1381,6 @@ def _build_capability_plan_summary(payload: Dict) -> Dict:
             summary["total"] = int(result.get("total", 0) or 0)
     return summary
 
-
 def _capability_idempotency_project_anchor() -> str:
     if _project_dir is None:
         return ""
@@ -4278,7 +1388,6 @@ def _capability_idempotency_project_anchor() -> str:
         return str(_project_dir.resolve())
     except Exception:
         return str(_project_dir)
-
 
 def _ensure_capability_idempotency_store() -> CapabilityIdempotencyStore:
     global _capability_idempotency_store
@@ -4293,14 +1402,11 @@ def _ensure_capability_idempotency_store() -> CapabilityIdempotencyStore:
         )
     return _capability_idempotency_store
 
-
 def _capability_idempotency_store_path() -> Optional[Path]:
     return _ensure_capability_idempotency_store().store_path()
 
-
 def _normalize_capability_idempotency_entry(raw: Any) -> Optional[Dict[str, Any]]:
     return _ensure_capability_idempotency_store().normalize_entry(raw)
-
 
 def _capability_idempotency_entry_expired(
     entry: Dict[str, Any],
@@ -4314,7 +1420,6 @@ def _capability_idempotency_entry_expired(
         now_epoch=now_epoch,
     )
 
-
 def _filter_capability_idempotency_entries(
     entries: Dict[str, Dict[str, Any]],
     *,
@@ -4327,7 +1432,6 @@ def _filter_capability_idempotency_entries(
         include_expired=include_expired,
     )
 
-
 def _load_capability_idempotency_store(
     *,
     include_expired: bool = False,
@@ -4338,10 +1442,8 @@ def _load_capability_idempotency_store(
         ttl_seconds=ttl_seconds,
     )
 
-
 def _save_capability_idempotency_store(records: Dict[str, Dict[str, Any]]):
     _ensure_capability_idempotency_store().save_store(records)
-
 
 def _trim_capability_idempotency_entries(
     entries: Dict[str, Dict[str, Any]],
@@ -4352,7 +1454,6 @@ def _trim_capability_idempotency_entries(
         entries,
         ttl_seconds=ttl_seconds,
     )
-
 
 def _trim_capability_idempotency_entries_with_limit(
     entries: Dict[str, Dict[str, Any]],
@@ -4366,7 +1467,6 @@ def _trim_capability_idempotency_entries_with_limit(
         ttl_seconds=ttl_seconds,
     )
 
-
 def _limit_capability_idempotency_entries(
     entries: Dict[str, Dict[str, Any]],
     *,
@@ -4377,13 +1477,11 @@ def _limit_capability_idempotency_entries(
         max_entries=max_entries,
     )
 
-
 def _get_persisted_capability_idempotency_entry(cache_key: str) -> Optional[Dict[str, Any]]:
     return _ensure_capability_idempotency_store().get_persisted_entry(
         cache_key,
         ttl_seconds=_CAPABILITY_IDEMPOTENCY_TTL_SECONDS,
     )
-
 
 def _compact_persisted_capability_idempotency_store(
     *,
@@ -4395,7 +1493,6 @@ def _compact_persisted_capability_idempotency_store(
         max_entries=max_entries,
     )
 
-
 def _upsert_persisted_capability_idempotency_entry(cache_key: str, entry: Dict[str, Any]):
     _ensure_capability_idempotency_store().upsert_persisted_entry(
         cache_key,
@@ -4404,14 +1501,11 @@ def _upsert_persisted_capability_idempotency_entry(cache_key: str, entry: Dict[s
         max_entries=_CAPABILITY_IDEMPOTENCY_LIMIT,
     )
 
-
 def _make_capability_idempotency_cache_key(path: str, ctx: Dict[str, str]) -> str:
     return _ensure_capability_idempotency_store().make_cache_key(path, ctx)
 
-
 def _trim_capability_idempotency_cache():
     _ensure_capability_idempotency_store().trim_memory_cache()
-
 
 @app.before_request
 def _capability_idempotency_before_request():
@@ -4438,7 +1532,6 @@ def _capability_idempotency_before_request():
         body["idempotency"] = idem
         body["request_context"] = ctx
     return jsonify(body), int(hit.get("status", 200) or 200)
-
 
 @app.after_request
 def _capability_context_after_request(response):
@@ -4486,7 +1579,6 @@ def _capability_context_after_request(response):
     response.set_data(json.dumps(body, ensure_ascii=False))
     return response
 
-
 def _choose_path_via_osascript(mode: str) -> Dict:
     if sys.platform != "darwin":
         return {"path": None, "cancelled": False, "error": "当前系统不支持 osascript 对话框"}
@@ -4511,7 +1603,6 @@ def _choose_path_via_osascript(mode: str) -> Dict:
     if not out:
         return {"path": None, "cancelled": True, "error": ""}
     return {"path": out, "cancelled": False, "error": ""}
-
 
 def _choose_path(mode: str) -> Dict:
     if mode not in {"folder", "file"}:
@@ -4547,1167 +1638,33 @@ def _choose_path(mode: str) -> Dict:
         osascript_result["error"] = base_error
     return osascript_result
 
-
 # 启动时加载并注入 AI 设置（支持无重启使用）
 _apply_ai_env(_load_ai_settings())
 _restore_jobs_from_store()
 
-
-# ── Capability API ────────────────────────────────────────────────────
-
-def _agent_capability_route_map() -> Dict[str, Dict[str, str]]:
-    return {
-        "topic_library": {
-            "list": "GET /api/capabilities/topic_library",
-            "upsert": "POST /api/capabilities/topic_library",
-            "bootstrap": "POST /api/capabilities/topic_library/bootstrap",
-        },
-        "topic_copy": {"draft": "POST /api/capabilities/topic_copy/draft"},
-        "text_rough_cut": {
-            "source": "GET /api/capabilities/text_rough_cut/source",
-            "plan": "POST /api/capabilities/text_rough_cut/plan",
-        },
-        "short_clip": {"plan": "POST /api/capabilities/short_clip/plan"},
-        "refinement": {
-            "plan": "POST /api/capabilities/refinement/plan",
-            "handoff": "POST /api/capabilities/refinement/handoff",
-            "execute": "POST /api/capabilities/refinement/execute",
-            "collect_master": "POST /api/capabilities/refinement/collect_master",
-        },
-        "publish_prep": {
-            "profiles": "GET /api/capabilities/publish_prep/profiles",
-            "plan": "POST /api/capabilities/publish_prep/generate",
-            "generate": "POST /api/capabilities/publish_prep/generate",
-        },
-        "subtitle_calibration": {
-            "plan": "POST /api/capabilities/subtitle_calibration/plan",
-            "run": "POST /api/capabilities/subtitle_calibration/run",
-        },
-        "image_semantic": {
-            "analyze": "POST /api/capabilities/image_semantic/analyze",
-            "search": "POST /api/capabilities/image_semantic/search",
-        },
-        "article_expand": {
-            "generate": "POST /api/capabilities/article_expand/generate",
-            "plan": "POST /api/capabilities/article_expand/generate",
-        },
-        "content_publish": {
-            "platforms": "GET /api/capabilities/content_publish/platforms",
-            "bootstrap": "POST /api/capabilities/content_publish/session/bootstrap",
-            "plan": "POST /api/capabilities/content_publish/plan",
-            "run": "POST /api/capabilities/content_publish/run",
-            "rerun": "POST /api/capabilities/content_publish/rerun",
-        },
-        "social_export": {
-            "profiles": "GET /api/capabilities/social_export/profiles",
-            "specs": "GET /api/capabilities/social_export/specs",
-            "validate_source": "POST /api/capabilities/social_export/validate_source",
-            "plan": "POST /api/capabilities/social_export/plan",
-            "run": "POST /api/capabilities/social_export/run",
-            "history": "GET /api/capabilities/social_export/history",
-            "rerun": "POST /api/capabilities/social_export/rerun",
-        },
-        "audio_voice": {
-            "plan": "POST /api/capabilities/audio_voice/plan",
-            "pick_bgm": "POST /api/capabilities/audio_voice/pick_bgm",
-            "synthesize": "POST /api/capabilities/audio_voice/synthesize",
-            "build_track": "POST /api/capabilities/audio_voice/build_track",
-            "mix_master": "POST /api/capabilities/audio_voice/mix_master",
-            "run": "POST /api/capabilities/audio_voice/run",
-        },
-    }
-
-
-def _list_agent_skills() -> List[Dict[str, Any]]:
-    out = [deepcopy(x) for x in _AGENT_SKILL_REGISTRY.values()]
-    out.sort(key=lambda item: str(item.get("skill_id", "")).lower())
-    return out
-def _read_agent_governance_policy() -> Dict[str, Any]:
-    if _project_dir is None:
-        return _normalize_agent_governance_policy({})
-    raw = _read_project_json("agent_governance.json", fallback={})
-    return _normalize_agent_governance_policy(raw)
-
-
-def _read_agent_governance_usage() -> Dict[str, Any]:
-    raw = _read_project_json("agent_governance_usage.json", fallback={})
-    if not isinstance(raw, dict):
-        raw = {}
-    out = deepcopy(_AGENT_GOVERNANCE_USAGE_DEFAULT)
-    actors_raw = raw.get("actors", {})
-    out["updated_at"] = str(raw.get("updated_at", "") or "")
-    if isinstance(actors_raw, dict):
-        out["actors"] = actors_raw
-    return out
-
-
-def _save_agent_governance_usage(usage: Dict[str, Any]) -> Dict[str, Any]:
-    out = usage if isinstance(usage, dict) else {}
-    out.setdefault("version", 1)
-    out["updated_at"] = datetime.now().isoformat(timespec="seconds")
-    p = _project_data_path("agent_governance_usage.json")
-    if p is not None:
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
-    return out
-def _read_agent_cost_model_config() -> Dict[str, Any]:
-    if _project_dir is None:
-        return _normalize_agent_cost_model_config({})
-    raw = _read_project_json("agent_cost_model.json", fallback={})
-    return _normalize_agent_cost_model_config(raw)
-def _record_governance_usage_for_skill_flow(
-    *,
-    actor_id: str,
-    summary: Dict[str, Any],
-) -> Dict[str, Any]:
-    actor = str(actor_id or "").strip()
-    if not actor:
-        return {"ok": False, "reason": "actor_id 为空"}
-    usage = _read_agent_governance_usage()
-    actors = usage.get("actors", {})
-    if not isinstance(actors, dict):
-        actors = {}
-    actor_entry = actors.get(actor, {})
-    if not isinstance(actor_entry, dict):
-        actor_entry = {}
-    actor_summary_bucket = actor_entry.get("summary", {})
-    cap_buckets = actor_entry.get("capabilities", {})
-    if not isinstance(cap_buckets, dict):
-        cap_buckets = {}
-
-    total_steps = int(summary.get("total_steps", 0) or 0)
-    success_steps = int(summary.get("success_steps", 0) or 0)
-    failed_steps = int(summary.get("failed_steps", 0) or 0)
-    skipped_steps = int(summary.get("skipped_steps", 0) or 0)
-    duration_seconds = float(summary.get("duration_seconds", 0.0) or 0.0)
-    steps = summary.get("steps", [])
-    total_prompt_tokens = 0
-    total_completion_tokens = 0
-    total_estimated_cost_usd = 0.0
-    now_iso = datetime.now().isoformat(timespec="seconds")
-    if isinstance(steps, list):
-        for item in steps:
-            if not isinstance(item, dict):
-                continue
-            usage_tokens = item.get("usage_tokens", {})
-            if isinstance(usage_tokens, dict):
-                total_prompt_tokens += max(int(usage_tokens.get("prompt_tokens", 0) or 0), 0)
-                total_completion_tokens += max(int(usage_tokens.get("completion_tokens", 0) or 0), 0)
-            estimated_cost = item.get("estimated_cost", {})
-            if isinstance(estimated_cost, dict):
-                total_estimated_cost_usd += max(float(estimated_cost.get("total_cost_usd", 0.0) or 0.0), 0.0)
-
-    actor_summary_bucket = _update_usage_bucket(
-        actor_summary_bucket,
-        steps_total=total_steps,
-        steps_success=success_steps,
-        steps_failed=failed_steps,
-        steps_skipped=skipped_steps,
-        duration_seconds=duration_seconds,
-        prompt_tokens=total_prompt_tokens,
-        completion_tokens=total_completion_tokens,
-        estimated_cost_usd=total_estimated_cost_usd,
-        now_iso=now_iso,
-    )
-
-    cap_stats: Dict[str, Dict[str, Any]] = {}
-    if isinstance(steps, list):
-        for item in steps:
-            if not isinstance(item, dict):
-                continue
-            capability_id = str(item.get("capability_id", "") or "").strip()
-            if not capability_id:
-                continue
-            bucket = cap_stats.setdefault(
-                capability_id,
-                {
-                    "total": 0,
-                    "success": 0,
-                    "failed": 0,
-                    "skipped": 0,
-                    "prompt_tokens": 0,
-                    "completion_tokens": 0,
-                    "estimated_cost_usd": 0.0,
-                    "duration_seconds": 0.0,
-                },
-            )
-            bucket["total"] += 1
-            st = str(item.get("status", "") or "").strip().lower()
-            if st == "done":
-                bucket["success"] += 1
-            elif st == "error":
-                bucket["failed"] += 1
-            elif st == "skipped":
-                bucket["skipped"] += 1
-            usage_tokens = item.get("usage_tokens", {})
-            if isinstance(usage_tokens, dict):
-                bucket["prompt_tokens"] += max(int(usage_tokens.get("prompt_tokens", 0) or 0), 0)
-                bucket["completion_tokens"] += max(int(usage_tokens.get("completion_tokens", 0) or 0), 0)
-            estimated_cost = item.get("estimated_cost", {})
-            if isinstance(estimated_cost, dict):
-                bucket["estimated_cost_usd"] += max(float(estimated_cost.get("total_cost_usd", 0.0) or 0.0), 0.0)
-                bucket["duration_seconds"] += max(float(estimated_cost.get("compute_seconds", 0.0) or 0.0), 0.0)
-            else:
-                bucket["duration_seconds"] += max(float(item.get("duration_seconds", 0.0) or 0.0), 0.0)
-
-    for capability_id, stat in cap_stats.items():
-        old_bucket = cap_buckets.get(capability_id, {})
-        cap_buckets[capability_id] = _update_usage_bucket(
-            old_bucket,
-            steps_total=int(stat.get("total", 0)),
-            steps_success=int(stat.get("success", 0)),
-            steps_failed=int(stat.get("failed", 0)),
-            steps_skipped=int(stat.get("skipped", 0)),
-            duration_seconds=float(stat.get("duration_seconds", 0.0) or 0.0),
-            prompt_tokens=int(stat.get("prompt_tokens", 0) or 0),
-            completion_tokens=int(stat.get("completion_tokens", 0) or 0),
-            estimated_cost_usd=float(stat.get("estimated_cost_usd", 0.0) or 0.0),
-            now_iso=now_iso,
-        )
-
-    actor_entry["summary"] = actor_summary_bucket
-    actor_entry["capabilities"] = cap_buckets
-    actors[actor] = actor_entry
-    usage["actors"] = actors
-    saved = _save_agent_governance_usage(usage)
-    return {
-        "ok": True,
-        "actor_id": actor,
-        "summary_suggested_limits": actor_summary_bucket.get("suggested_limits", {}),
-        "summary_cost": {
-            "total_estimated_cost_usd": actor_summary_bucket.get("total_estimated_cost_usd", 0.0),
-            "avg_estimated_cost_usd": actor_summary_bucket.get("avg_estimated_cost_usd", 0.0),
-            "total_tokens": actor_summary_bucket.get("total_tokens", 0),
-        },
-        "capability_suggested_limits": {
-            cap: (bucket.get("suggested_limits", {}) if isinstance(bucket, dict) else {})
-            for cap, bucket in cap_buckets.items()
-            if cap in cap_stats
-        },
-        "usage_file": "data/agent_governance_usage.json",
-        "updated_at": saved.get("updated_at", ""),
-    }
-def _capability_supports_input_mode(capability_id: str) -> bool:
-    cid = str(capability_id or "").strip().lower()
-    return cid in {
-        "topic_library",
-        "topic_copy",
-        "text_rough_cut",
-        "short_clip",
-        "refinement",
-        "publish_prep",
-        "subtitle_calibration",
-        "image_semantic",
-        "article_expand",
-        "content_publish",
-        "social_export",
-        "audio_voice",
-    }
-
-
-def _normalize_agent_input_mode_value(raw_value: Any) -> str:
-    text = str(raw_value or "").strip().lower()
-    if text == "auto":
-        return "project" if _project_dir is not None else "inline"
-    return _parse_capability_input_mode(text or "project", default="project")
-
-
-def _apply_agent_capability_input_defaults(
-    capability_id: str,
-    input_payload: Dict[str, Any],
-    *,
-    default_input: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    out = deepcopy(default_input) if isinstance(default_input, dict) else {}
-    out.update(input_payload if isinstance(input_payload, dict) else {})
-
-    if not _capability_supports_input_mode(capability_id):
-        return out
-    if "input_mode" in out:
-        out["input_mode"] = _normalize_agent_input_mode_value(out.get("input_mode"))
-    else:
-        out["input_mode"] = "project" if _project_dir is not None else "inline"
-    return out
-
-
-def _normalize_agent_skill_steps(
-    steps_raw: Any,
-    *,
-    default_retry_policy: Optional[Dict[str, Any]] = None,
-    default_timeout_seconds: float = 120.0,
-) -> List[Dict[str, Any]]:
-    if not isinstance(steps_raw, list) or not steps_raw:
-        raise ValueError("skills 不能为空，且必须是数组")
-    out: List[Dict[str, Any]] = []
-    for idx, item in enumerate(steps_raw, start=1):
-        if not isinstance(item, dict):
-            raise ValueError(f"skills[{idx}] 必须是对象")
-        skill_id = str(item.get("skill_id", "") or "").strip()
-        if not skill_id:
-            raise ValueError(f"skills[{idx}].skill_id 不能为空")
-        skill_spec = _AGENT_SKILL_REGISTRY.get(skill_id)
-        if not isinstance(skill_spec, dict):
-            raise ValueError(f"不支持的 skill_id: {skill_id}")
-
-        input_payload = item.get("input", {})
-        if input_payload is None:
-            input_payload = {}
-        if not isinstance(input_payload, dict):
-            raise ValueError(f"skills[{idx}].input 必须是对象")
-        capability_id = str(skill_spec.get("capability_id", "") or "")
-        input_payload = _apply_agent_capability_input_defaults(
-            capability_id,
-            input_payload,
-            default_input=skill_spec.get("default_input", {}),
-        )
-
-        retry_base = default_retry_policy if isinstance(default_retry_policy, dict) else {}
-        retry_policy = _normalize_skill_retry_policy(
-            item.get("retry_policy", retry_base),
-        )
-        timeout_seconds = _normalize_skill_timeout_seconds(
-            item.get("timeout_seconds", default_timeout_seconds),
-            default=default_timeout_seconds,
-        )
-        continue_on_error = _coerce_bool(item.get("continue_on_error", False), default=False)
-        step_id_raw = str(item.get("step_id", "") or "").strip()
-        step_id = _normalize_agent_template_id(step_id_raw) or f"step_{idx:02d}"
-        condition = _normalize_agent_skill_condition(item.get("condition", item.get("when", {})))
-
-        out.append({
-            "index": idx,
-            "step_id": step_id,
-            "skill_id": skill_id,
-            "skill_name": str(skill_spec.get("name", "") or ""),
-            "capability_id": capability_id,
-            "method": str(skill_spec.get("method", "POST") or "POST").strip().upper(),
-            "endpoint": str(skill_spec.get("endpoint", "") or "").strip(),
-            "input": deepcopy(input_payload),
-            "retry_policy": retry_policy,
-            "timeout_seconds": timeout_seconds,
-            "continue_on_error": continue_on_error,
-            "condition": condition,
-        })
-    return out
-
-
-def _resolve_agent_primary_call(
-    *,
-    capability_id: str,
-    routes: Dict[str, str],
-    action: str = "auto",
-) -> Dict[str, str]:
-    action_norm = str(action or "auto").strip().lower()
-    picked = ""
-    if action_norm and action_norm != "auto":
-        picked = str(routes.get(action_norm, "") or "").strip()
-        if not picked:
-            raise ValueError(f"capability={capability_id} 不支持 action={action_norm}")
-    else:
-        picked = (
-            str(routes.get("run", "") or "").strip()
-            or str(routes.get("plan", "") or "").strip()
-            or str(routes.get("draft", "") or "").strip()
-            or str(routes.get("list", "") or "").strip()
-            or str(next(iter(routes.values()), "") or "").strip()
-        )
-    if not picked:
-        raise ValueError(f"capability={capability_id} 缺少可执行路由")
-    method, endpoint = picked.split(" ", 1) if " " in picked else ("POST", picked)
-    return {"method": str(method or "POST").strip().upper(), "endpoint": str(endpoint or "").strip()}
-
-
-def _invoke_agent_primary_call(
-    *,
-    method: str,
-    endpoint: str,
-    payload: Dict,
-    request_context: Dict[str, str],
-) -> Dict:
-    method_upper = str(method or "POST").strip().upper()
-    req_payload = dict(payload) if isinstance(payload, dict) else {}
-
-    with app.test_client() as client:
-        if method_upper == "GET":
-            query: Dict[str, str] = {}
-            for k, v in req_payload.items():
-                if v is None:
-                    continue
-                if isinstance(v, dict):
-                    query[str(k)] = json.dumps(v, ensure_ascii=False)
-                elif isinstance(v, (list, tuple, set)):
-                    query[str(k)] = ",".join(str(x) for x in v)
-                else:
-                    query[str(k)] = str(v)
-            for k in ("actor_type", "actor_id", "run_mode", "idempotency_key", "trace_id"):
-                val = str(request_context.get(k, "") or "").strip()
-                if val:
-                    query[k] = val
-            resp = client.open(endpoint, method=method_upper, query_string=query)
-        else:
-            for k in ("actor_type", "actor_id", "run_mode", "idempotency_key", "trace_id"):
-                val = str(request_context.get(k, "") or "").strip()
-                if val and k not in req_payload:
-                    req_payload[k] = val
-            resp = client.open(endpoint, method=method_upper, json=req_payload)
-
-    data = resp.get_json(silent=True)
-    if not isinstance(data, dict):
-        data = {
-            "ok": False,
-            "error": f"目标接口返回非 JSON: {endpoint}",
-            "status_code": int(resp.status_code),
-        }
-    return {"status_code": int(resp.status_code), "data": data}
-
-
-_WORKFLOW_TEMPLATE_PATTERN = re.compile(r"\{\{\s*([^{}]+?)\s*\}\}")
-def _resolve_custom_workflow_from_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
-    raw = payload if isinstance(payload, dict) else {}
-    workflow_raw = raw.get("workflow")
-    if isinstance(workflow_raw, dict):
-        return _normalize_custom_workflow_payload(workflow_raw)
-
-    workflow_id = _normalize_agent_template_id(raw.get("workflow_id", ""))
-    if workflow_id and not str(raw.get("workflow", "")).strip():
-        store = _read_custom_workflow_store()
-        item = store.get(workflow_id)
-        if isinstance(item, dict):
-            return deepcopy(item)
-        raise ValueError(f"workflow 不存在: {workflow_id}")
-
-    if isinstance(raw.get("steps"), list):
-        return _normalize_custom_workflow_payload(raw)
-
-    raise ValueError("缺少 workflow/workflow_id（或 inline steps）")
-
-
-def _build_custom_workflow_plan(
-    *,
-    workflow: Dict[str, Any],
-    payload: Dict[str, Any],
-    dry_run: bool,
-) -> Dict[str, Any]:
-    route_map = _agent_capability_route_map()
-    steps_raw = workflow.get("steps", []) if isinstance(workflow, dict) else []
-    if not isinstance(steps_raw, list) or not steps_raw:
-        raise ValueError("workflow.steps 不能为空")
-
-    step_inputs_raw = payload.get("step_inputs", {})
-    step_inputs = step_inputs_raw if isinstance(step_inputs_raw, dict) else {}
-    workflow_input_raw = payload.get("input", {})
-    workflow_input = workflow_input_raw if isinstance(workflow_input_raw, dict) else {}
-    workflow_default_mode = str(workflow.get("input_mode", "auto") or "auto").strip().lower()
-    if workflow_default_mode not in {"auto", "project", "inline"}:
-        workflow_default_mode = "auto"
-
-    planned_steps: List[Dict[str, Any]] = []
-    for idx, step in enumerate(steps_raw, start=1):
-        if not isinstance(step, dict):
-            raise ValueError(f"steps[{idx}] 必须是对象")
-        node_type = str(step.get("node_type", "action") or "action").strip().lower()
-        if node_type not in {"action", "condition"}:
-            raise ValueError(f"steps[{idx}].node_type 仅支持 action/condition")
-        capability_id = str(step.get("capability_id", "") or "").strip().lower()
-        action = str(step.get("action", "auto") or "auto").strip().lower()
-        if not action:
-            action = "auto"
-
-        step_id = _normalize_agent_template_id(step.get("step_id", "")) or f"step_{idx:02d}"
-        input_template = step.get("input", {})
-        if input_template is None:
-            input_template = {}
-        if not isinstance(input_template, dict):
-            raise ValueError(f"steps[{idx}].input 必须是对象")
-        input_template = deepcopy(input_template)
-
-        step_override = step_inputs.get(step_id, {})
-        if isinstance(step_override, dict) and step_override:
-            input_template = _deep_merge_dict(input_template, step_override)
-
-        candidate_mode = str(step.get("input_mode", workflow_default_mode) or workflow_default_mode).strip().lower()
-        if candidate_mode not in {"auto", "project", "inline"}:
-            candidate_mode = workflow_default_mode
-
-        resolved_method = "POST"
-        resolved_endpoint = ""
-        if node_type == "action":
-            if not capability_id:
-                raise ValueError(f"steps[{idx}].capability_id 不能为空")
-            routes = route_map.get(capability_id)
-            if not isinstance(routes, dict) or not routes:
-                raise ValueError(f"steps[{idx}] 不支持 capability_id={capability_id}")
-            resolved = _resolve_agent_primary_call(capability_id=capability_id, routes=routes, action=action)
-            resolved_method = str(resolved.get("method", "POST") or "POST").strip().upper()
-            resolved_endpoint = str(resolved.get("endpoint", "") or "").strip()
-
-            if _capability_supports_input_mode(capability_id):
-                if "input_mode" not in input_template:
-                    input_template["input_mode"] = candidate_mode
-                input_template = _apply_agent_capability_input_defaults(capability_id, input_template)
-
-            if dry_run and resolved_method != "GET" and "dry_run" not in input_template:
-                input_template["dry_run"] = True
-        else:
-            if capability_id:
-                # condition 节点允许 capability_id 留空；若传入则仅作为注释信息保留
-                capability_id = str(capability_id).strip().lower()
-
-        planned_steps.append(
-            {
-                "index": idx,
-                "step_id": step_id,
-                "node_type": node_type,
-                "name": str(step.get("name", "") or "").strip(),
-                "description": str(step.get("description", "") or "").strip(),
-                "capability_id": capability_id,
-                "action": action,
-                "method": resolved_method,
-                "endpoint": resolved_endpoint,
-                "input_template": input_template,
-                "condition": deepcopy(step.get("condition", "")),
-                "run_if": deepcopy(step.get("run_if", "")),
-                "continue_on_error": _coerce_bool(step.get("continue_on_error", False), default=False),
-                "enabled": _coerce_bool(step.get("enabled", True), default=True),
-                "save_as": _normalize_agent_template_id(step.get("save_as", "")),
-                "next_step_id": _normalize_agent_template_id(step.get("next_step_id", "")),
-                "next_on_success": _normalize_agent_template_id(step.get("next_on_success", "")),
-                "next_on_error": _normalize_agent_template_id(step.get("next_on_error", "")),
-                "next_on_skip": _normalize_agent_template_id(step.get("next_on_skip", "")),
-            }
-        )
-
-    step_ids = {str(item.get("step_id", "") or "") for item in planned_steps}
-    for item in planned_steps:
-        sid = str(item.get("step_id", "") or "")
-        for route_key in ("next_step_id", "next_on_success", "next_on_error", "next_on_skip"):
-            target = str(item.get(route_key, "") or "").strip()
-            if target and target not in step_ids:
-                raise ValueError(f"step={sid} 的 {route_key} 指向不存在的 step_id: {target}")
-
-    start_step_id = _normalize_agent_template_id(payload.get("start_step_id", workflow.get("start_step_id", "")))
-    graph = _build_custom_workflow_graph(
-        steps=planned_steps,
-        requested_start_step_id=start_step_id,
-    )
-
-    return {
-        "workflow_id": str(workflow.get("workflow_id", "") or ""),
-        "name": str(workflow.get("name", "") or ""),
-        "description": str(workflow.get("description", "") or ""),
-        "input_mode": workflow_default_mode,
-        "input": deepcopy(workflow_input),
-        "start_step_id": start_step_id,
-        "graph": graph,
-        "dry_run": bool(dry_run),
-        "steps": planned_steps,
-        "total_steps": len(planned_steps),
-    }
-
-
-def _execute_custom_workflow_plan(
-    *,
-    plan: Dict[str, Any],
-    request_context: Dict[str, str],
-    job_id: str,
-) -> Dict[str, Any]:
-    started_at_iso = datetime.now().isoformat(timespec="seconds")
-    started = time.monotonic()
-    steps = plan.get("steps", []) if isinstance(plan.get("steps"), list) else []
-    total = len(steps)
-
-    step_map: Dict[str, Dict[str, Any]] = {}
-    ordered_step_ids: List[str] = []
-    default_next_map: Dict[str, str] = {}
-    for idx, step in enumerate(steps):
-        sid = str(step.get("step_id", "") or "").strip()
-        if not sid:
-            continue
-        step_map[sid] = step
-        ordered_step_ids.append(sid)
-        default_next_map[sid] = (
-            str(steps[idx + 1].get("step_id", "") or "").strip()
-            if idx + 1 < len(steps)
-            else ""
-        )
-
-    history_steps: List[Dict[str, Any]] = []
-    warnings: List[str] = []
-    artifact_rows: List[Dict[str, str]] = []
-    artifact_seen = set()
-    execution_path: List[str] = []
-    reached_set = set()
-
-    state = "done"
-    success_count = 0
-    failed_count = 0
-    skipped_count = 0
-
-    template_context: Dict[str, Any] = {
-        "workflow": {"input": deepcopy(plan.get("input", {})) if isinstance(plan.get("input"), dict) else {}},
-        "input": deepcopy(plan.get("input", {})) if isinstance(plan.get("input"), dict) else {},
-        "steps": {},
-        "vars": {},
-        "last": {},
-        "request_context": deepcopy(request_context),
-    }
-
-    start_step_id = _normalize_agent_template_id(plan.get("start_step_id", ""))
-    if not start_step_id:
-        start_step_id = ordered_step_ids[0] if ordered_step_ids else ""
-    if start_step_id and start_step_id not in step_map:
-        warnings.append(f"start_step_id 不存在，已回退首节点: {start_step_id}")
-        start_step_id = ordered_step_ids[0] if ordered_step_ids else ""
-
-    max_hops = max(total * 4, 20)
-    hops = 0
-    current_step_id = start_step_id
-    while current_step_id:
-        hops += 1
-        if hops > max_hops:
-            warnings.append(f"workflow 路径超过最大跳数 {max_hops}，已提前停止（可能存在环路）")
-            break
-        if current_step_id in reached_set:
-            warnings.append(f"检测到环路或重复节点: {current_step_id}，已停止")
-            break
-        step = step_map.get(current_step_id)
-        if not isinstance(step, dict):
-            warnings.append(f"节点不存在: {current_step_id}，执行提前终止")
-            break
-        reached_set.add(current_step_id)
-        execution_path.append(current_step_id)
-
-        idx = int(step.get("index", len(history_steps) + 1) or (len(history_steps) + 1))
-        step_id = str(step.get("step_id", current_step_id) or current_step_id)
-        node_type = str(step.get("node_type", "action") or "action").strip().lower()
-        continue_on_error = _coerce_bool(step.get("continue_on_error", False), default=False)
-
-        if _jobs.get(job_id, {}).get("cancel_requested"):
-            raise JobCancelledError("任务已取消")
-
-        progress = min(10 + int((len(execution_path) - 1) * 80 / max(total, 1)), 89)
-        _jobs[job_id]["progress"] = progress
-        _jobs[job_id]["log"].append(
-            f"[Workflow] step_id={step_id} type={node_type} {step.get('method')} {step.get('endpoint')}"
-        )
-
-        base_item: Dict[str, Any] = {
-            "index": idx,
-            "step_id": step_id,
-            "node_type": node_type,
-            "capability_id": str(step.get("capability_id", "") or ""),
-            "action": str(step.get("action", "auto") or "auto"),
-            "method": str(step.get("method", "POST") or "POST"),
-            "endpoint": str(step.get("endpoint", "") or ""),
-            "continue_on_error": continue_on_error,
-            "enabled": _coerce_bool(step.get("enabled", True), default=True),
-            "next_step_id": str(step.get("next_step_id", "") or ""),
-            "next_on_success": str(step.get("next_on_success", "") or ""),
-            "next_on_error": str(step.get("next_on_error", "") or ""),
-            "next_on_skip": str(step.get("next_on_skip", "") or ""),
-        }
-
-        next_step_id = ""
-        request_payload: Dict[str, Any] = {}
-        status_code = 0
-        response_data: Dict[str, Any] = {}
-        step_status = "done"
-        step_error = ""
-        step_duration = 0.0
-
-        if not _coerce_bool(step.get("enabled", True), default=True):
-            step_status = "skipped"
-            step_error = "步骤 disabled=true"
-            skipped_count += 1
-            next_step_id = _workflow_pick_next_step_id(
-                step=step,
-                current_step_id=step_id,
-                default_next_map=default_next_map,
-                status="skipped",
-            )
-            response_data = {"ok": True, "skipped": True, "reason": step_error}
-        elif node_type == "condition":
-            cond_raw = step.get("condition", True)
-            resolved_cond = _resolve_workflow_templates(
-                deepcopy(cond_raw),
-                context=template_context,
-                warnings=warnings,
-            )
-            passed = _workflow_truthy(resolved_cond)
-            step_status = "done"
-            status_code = 200
-            response_data = {"ok": True, "passed": passed, "condition": resolved_cond}
-            step_duration = 0.0001
-            success_count += 1
-            if passed:
-                next_step_id = (
-                    str(step.get("next_on_success", "") or "").strip()
-                    or str(step.get("next_step_id", "") or "").strip()
-                    or default_next_map.get(step_id, "")
-                )
-            else:
-                next_step_id = (
-                    str(step.get("next_on_error", "") or "").strip()
-                    or str(step.get("next_on_skip", "") or "").strip()
-                    or str(step.get("next_step_id", "") or "").strip()
-                    or default_next_map.get(step_id, "")
-                )
-        else:
-            run_if_raw = step.get("run_if", "")
-            run_if_enabled = not (
-                run_if_raw is None
-                or (isinstance(run_if_raw, str) and not str(run_if_raw).strip())
-            )
-            if run_if_enabled:
-                run_if_resolved = _resolve_workflow_templates(
-                    deepcopy(run_if_raw),
-                    context=template_context,
-                    warnings=warnings,
-                )
-                if not _workflow_truthy(run_if_resolved):
-                    step_status = "skipped"
-                    step_error = "run_if 条件不满足"
-                    skipped_count += 1
-                    response_data = {"ok": True, "skipped": True, "run_if": run_if_resolved}
-                    next_step_id = _workflow_pick_next_step_id(
-                        step=step,
-                        current_step_id=step_id,
-                        default_next_map=default_next_map,
-                        status="skipped",
-                    )
-                else:
-                    request_payload = {}
-                    input_template = step.get("input_template", {})
-                    resolved_input = _resolve_workflow_templates(
-                        input_template if isinstance(input_template, dict) else {},
-                        context=template_context,
-                        warnings=warnings,
-                    )
-                    if isinstance(resolved_input, dict):
-                        request_payload = resolved_input
-                    step_begin = time.monotonic()
-                    ret = _invoke_agent_primary_call(
-                        method=str(step.get("method", "POST") or "POST"),
-                        endpoint=str(step.get("endpoint", "") or ""),
-                        payload=request_payload,
-                        request_context=request_context,
-                    )
-                    step_duration = round(max(time.monotonic() - step_begin, 0.0), 4)
-                    status_code = int(ret.get("status_code", 0) or 0)
-                    response_data = ret.get("data") if isinstance(ret.get("data"), dict) else {}
-                    ok = status_code < 400 and bool(response_data.get("ok", False))
-                    if ok:
-                        step_status = "done"
-                        success_count += 1
-                        next_step_id = _workflow_pick_next_step_id(
-                            step=step,
-                            current_step_id=step_id,
-                            default_next_map=default_next_map,
-                            status="done",
-                        )
-                    else:
-                        step_status = "error"
-                        step_error = str(response_data.get("error", "") or f"step 调用失败（status={status_code}）")
-                        failed_count += 1
-                        _jobs[job_id]["log"].append(f"[Workflow:{step_id}] 失败: {step_error}")
-                        if continue_on_error:
-                            next_step_id = _workflow_pick_next_step_id(
-                                step=step,
-                                current_step_id=step_id,
-                                default_next_map=default_next_map,
-                                status="error",
-                            )
-                        else:
-                            next_step_id = (
-                                str(step.get("next_on_error", "") or "").strip()
-                                or str(step.get("next_step_id", "") or "").strip()
-                            )
-            else:
-                request_payload = {}
-                input_template = step.get("input_template", {})
-                resolved_input = _resolve_workflow_templates(
-                    input_template if isinstance(input_template, dict) else {},
-                    context=template_context,
-                    warnings=warnings,
-                )
-                if isinstance(resolved_input, dict):
-                    request_payload = resolved_input
-                step_begin = time.monotonic()
-                ret = _invoke_agent_primary_call(
-                    method=str(step.get("method", "POST") or "POST"),
-                    endpoint=str(step.get("endpoint", "") or ""),
-                    payload=request_payload,
-                    request_context=request_context,
-                )
-                step_duration = round(max(time.monotonic() - step_begin, 0.0), 4)
-                status_code = int(ret.get("status_code", 0) or 0)
-                response_data = ret.get("data") if isinstance(ret.get("data"), dict) else {}
-                ok = status_code < 400 and bool(response_data.get("ok", False))
-                if ok:
-                    step_status = "done"
-                    success_count += 1
-                    next_step_id = _workflow_pick_next_step_id(
-                        step=step,
-                        current_step_id=step_id,
-                        default_next_map=default_next_map,
-                        status="done",
-                    )
-                else:
-                    step_status = "error"
-                    step_error = str(response_data.get("error", "") or f"step 调用失败（status={status_code}）")
-                    failed_count += 1
-                    _jobs[job_id]["log"].append(f"[Workflow:{step_id}] 失败: {step_error}")
-                    if continue_on_error:
-                        next_step_id = _workflow_pick_next_step_id(
-                            step=step,
-                            current_step_id=step_id,
-                            default_next_map=default_next_map,
-                            status="error",
-                        )
-                    else:
-                        next_step_id = (
-                            str(step.get("next_on_error", "") or "").strip()
-                            or str(step.get("next_step_id", "") or "").strip()
-                        )
-
-        step_item = dict(base_item)
-        step_item["status"] = step_status
-        step_item["status_code"] = status_code
-        step_item["duration_seconds"] = step_duration
-        step_item["request_payload"] = deepcopy(request_payload)
-        step_item["response"] = deepcopy(response_data)
-        step_item["next_selected"] = str(next_step_id or "")
-        if step_error:
-            step_item["error"] = step_error
-        history_steps.append(step_item)
-
-        context_entry = {
-            "status": step_status,
-            "response": deepcopy(response_data),
-            "status_code": status_code,
-            "error": step_error,
-            "request_payload": deepcopy(request_payload),
-            "next_selected": str(next_step_id or ""),
-        }
-        template_context["steps"][step_id] = context_entry
-        template_context["last"] = context_entry
-        save_as = _normalize_agent_template_id(step.get("save_as", ""))
-        if save_as:
-            template_context.setdefault("vars", {})[save_as] = deepcopy(response_data)
-
-        if isinstance(response_data, dict):
-            for artifact in _extract_artifacts_from_payload(response_data):
-                marker = (artifact.get("type", ""), artifact.get("value", ""))
-                if marker in artifact_seen:
-                    continue
-                artifact_seen.add(marker)
-                artifact_rows.append(artifact)
-
-        if next_step_id:
-            if next_step_id not in step_map:
-                warnings.append(f"step={step_id} 跳转到不存在节点: {next_step_id}，执行终止")
-                break
-            current_step_id = next_step_id
-            continue
-        current_step_id = ""
-
-    for sid in ordered_step_ids:
-        if sid in reached_set:
-            continue
-        step = step_map.get(sid, {})
-        item = {
-            "index": int(step.get("index", len(history_steps) + 1) or (len(history_steps) + 1)),
-            "step_id": sid,
-            "node_type": str(step.get("node_type", "action") or "action"),
-            "capability_id": str(step.get("capability_id", "") or ""),
-            "action": str(step.get("action", "auto") or "auto"),
-            "method": str(step.get("method", "POST") or "POST"),
-            "endpoint": str(step.get("endpoint", "") or ""),
-            "status": "unreached",
-            "error": "未进入执行路径",
-            "continue_on_error": _coerce_bool(step.get("continue_on_error", False), default=False),
-            "enabled": _coerce_bool(step.get("enabled", True), default=True),
-            "next_step_id": str(step.get("next_step_id", "") or ""),
-            "next_on_success": str(step.get("next_on_success", "") or ""),
-            "next_on_error": str(step.get("next_on_error", "") or ""),
-            "next_on_skip": str(step.get("next_on_skip", "") or ""),
-            "status_code": 0,
-            "duration_seconds": 0.0,
-            "request_payload": {},
-            "response": {},
-            "next_selected": "",
-        }
-        history_steps.append(item)
-        skipped_count += 1
-
-    finished_at_iso = datetime.now().isoformat(timespec="seconds")
-    duration_seconds = round(max(time.monotonic() - started, 0.0), 4)
-    if failed_count == 0:
-        state = "done"
-    elif success_count > 0:
-        state = "partial"
-    else:
-        state = "failed"
-
-    return {
-        "run_id": str(uuid.uuid4())[:8],
-        "workflow_id": str(plan.get("workflow_id", "") or ""),
-        "workflow_name": str(plan.get("name", "") or ""),
-        "status": state,
-        "dry_run": bool(plan.get("dry_run", False)),
-        "started_at": started_at_iso,
-        "finished_at": finished_at_iso,
-        "duration_seconds": duration_seconds,
-        "summary": {
-            "total_steps": total,
-            "traversed_steps": len(execution_path),
-            "unreached_steps": max(total - len(execution_path), 0),
-            "success_steps": success_count,
-            "failed_steps": failed_count,
-            "skipped_steps": skipped_count,
-            "overall_ok": failed_count == 0,
-        },
-        "execution_path": execution_path,
-        "steps": history_steps,
-        "warnings": list(dict.fromkeys(str(x) for x in warnings if str(x).strip())),
-        "artifacts": artifact_rows,
-    }
-
-
-def _start_custom_workflow_run(
-    *,
-    workflow: Dict[str, Any],
-    payload: Dict[str, Any],
-    request_context: Dict[str, str],
-    source: str,
-) -> Dict[str, Any]:
-    dry_run = _coerce_bool(payload.get("dry_run", False), default=False)
-    plan = _build_custom_workflow_plan(workflow=workflow, payload=payload, dry_run=dry_run)
-    rerun_context_raw = payload.get("rerun_context", {})
-    rerun_context = deepcopy(rerun_context_raw) if isinstance(rerun_context_raw, dict) else {}
-    if rerun_context:
-        rerun_context.setdefault("mode", "custom")
-        rerun_context.setdefault("source", source)
-
-    job_id = str(uuid.uuid4())[:8]
-    run_id = str(uuid.uuid4())[:8]
-    source_text = str(source or "manual").strip() or "manual"
-
-    def _do_run():
-        _jobs[job_id]["progress"] = 5
-        _jobs[job_id]["log"].append(
-            f"[Workflow] run_id={run_id} workflow={plan.get('workflow_id')} source={source_text}"
-        )
-        result = _execute_custom_workflow_plan(
-            plan=plan,
-            request_context=request_context,
-            job_id=job_id,
-        )
-        result["run_id"] = run_id
-        record = {
-            "run_id": run_id,
-            "workflow_id": str(plan.get("workflow_id", "") or ""),
-            "workflow_name": str(plan.get("name", "") or ""),
-            "status": str(result.get("status", "done") or "done"),
-            "dry_run": bool(plan.get("dry_run", False)),
-            "started_at": str(result.get("started_at", "") or ""),
-            "finished_at": str(result.get("finished_at", "") or ""),
-            "duration_seconds": float(result.get("duration_seconds", 0.0) or 0.0),
-            "summary": deepcopy(result.get("summary", {})) if isinstance(result.get("summary"), dict) else {},
-            "execution_path": deepcopy(result.get("execution_path", [])) if isinstance(result.get("execution_path"), list) else [],
-            "steps": deepcopy(result.get("steps", [])) if isinstance(result.get("steps"), list) else [],
-            "warnings": deepcopy(result.get("warnings", [])) if isinstance(result.get("warnings"), list) else [],
-            "artifacts": deepcopy(result.get("artifacts", [])) if isinstance(result.get("artifacts"), list) else [],
-            "request_context": deepcopy(request_context),
-            "source": source_text,
-            "workflow": deepcopy(workflow),
-            "plan": deepcopy(plan),
-        }
-        if rerun_context:
-            record["rerun_context"] = deepcopy(rerun_context)
-        _append_custom_workflow_run(record)
-        _jobs[job_id]["progress"] = 95
-        return {"ok": True, "run": record}
-
-    _run_in_bg(
-        job_id,
-        _do_run,
-        kind="custom_workflow",
-        job_meta={
-            "workflow_id": str(plan.get("workflow_id", "") or ""),
-            "source": source_text,
-            "dry_run": bool(plan.get("dry_run", False)),
-            "request_context": deepcopy(request_context),
-            "replay": {
-                "method": "POST",
-                "endpoint": "/api/workflows/run",
-                "payload": deepcopy(payload),
-                "request_context": deepcopy(request_context),
-            },
-        },
-    )
-    return {
-        "ok": True,
-        "job_id": job_id,
-        "run_id": run_id,
-        "workflow_id": str(plan.get("workflow_id", "") or ""),
-        "workflow_name": str(plan.get("name", "") or ""),
-        "dry_run": bool(plan.get("dry_run", False)),
-        "total_steps": int(plan.get("total_steps", 0) or 0),
-        "status_endpoint": f"/api/job/{job_id}",
-        "rerun_context": deepcopy(rerun_context) if rerun_context else {},
-    }
-
-
-def _normalize_agent_replay_context(raw: Any) -> Dict[str, str]:
-    src = raw if isinstance(raw, dict) else {}
-    actor_type = str(src.get("actor_type", "agent") or "agent").strip().lower()
-    if actor_type not in {"human", "agent"}:
-        actor_type = "agent"
-    actor_id = str(src.get("actor_id", "") or "").strip()[:128]
-    run_mode = str(src.get("run_mode", "headless") or "headless").strip().lower()
-    if run_mode not in {"interactive", "headless"}:
-        run_mode = "headless" if actor_type == "agent" else "interactive"
-    idempotency_key = str(src.get("idempotency_key", "") or "").strip()[:128]
-    trace_id = str(src.get("trace_id", "") or "").strip()[:128]
-    return {
-        "actor_type": actor_type,
-        "actor_id": actor_id,
-        "run_mode": run_mode,
-        "idempotency_key": idempotency_key,
-        "trace_id": trace_id,
-    }
-
-
-def _execute_agent_skill(
-    *,
-    skill_id: str,
-    input_payload: Dict[str, Any],
-    retry_policy: Dict[str, Any],
-    timeout_seconds: float,
-    request_context: Dict[str, str],
-    logger=None,
-) -> Dict[str, Any]:
-    skill_spec = _AGENT_SKILL_REGISTRY.get(skill_id)
-    if not isinstance(skill_spec, dict):
-        raise ValueError(f"不支持的 skill_id: {skill_id}")
-    method = str(skill_spec.get("method", "POST") or "POST").strip().upper()
-    endpoint = str(skill_spec.get("endpoint", "") or "").strip()
-    if not endpoint:
-        raise RuntimeError(f"skill 配置缺少 endpoint: {skill_id}")
-    capability_id = str(skill_spec.get("capability_id", "") or "")
-    effective_input = _apply_agent_capability_input_defaults(
-        capability_id,
-        input_payload if isinstance(input_payload, dict) else {},
-        default_input=skill_spec.get("default_input", {}),
-    )
-
-    max_attempts = int(retry_policy.get("max_retries", 0) or 0) + 1
-    retry_http_codes = set(retry_policy.get("retry_on_http", []))
-    backoff_s = float(int(retry_policy.get("backoff_ms", 0) or 0)) / 1000.0
-    timeout_s = _normalize_skill_timeout_seconds(timeout_seconds, default=120.0)
-    begin = time.monotonic()
-    final_status = 0
-    final_data: Dict[str, Any] = {}
-    attempts = 0
-
-    for attempt in range(1, max_attempts + 1):
-        attempts = attempt
-        if callable(logger):
-            logger(f"尝试 {attempt}/{max_attempts} -> {method} {endpoint}")
-        ret = _invoke_agent_primary_call(
-            method=method,
-            endpoint=endpoint,
-            payload=effective_input,
-            request_context=request_context,
-        )
-        final_status = int(ret.get("status_code", 0) or 0)
-        final_data = ret.get("data") if isinstance(ret.get("data"), dict) else {}
-        if final_status < 400 and bool(final_data.get("ok", False)):
-            duration_seconds = round(max(time.monotonic() - begin, 0.0), 4)
-            usage_tokens = _extract_usage_tokens_from_response(final_data)
-            pricing_hint = _extract_pricing_hint_from_response(final_data)
-            estimated_cost = _estimate_step_cost_metrics(
-                prompt_tokens=int(usage_tokens.get("prompt_tokens", 0) or 0),
-                completion_tokens=int(usage_tokens.get("completion_tokens", 0) or 0),
-                duration_seconds=duration_seconds,
-                provider=str(pricing_hint.get("provider", "") or ""),
-                model=str(pricing_hint.get("model", "") or ""),
-                cost_model=_read_agent_cost_model_config(),
-            )
-            return {
-                "skill_id": skill_id,
-                "skill_name": str(skill_spec.get("name", "") or ""),
-                "capability_id": str(skill_spec.get("capability_id", "") or ""),
-                "primary_call": {
-                    "method": method,
-                    "endpoint": endpoint,
-                    "payload": deepcopy(effective_input),
-                },
-                "attempts": attempts,
-                "status_code": final_status,
-                "response": final_data,
-                "duration_seconds": duration_seconds,
-                "usage_tokens": usage_tokens,
-                "pricing_hint": pricing_hint,
-                "estimated_cost": estimated_cost,
-            }
-
-        elapsed = time.monotonic() - begin
-        if elapsed >= timeout_s:
-            raise RuntimeError(f"skill 调用超时（{timeout_s:.1f}s）")
-        can_retry = attempt < max_attempts and final_status in retry_http_codes
-        if not can_retry:
-            break
-        if backoff_s > 0:
-            if callable(logger):
-                logger(f"重试等待 {backoff_s:.2f}s")
-            time.sleep(backoff_s)
-
-    err = str(final_data.get("error", "") or f"skill 调用失败（status={final_status}）")
-    raise RuntimeError(err)
-
-
-def _should_run_conditional_step(
-    condition: Dict[str, Any],
-    previous_results: Dict[str, Dict[str, Any]],
-) -> (bool, str):
-    cond = condition if isinstance(condition, dict) else {}
-    if_overall_ok = _coerce_bool(cond.get("if_overall_ok", False), default=False)
-    if if_overall_ok:
-        for item in previous_results.values():
-            if str(item.get("status", "")).lower() == "error":
-                return False, "if_overall_ok 未满足（前序存在 error）"
-
-    depends_on = cond.get("depends_on", [])
-    if not isinstance(depends_on, list) or not depends_on:
-        return True, ""
-    status_in_raw = cond.get("status_in", ["done"])
-    status_in = {str(x).lower().strip() for x in status_in_raw} if isinstance(status_in_raw, list) else {"done"}
-    if not status_in:
-        status_in = {"done"}
-    require_all = _coerce_bool(cond.get("require_all", True), default=True)
-
-    matched = []
-    missing = []
-    for dep in depends_on:
-        dep_id = _normalize_agent_template_id(str(dep or "").strip())
-        if not dep_id:
-            continue
-        dep_item = previous_results.get(dep_id)
-        if not isinstance(dep_item, dict):
-            missing.append(dep_id)
-            matched.append(False)
-            continue
-        dep_status = str(dep_item.get("status", "")).strip().lower()
-        matched.append(dep_status in status_in)
-    if missing:
-        return False, f"依赖未完成: {','.join(missing)}"
-
-    passed = all(matched) if require_all else any(matched)
-    if passed:
-        return True, ""
-    return False, "依赖状态不满足 condition"
+# ── Agent governance service (extracted to services/agent_governance_service.py L1-6) ──
+from modules.app_api.services.agent_governance_service import (  # noqa: E402
+    _agent_capability_route_map, _list_agent_skills, _normalize_skill_retry_policy,
+    _normalize_skill_timeout_seconds, _normalize_skill_budget_limit,
+    _normalize_governance_limit_item, _normalize_governance_string_list,
+    _normalize_agent_governance_policy, _read_agent_governance_policy,
+    _read_agent_governance_usage, _save_agent_governance_usage, _normalize_cost_rate_item,
+    _normalize_agent_cost_model_config, _read_agent_cost_model_config,
+    _extract_pricing_hint_from_response, _resolve_cost_rates,
+    _extract_usage_tokens_from_response, _estimate_step_cost_metrics,
+    _normalize_usage_bucket, _compute_usage_suggested_limits, _update_usage_bucket,
+    _record_governance_usage_for_skill_flow, _extract_dynamic_limits_from_usage,
+    _pick_actor_rule, _tighten_governance_limit,
+    _resolve_agent_governance_for_skill_flow, _apply_governance_to_skill_flow,
+)
+from modules.app_api.services import agent_governance_service as _governance_svc_early  # noqa: E402
+_governance_svc_early.init(
+    project_dir=_project_dir, agent_skill_registry=_AGENT_SKILL_REGISTRY,
+    agent_governance_default=_AGENT_GOVERNANCE_DEFAULT,
+    agent_governance_usage_default=_AGENT_GOVERNANCE_USAGE_DEFAULT,
+    agent_usage_recent_runs_max=_AGENT_USAGE_RECENT_RUNS_MAX,
+    agent_cost_model_default=_AGENT_COST_MODEL_DEFAULT,
+)
 
 def _parse_capability_idempotency_cache_key(cache_key: str) -> Dict[str, str]:
     text = str(cache_key or "")
@@ -5726,7 +1683,6 @@ def _parse_capability_idempotency_cache_key(cache_key: str) -> Dict[str, str]:
         "idempotency_key": "",
     }
 
-
 def _normalize_capability_idempotency_ttl(value, default: int = _CAPABILITY_IDEMPOTENCY_TTL_SECONDS) -> int:
     try:
         ttl = int(value)
@@ -5736,10 +1692,8 @@ def _normalize_capability_idempotency_ttl(value, default: int = _CAPABILITY_IDEM
         ttl = 0
     return ttl
 
-
 def _normalize_capability_idempotency_filter_text(value: Any) -> str:
     return str(value or "").strip()
-
 
 def _capability_idempotency_match_text(candidate: Any, pattern: str, *, exact: bool = False) -> bool:
     query = _normalize_capability_idempotency_filter_text(pattern).lower()
@@ -5749,7 +1703,6 @@ def _capability_idempotency_match_text(candidate: Any, pattern: str, *, exact: b
     if exact:
         return text == query
     return query in text
-
 
 def _collect_capability_idempotency_records(
     *,
@@ -5865,90 +1818,77 @@ def _collect_capability_idempotency_records(
         },
     }
 
-
-def _read_content_publish_sessions() -> Dict[str, Dict[str, Any]]:
-    raw = _read_project_json("content_publish_sessions.json", fallback={})
-    if not isinstance(raw, dict):
-        return {}
-    out: Dict[str, Dict[str, Any]] = {}
-    for key, value in raw.items():
-        sid = str(key or "").strip()
-        if sid and isinstance(value, dict):
-            out[sid] = value
-    return out
-
-
-def _save_content_publish_sessions(sessions: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
-    p = _project_data_path("content_publish_sessions.json")
-    if p is None:
-        return sessions
-    p.parent.mkdir(parents=True, exist_ok=True)
-    payload = sessions if isinstance(sessions, dict) else {}
-    p.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    return payload
-
-
-def _read_content_publish_history() -> List[Dict[str, Any]]:
-    raw = _read_project_json("content_publish_history.json", fallback=[])
-    if not isinstance(raw, list):
-        return []
-    return [x for x in raw if isinstance(x, dict)]
-
-
-def _save_content_publish_history(history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    p = _project_data_path("content_publish_history.json")
-    if p is None:
-        return history
-    p.parent.mkdir(parents=True, exist_ok=True)
-    items = [x for x in history if isinstance(x, dict)]
-    p.write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
-    return items
-
-
-def _resolve_content_publish_content(
-    payload: Dict[str, Any],
-    *,
-    input_mode: str,
-) -> Dict[str, Any]:
-    content = payload.get("content") if isinstance(payload.get("content"), dict) else {}
-    out = dict(content)
-    if input_mode == "project":
-        if not out.get("title") or not out.get("description"):
-            publish_prep = _read_project_json("publish_prep_last.json", fallback={})
-            result = publish_prep.get("platform_results", []) if isinstance(publish_prep, dict) else []
-            first = result[0] if isinstance(result, list) and result else {}
-            generated = first.get("content", {}) if isinstance(first, dict) else {}
-            if not out.get("title"):
-                out["title"] = str(generated.get("title") or "").strip()
-            if not out.get("description"):
-                out["description"] = str(generated.get("body") or "").strip()
-            if not out.get("keywords") and isinstance(generated.get("keywords"), list):
-                out["keywords"] = generated.get("keywords")
-        if not out.get("article_markdown") or not out.get("article_html"):
-            article = _read_project_json("article_expand_last.json", fallback={})
-            if isinstance(article, dict):
-                if not out.get("article_markdown"):
-                    out["article_markdown"] = str(article.get("markdown") or "").strip()
-                if not out.get("article_html"):
-                    md = str(article.get("markdown") or "").strip()
-                    title = str(article.get("title_candidates", ["Untitled"])[0] if isinstance(article.get("title_candidates"), list) and article.get("title_candidates") else "Untitled")
-                    if md:
-                        out["article_html"] = f"<article><h1>{title}</h1><pre>{md}</pre></article>"
-    return out
-
-
-def _resolve_content_publish_connectors(payload: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
-    connectors = payload.get("connectors", {})
-    if isinstance(connectors, dict) and connectors:
-        return _normalize_publish_connectors(connectors)
-    saved = _load_publish_settings()
-    return saved.get("connectors", {}) if isinstance(saved.get("connectors"), dict) else {}
-
+# -- publish orchestrator: Group B (content publish) imported from services/publish_orchestrator.py --
+from modules.app_api.services.publish_orchestrator import (  # noqa: E402
+    _read_content_publish_sessions,
+    _save_content_publish_sessions,
+    _read_content_publish_history,
+    _save_content_publish_history,
+    _resolve_content_publish_content,
+    _resolve_content_publish_connectors,
+    _inject_youtube_oauth_token,
+    _refresh_youtube_token,
+)
 
 # ── 工厂函数（供 app.py 调用）─────────────────────────────────────────
 
 def create_app(project_dir: Optional[str] = None):
     """创建并配置 Flask app，可选预加载项目。"""
+    # Inject shared state into extracted workflow_runner module
+    from modules.app_api.services import workflow_runner as _workflow_runner_mod
+    _workflow_runner_mod.init(
+        project_dir=_project_dir,
+        custom_workflow_lock=_custom_workflow_lock,
+        custom_workflow_store_mem=_custom_workflow_store_mem,
+        custom_workflow_runs_mem=_custom_workflow_runs_mem,
+    )
+    # Inject shared state into extracted publish_orchestrator module
+    from modules.app_api.services import publish_orchestrator as _publish_orch_mod
+    _publish_orch_mod.init(
+        project_dir=_project_dir,
+        secret_store=_secret_store,
+        jobs=_jobs,
+    )
+    # Inject shared state into extracted settings_service module
+    from modules.app_api.services import settings_service as _settings_mod
+    _settings_mod.init(
+        library=_library,
+        secret_store=_secret_store,
+        project_dir=_project_dir,
+    )
+    # Inject shared state into extracted agent_template_service module
+    from modules.app_api.services import agent_template_service as _template_mod
+    _template_mod.init(
+        project_dir=_project_dir,
+        agent_system_templates=_AGENT_SYSTEM_TEMPLATES,
+        agent_template_scope_order=_AGENT_TEMPLATE_SCOPE_ORDER,
+    )
+    # Inject shared state into extracted agent_governance_service module
+    from modules.app_api.services import agent_governance_service as _governance_mod
+    _governance_mod.init(
+        project_dir=_project_dir, agent_skill_registry=_AGENT_SKILL_REGISTRY,
+        agent_governance_default=_AGENT_GOVERNANCE_DEFAULT,
+        agent_governance_usage_default=_AGENT_GOVERNANCE_USAGE_DEFAULT,
+        agent_usage_recent_runs_max=_AGENT_USAGE_RECENT_RUNS_MAX,
+        agent_cost_model_default=_AGENT_COST_MODEL_DEFAULT,
+    )
+    # Inject shared state into extracted job_analytics_service module
+    from modules.app_api.services import job_analytics_service as _analytics_mod
+    _analytics_mod.init(
+        project_dir=_project_dir, eta_history_lock=_eta_history_lock,
+        eta_history_cache=_eta_history_cache, ensure_job_store=lambda: _ensure_job_store(),
+        jobs=_jobs, agent_history_lock=_agent_history_lock,
+    )
+    # Inject shared state into extracted capability_helpers module
+    from modules.app_api.services import capability_helpers as _cap_helpers_mod
+    _cap_helpers_mod.init(project_dir=_project_dir, ws=_ws)
+    # Inject shared state into extracted middleware/security module
+    from modules.app_api.middleware import security as _security_mod2
+    _security_mod2.init(
+        require_local_api_token=_REQUIRE_LOCAL_API_TOKEN,
+        require_csrf_protection=_REQUIRE_CSRF_PROTECTION,
+        local_api_token=_LOCAL_API_TOKEN, local_csrf_token=_LOCAL_CSRF_TOKEN,
+    )
     # Ensure logging & perf_log are initialised (no-op if launcher already did it)
     try:
         from modules.app_api.services.logging_service import init_logging
@@ -5989,7 +1929,6 @@ def create_app(project_dir: Optional[str] = None):
         except Exception:
             pass
     return app
-
 
 def set_window(window):
     """由 app.py 在窗口创建后注入 pywebview window 引用。"""

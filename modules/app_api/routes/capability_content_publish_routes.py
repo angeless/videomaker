@@ -35,7 +35,8 @@ def create_content_publish_capability_blueprint(
     def api_content_publish_platforms():
         from modules.capabilities.content_publish import list_publish_platforms
 
-        return jsonify({"ok": True, **list_publish_platforms()})
+        connectors = resolve_content_publish_connectors({})
+        return jsonify({"ok": True, **list_publish_platforms(connectors=connectors)})
 
     @bp.route("/api/capabilities/content_publish/session/bootstrap", methods=["POST"])
     def api_content_publish_session_bootstrap():
@@ -285,6 +286,21 @@ def create_content_publish_capability_blueprint(
                 "rerun_from": run_id,
             }
         )
+
+    @bp.route("/api/capabilities/content_publish/history", methods=["GET"])
+    def api_content_publish_history():
+        if project_dir_getter() is None:
+            return jsonify({"ok": True, "runs": []})
+        history = read_content_publish_history()
+        pf = parse_str_param(request.args.get("platform"), default="")
+        sf = parse_str_param(request.args.get("status"), default="")
+        lim = parse_int_param(request.args.get("limit"), default=50, min_val=1, max_val=300)
+        if pf:
+            history = [r for r in history if pf in str(r.get("platforms", r.get("platform_ids", [])))]
+        if sf:
+            history = [r for r in history if r.get("result", {}).get("status") == sf or r.get("status") == sf]
+        history = list(reversed(history))[:lim]
+        return jsonify({"ok": True, "runs": history, "total": len(history)})
 
     return bp
 

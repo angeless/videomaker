@@ -1,6 +1,12 @@
 <template>
   <div class="step-panel">
     <h3>{{ labels.workflow.steps[2] }}</h3>
+
+    <div v-if="stepDone" class="step-done-banner">
+      <span>✅ 脚本已确认<span v-if="workflow.scriptClips.length > 0"> — {{ workflow.scriptClips.length }} 个分镜</span></span>
+      <button class="btn btn-sm btn-next" @click="router.push('/create/workflow/4')">继续下一步 →</button>
+    </div>
+
     <p class="text-muted" style="margin-bottom: 16px">
       AI 根据选题和素材生成视频脚本，包含分镜和字幕。
     </p>
@@ -85,10 +91,20 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAppStore } from '../../stores/app.js'
 import { useWorkflowStore } from '../../stores/workflow.js'
 import labels from '../../i18n/labels.js'
 
+const router = useRouter()
+const appStore = useAppStore()
 const workflow = useWorkflowStore()
+
+const stepDone = computed(() => {
+  const s = (appStore.steps || []).find(s => s.n === 3)
+  return s ? s.status === 'done' : false
+})
 </script>
 
 <style scoped>
@@ -99,4 +115,27 @@ const workflow = useWorkflowStore()
 .clip-card { display: flex; gap: 12px; align-items: flex-start; }
 .clip-num { font-size: 12px; font-weight: 600; color: var(--accent); min-width: 24px; }
 .clip-info { flex: 1; }
+.step-done-banner {
+  background: rgba(52, 211, 153, 0.1);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--success, #34d399);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.btn-next {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
 </style>

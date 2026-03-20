@@ -20,6 +20,7 @@ export const useProjectStore = defineStore('project', () => {
   // ── 初始化/打开项目 ──
   const showInit = ref(false)
   const initMode = ref('new')
+  const initProjectName = ref('')
   const initVideosDir = ref('')
   const initProjectDir = ref('')
   const initOpenDir = ref('')
@@ -30,18 +31,26 @@ export const useProjectStore = defineStore('project', () => {
   const recentProjects = ref([])
   const recentProjectsLoading = ref(false)
 
+  // ── 项目元数据（T-0604）──
+  const projectDisplayName = ref('')
+  const projectMeta = ref({})
+
   const hasProject = computed(() => !!projectDir.value)
 
   async function fetchStatus() {
     const data = await api.api('GET', '/api/status')
     if (data.ready) {
       applyState(data)
+      loadProjectMeta()
     } else if (_savedProjectDir && !projectDir.value) {
       // 后端未返回项目但本地有缓存 → 尝试重新打开
       const reopen = await api.api('POST', '/api/open_project', { project_dir: _savedProjectDir })
       if (!reopen.error) {
         const data2 = await api.api('GET', '/api/status')
-        if (data2.ready) applyState(data2)
+        if (data2.ready) {
+          applyState(data2)
+          loadProjectMeta()
+        }
       }
     }
   }
@@ -66,13 +75,12 @@ export const useProjectStore = defineStore('project', () => {
     recentProjects.value = data.projects || []
   }
 
-  async function createProject(videosDir_, projectDir_) {
+  async function createProject(videosDir_, projectDir_, projectName_) {
     initLoading.value = true
     initError.value = ''
-    const data = await api.api('POST', '/api/init', {
-      videos_dir: videosDir_,
-      project_dir: projectDir_,
-    })
+    const body = { videos_dir: videosDir_, project_dir: projectDir_ }
+    if (projectName_) body.project_name = projectName_
+    const data = await api.api('POST', '/api/init', body)
     initLoading.value = false
     if (data.error) {
       initError.value = data.error
@@ -94,6 +102,32 @@ export const useProjectStore = defineStore('project', () => {
     }
     await fetchStatus()
     showInit.value = false
+    return true
+  }
+
+  async function loadProjectMeta() {
+    if (!projectDir.value) return
+    const data = await api.api('GET', `/api/project/meta?project_dir=${encodeURIComponent(projectDir.value)}`)
+    if (data.ok && data.meta) {
+      projectMeta.value = data.meta
+      projectDisplayName.value = data.meta.display_name || ''
+    }
+  }
+
+  async function renameProject(newName) {
+    if (!projectDir.value) return false
+    const data = await api.api('POST', '/api/project/rename', {
+      project_dir: projectDir.value,
+      display_name: newName,
+    })
+    if (data.error) {
+      toast.show(data.error, 'danger')
+      return false
+    }
+    if (data.ok && data.meta) {
+      projectMeta.value = data.meta
+      projectDisplayName.value = data.meta.display_name || ''
+    }
     return true
   }
 
@@ -120,10 +154,11 @@ export const useProjectStore = defineStore('project', () => {
 
   return {
     projectDir, videosDir, currentStep, steps, config,
-    showInit, initMode, initVideosDir, initProjectDir, initOpenDir,
+    projectDisplayName, projectMeta,
+    showInit, initMode, initProjectName, initVideosDir, initProjectDir, initOpenDir,
     initLoading, initError, recentProjects, recentProjectsLoading,
     hasProject,
-    fetchStatus, applyState, loadRecentProjects,
+    fetchStatus, applyState, loadRecentProjects, loadProjectMeta, renameProject,
     createProject, openProject, pickFolder, pickFile,
   }
 })

@@ -1,5 +1,5 @@
 <template>
-  <div class="asset-card card">
+  <div class="asset-card card" @click="$emit('select', asset)" style="cursor: pointer">
     <!-- 缩略图 -->
     <div class="asset-thumb">
       <div v-if="asset.thumbnail_url" class="asset-thumb-img">
@@ -82,7 +82,7 @@ const props = defineProps({
   asset: { type: Object, required: true },
 })
 
-defineEmits(['show-evidence'])
+defineEmits(['show-evidence', 'select'])
 
 function qualityLabel(score) {
   const n = Number(score)
@@ -199,10 +199,10 @@ const displayLocation = computed(() => {
 
 function formatDuration(seconds) {
   const s = Number(seconds) || 0
-  if (s < 60) return `${Math.round(s)}s`
+  if (s < 60) return `${Math.round(s)}秒`
   const m = Math.floor(s / 60)
   const sec = Math.round(s % 60)
-  return `${m}:${sec.toString().padStart(2, '0')}`
+  return `${m}分${sec}秒`
 }
 </script>
 

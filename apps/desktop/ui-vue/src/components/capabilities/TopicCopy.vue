@@ -2,10 +2,10 @@
   <div>
     <h3>选题文案</h3>
     <div class="cap-section">
-      <div class="form-row"><label>选题 Slug</label><input v-model="form.slug" class="form-input" placeholder="从选题库选择或手动输入" /></div>
-      <div class="form-row"><label>目标时长(秒)</label><input v-model.number="form.target_duration_s" type="number" class="form-input" /></div>
+      <div class="form-row"><label>{{ L.panelHints.topicCopy.slugLabel }}</label><input v-model="form.slug" class="form-input" :placeholder="L.panelHints.topicCopy.slugPlaceholder" /></div>
+      <div class="form-row"><label>目标时长(秒)</label><input v-model.number="form.target_duration_s" type="number" class="form-input" :placeholder="L.panelHints.topicCopy.targetDurationPlaceholder" /></div>
       <button class="btn btn-primary btn-sm" @click="generate" :disabled="!canGenerate || loading">{{ loading ? '生成中…' : '生成文案草案' }}</button>
-      <div v-if="!form.slug.trim() && appStore.projectDir" class="form-hint">请先输入选题 Slug 或从左侧选题库选择</div>
+      <div v-if="!form.slug.trim() && appStore.projectDir" class="form-hint">请先输入选题标识符或从上方选题库选择</div>
     </div>
     <div v-if="draft" class="cap-section">
       <div class="cap-subtitle">生成结果</div>
@@ -44,8 +44,10 @@ import { useApiStore } from '../../stores/api.js'
 import { useCapabilitiesStore } from '../../stores/capabilities.js'
 import { useAppStore } from '../../stores/app.js'
 import { useWorkflowStore } from '../../stores/workflow.js'
+import labels from '../../i18n/labels.js'
 import { translateTag } from '../../composables/useSemanticTranslation.js'
 
+const L = labels
 const router = useRouter()
 const apiStore = useApiStore()
 const capStore = useCapabilitiesStore()

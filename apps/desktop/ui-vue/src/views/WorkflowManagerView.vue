@@ -1,13 +1,16 @@
 <template>
   <div class="titlebar">
     <span class="title">{{ labels.appTitle }}</span>
-    <span class="project-path">{{ projectDisplayName }}</span>
+    <ProjectTitle />
     <AppNav />
   </div>
 
   <div class="main">
     <div class="content" style="padding: 24px">
-      <h2 class="section-title">自定义工作流管理</h2>
+      <div class="section-header-row">
+        <h2 class="section-title" style="margin-bottom: 0">自定义工作流管理</h2>
+        <router-link to="/create/canvas" class="btn btn-ghost btn-sm">← 返回创作</router-link>
+      </div>
 
       <!-- 模板区域 -->
       <section class="wf-section">
@@ -50,10 +53,17 @@
         <div v-if="loadingWorkflows" class="muted-text">加载中...</div>
         <div v-else-if="workflows.length === 0" class="muted-text">暂无自定义工作流，可从上方模板创建。</div>
         <div v-else class="wf-list">
-          <div v-for="wf in workflows" :key="wf.workflow_id" class="card wf-item-card">
+          <div v-for="wf in workflows" :key="wf.workflow_id" :data-wf-id="wf.workflow_id" class="card wf-item-card">
             <div class="wf-card-header">
               <strong>{{ wf.name || wf.workflow_id }}</strong>
               <div class="wf-actions">
+                <button
+                  class="btn btn-primary btn-sm"
+                  :disabled="running === wf.workflow_id"
+                  @click="runWorkflow(wf.workflow_id)"
+                >
+                  {{ running === wf.workflow_id ? '运行中...' : '运行' }}
+                </button>
                 <button class="btn btn-ghost btn-sm" @click="toggleExpand(wf.workflow_id)">
                   {{ expanded === wf.workflow_id ? '收起' : '展开步骤' }}
                 </button>
@@ -78,8 +88,21 @@
             <div v-if="expanded === wf.workflow_id && wf.steps" class="wf-steps">
               <div v-for="step in wf.steps" :key="step.step_id" class="wf-step-row">
                 <span class="step-index">{{ step.index || '•' }}</span>
-                <span class="step-name">{{ step.name }}</span>
-                <span class="step-cap muted-text">{{ capabilityLabel(step.capability_id) }}</span>
+                <template v-if="editingStep === step.step_id">
+                  <input
+                    v-model="editStepName"
+                    class="form-input step-edit-input"
+                    @keyup.enter="saveStepName(wf.workflow_id, step.step_id)"
+                    @keyup.escape="editingStep = ''"
+                  />
+                  <button class="btn btn-primary btn-xs" @click="saveStepName(wf.workflow_id, step.step_id)">保存</button>
+                  <button class="btn btn-ghost btn-xs" @click="editingStep = ''">取消</button>
+                </template>
+                <template v-else>
+                  <span class="step-name">{{ step.name }}</span>
+                  <span class="step-cap muted-text">{{ capabilityLabel(step.capability_id) }}</span>
+                  <button class="btn btn-ghost btn-xs step-edit-btn" @click="startEditStep(step)">编辑</button>
+                </template>
               </div>
             </div>
           </div>
@@ -95,8 +118,8 @@
           <div v-for="run in runs" :key="run.run_id" class="card wf-run-card">
             <div class="wf-card-header">
               <span>
-                <strong>{{ run.workflow_id }}</strong>
-                <span class="badge" :class="'badge-' + (run.status || 'pending')">{{ run.status }}</span>
+                <strong>{{ resolveWorkflowName(run.workflow_id) }}</strong>
+                <span class="badge" :class="'badge-' + (run.status || 'pending')">{{ runStatusLabel(run.status) }}</span>
               </span>
               <span class="muted-text">{{ formatDate(run.started_at || run.created_at) }}</span>
             </div>
@@ -115,20 +138,12 @@ import { useToastStore } from '../stores/toast.js'
 import labels from '../i18n/labels.js'
 import { translateTag } from '../composables/useSemanticTranslation.js'
 import AppNav from '../components/layout/AppNav.vue'
+import ProjectTitle from '../components/common/ProjectTitle.vue'
 
 const api = useApiStore()
 const appStore = useAppStore()
 const toast = useToastStore()
 const myWorkflowsSection = ref(null)
-
-const projectDisplayName = computed(() => {
-  const dir = appStore.projectDir
-  if (!dir) return '未打开项目'
-  const name = dir.split('/').filter(Boolean).pop() || dir
-  const m = name.match(/^proj_selected_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})/)
-  if (m) return `项目 ${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}`
-  return name
-})
 
 // ── 模板 ──
 const templates = ref([])
@@ -165,6 +180,9 @@ const workflows = ref([])
 const loadingWorkflows = ref(false)
 const expanded = ref('')
 const deleting = ref('')
+const running = ref('')
+const editingStep = ref('')
+const editStepName = ref('')
 
 async function loadWorkflows() {
   loadingWorkflows.value = true
@@ -178,7 +196,14 @@ async function loadWorkflows() {
 }
 
 function toggleExpand(id) {
-  expanded.value = expanded.value === id ? '' : id
+  const wasExpanded = expanded.value === id
+  expanded.value = wasExpanded ? '' : id
+  if (!wasExpanded) {
+    nextTick(() => {
+      const el = document.querySelector(`[data-wf-id="${id}"]`)
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    })
+  }
 }
 
 async function deleteWorkflow(id) {
@@ -194,6 +219,37 @@ async function deleteWorkflow(id) {
   await loadWorkflows()
 }
 
+function startEditStep(step) {
+  editingStep.value = step.step_id
+  editStepName.value = step.name || ''
+}
+
+async function saveStepName(workflowId, stepId) {
+  if (!editStepName.value.trim()) return
+  const data = await api.api('PATCH', `/api/workflows/${workflowId}/steps/${stepId}`, {
+    name: editStepName.value.trim(),
+  })
+  editingStep.value = ''
+  if (data.error) {
+    toast.show('保存失败: ' + (data.error || ''), 'danger')
+    return
+  }
+  toast.show('已更新', 'success')
+  await loadWorkflows()
+}
+
+async function runWorkflow(id) {
+  running.value = id
+  const data = await api.api('POST', `/api/workflows/${id}/run`)
+  running.value = ''
+  if (data.error) {
+    toast.show('运行失败: ' + (data.error || ''), 'danger')
+    return
+  }
+  toast.show('工作流已启动', 'success')
+  await loadRuns()
+}
+
 // ── 运行历史 ──
 const runs = ref([])
 const loadingRuns = ref(false)
@@ -207,12 +263,39 @@ async function loadRuns() {
 }
 
 // ── 工具 ──
+// W-01: capability_id → 中文标签映射（补充 labels.tools.items 未覆盖的 ID）
+const capIdFallback = {
+  text_rough_cut: '文字粗剪',
+  image_semantic: '图片语义',
+  subtitle_calibration: '字幕校准',
+  topic_library: '选题库',
+  topic_copy: '选题文案',
+  short_clip: '短视频快剪',
+  refinement: '视频精剪',
+  audio_voice: '配乐配音',
+  article_expand: '公众号扩写',
+  publish_prep: '发布文案',
+  social_export: '社媒导出',
+  content_publish: '内容发布',
+}
+
 function capabilityLabel(capId) {
   if (!capId) return ''
   const item = labels.tools?.items?.[capId]
   if (item?.label) return item.label
+  if (capIdFallback[capId]) return capIdFallback[capId]
   // fallback: 将 snake_case 转为可读格式
   return capId.replace(/_/g, ' ')
+}
+
+function resolveWorkflowName(wfId) {
+  const wf = workflows.value.find(w => w.workflow_id === wfId)
+  return wf?.name || wfId
+}
+
+function runStatusLabel(status) {
+  const map = { completed: '已完成', running: '运行中', failed: '失败', pending: '等待中', done: '已完成', error: '失败' }
+  return map[status] || status || '未知'
 }
 
 function formatDate(iso) {
@@ -231,6 +314,13 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.section-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
 .section-title {
   font-size: 18px;
   font-weight: 600;
@@ -404,6 +494,29 @@ onMounted(() => {
 
 .step-cap {
   font-size: 12px;
+}
+
+.step-edit-btn {
+  opacity: 0;
+  transition: opacity 0.15s;
+  font-size: 11px;
+  padding: 1px 6px;
+}
+
+.wf-step-row:hover .step-edit-btn {
+  opacity: 1;
+}
+
+.step-edit-input {
+  flex: 1;
+  font-size: 13px;
+  padding: 3px 8px;
+  max-width: 200px;
+}
+
+.btn-xs {
+  font-size: 11px;
+  padding: 2px 8px;
 }
 
 .wf-run-card {

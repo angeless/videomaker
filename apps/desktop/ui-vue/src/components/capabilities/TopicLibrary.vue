@@ -8,7 +8,7 @@
       </div>
       <div class="form-row">
         <label>分类</label>
-        <input v-model="category" placeholder="如 travel" class="form-input" />
+        <input v-model="category" :placeholder="L.panelHints.topicLibrary.categoryPlaceholder" class="form-input" />
       </div>
       <div class="btn-row">
         <button class="btn btn-sm" @click="load" :disabled="!appStore.projectDir || loadingQuery">{{ loadingQuery ? '查询中…' : '查询' }}</button>
@@ -30,10 +30,10 @@
     <div class="cap-section">
       <div class="cap-subtitle">新建 / 编辑模板</div>
       <div class="form-row"><label>标题</label><input v-model="form.title" class="form-input" /></div>
-      <div class="form-row"><label>Slug</label><input v-model="form.slug" class="form-input" /></div>
-      <div class="form-row"><label>分类</label><input v-model="form.category" class="form-input" placeholder="travel" /></div>
-      <div class="form-row"><label>受众</label><input v-model="form.audience" class="form-input" placeholder="short_video" /></div>
-      <div class="form-row"><label>开头风格</label><input v-model="form.hook_style" class="form-input" placeholder="story" /></div>
+      <div class="form-row"><label>标识符</label><input v-model="form.slug" class="form-input" placeholder="唯一标识" /></div>
+      <div class="form-row"><label>分类</label><input v-model="form.category" class="form-input" :placeholder="L.panelHints.topicLibrary.categoryPlaceholder" /></div>
+      <div class="form-row"><label>受众</label><input v-model="form.audience" class="form-input" placeholder="短视频" /></div>
+      <div class="form-row"><label>开头风格</label><input v-model="form.hook_style" class="form-input" placeholder="故事型" /></div>
       <div class="form-row"><label>标签</label><input v-model="form.tags" class="form-input" placeholder="逗号分隔" /></div>
       <div class="form-row"><label>大纲模板</label><textarea v-model="form.outline_template" class="form-input" rows="3"></textarea></div>
       <button class="btn btn-primary btn-sm" @click="save" :disabled="!appStore.projectDir || !form.title.trim() || loadingSave">{{ loadingSave ? '保存中…' : '保存模板' }}</button>
@@ -47,7 +47,9 @@ import { ref, reactive, onMounted, inject } from 'vue'
 import { useApiStore } from '../../stores/api.js'
 import { useCapabilitiesStore } from '../../stores/capabilities.js'
 import { useAppStore } from '../../stores/app.js'
+import labels from '../../i18n/labels.js'
 
+const L = labels
 const apiStore = useApiStore()
 const capStore = useCapabilitiesStore()
 const appStore = useAppStore()
@@ -62,8 +64,8 @@ const loadingQuery = ref(false)
 const loadingBootstrap = ref(false)
 const loadingSave = ref(false)
 const form = reactive({
-  title: '', slug: '', category: 'travel', audience: 'short_video',
-  hook_style: 'story', outline_template: '', tags: '',
+  title: '', slug: '', category: '', audience: '',
+  hook_style: '', outline_template: '', tags: '',
 })
 
 async function load() {
@@ -97,9 +99,9 @@ function useTemplate(item) {
   if (!item) return
   form.slug = item.slug || ''
   form.title = item.title || ''
-  form.category = item.category || 'travel'
-  form.audience = item.audience || 'short_video'
-  form.hook_style = item.hook_style || 'story'
+  form.category = item.category || ''
+  form.audience = item.audience || ''
+  form.hook_style = item.hook_style || ''
   form.outline_template = item.outline_template || ''
   form.tags = Array.isArray(item.tags) ? item.tags.join(',') : ''
   // Phase 2: 广播 slug 给 TopicCopy（仅在 IdeateView 内生效）

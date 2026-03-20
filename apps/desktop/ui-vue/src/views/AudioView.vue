@@ -44,5 +44,6 @@ import AudioVoice from '../components/capabilities/AudioVoice.vue'
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  padding-bottom: 48px;
 }
 </style>

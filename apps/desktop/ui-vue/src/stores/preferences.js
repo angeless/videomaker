@@ -7,6 +7,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
 
   const uiSettings = ref({
     onboarding_completed: false,
+    onboarding_step: 0,
     creator_mode: true,
     font_scale: 1.0,
     preferred_production_view: 'hub',
@@ -30,6 +31,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     }
     uiSettings.value = {
       onboarding_completed: !!data.onboarding_completed,
+      onboarding_step: parseInt(data.onboarding_step, 10) || 0,
       creator_mode: data.creator_mode !== false,
       font_scale: Number(data.font_scale || 1.0),
       preferred_production_view: `${data.preferred_production_view || 'hub'}`,
@@ -46,6 +48,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     uiSettingsSaving.value = true
     const payload = {
       onboarding_completed: !!uiSettings.value.onboarding_completed,
+      onboarding_step: uiSettings.value.onboarding_step || 0,
       creator_mode: !!uiSettings.value.creator_mode,
       font_scale: Number(uiSettings.value.font_scale || 1.0),
       preferred_production_view: uiSettings.value.preferred_production_view || 'hub',

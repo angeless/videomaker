@@ -1,94 +1,145 @@
-"""Agent governance, cost model, and skill normalization helpers.
+"""Agent governance / cost / skill functions extracted from server.py (L1-6)."""
 
-Extracted from server.py (Roadmap L1) — pure functions only, no IO.
-"""
-from __future__ import annotations
+import json
 from copy import deepcopy
-from typing import Any, Dict, List, Optional
+from datetime import datetime
+from typing import Optional, Dict, List, Any
+
+# ── Module-level state (defaults; overwritten by init()) ────────────
+_project_dir = None
+_AGENT_SKILL_REGISTRY: Dict[str, Dict[str, Any]] = {}
+_AGENT_GOVERNANCE_DEFAULT: Dict[str, Any] = {}
+_AGENT_GOVERNANCE_USAGE_DEFAULT: Dict[str, Any] = {}
+_AGENT_USAGE_RECENT_RUNS_MAX = 16
+_AGENT_COST_MODEL_DEFAULT: Dict[str, Any] = {}
 
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-
-AGENT_GOVERNANCE_DEFAULT: Dict[str, Any] = {
-    "default_limits": {
-        "max_steps": 40,
-        "max_failures": 12,
-        "max_duration_seconds": 1800,
-        "max_parallel": 4,
-    },
-    "actor_limits": {},
-    "capability_limits": {},
-    "actor_capability_limits": {},
-    "blocked_skills": [],
-    "blocked_capabilities": [],
-    "blocked_skills_by_actor": {},
-    "blocked_capabilities_by_actor": {},
-}
-
-AGENT_GOVERNANCE_USAGE_DEFAULT: Dict[str, Any] = {
-    "version": 1,
-    "updated_at": "",
-    "actors": {},
-}
-
-AGENT_USAGE_RECENT_RUNS_MAX = 16
-
-AGENT_TASK_HISTORY_MAX = 600
-
-AGENT_COST_MODEL_DEFAULT: Dict[str, Any] = {
-    "default_rates": {
-        "prompt_usd_per_1k_tokens": 0.002,
-        "completion_usd_per_1k_tokens": 0.006,
-        "compute_usd_per_second": 0.00005,
-    },
-    "providers": {},
-}
+def init(
+    *,
+    project_dir=None,
+    agent_skill_registry=None,
+    agent_governance_default=None,
+    agent_governance_usage_default=None,
+    agent_usage_recent_runs_max=None,
+    agent_cost_model_default=None,
+):
+    global _project_dir, _AGENT_SKILL_REGISTRY, _AGENT_GOVERNANCE_DEFAULT
+    global _AGENT_GOVERNANCE_USAGE_DEFAULT, _AGENT_USAGE_RECENT_RUNS_MAX, _AGENT_COST_MODEL_DEFAULT
+    if project_dir is not None:
+        _project_dir = project_dir
+    if agent_skill_registry is not None:
+        _AGENT_SKILL_REGISTRY = agent_skill_registry
+    if agent_governance_default is not None:
+        _AGENT_GOVERNANCE_DEFAULT = agent_governance_default
+    if agent_governance_usage_default is not None:
+        _AGENT_GOVERNANCE_USAGE_DEFAULT = agent_governance_usage_default
+    if agent_usage_recent_runs_max is not None:
+        _AGENT_USAGE_RECENT_RUNS_MAX = agent_usage_recent_runs_max
+    if agent_cost_model_default is not None:
+        _AGENT_COST_MODEL_DEFAULT = agent_cost_model_default
 
 
-# ---------------------------------------------------------------------------
-# Private helpers (not part of public API, used by extracted functions)
-# ---------------------------------------------------------------------------
+# ── Lazy imports from server.py for cross-dependencies ──────────────
 
-def _coerce_bool(value, default: bool = False) -> bool:
-    if value is None:
-        return bool(default)
-    if isinstance(value, bool):
-        return value
-    text = str(value).strip().lower()
-    if text in {"1", "true", "yes", "y", "on"}:
-        return True
-    if text in {"0", "false", "no", "n", "off"}:
-        return False
-    return bool(default)
+def _get_effective_project_dir():
+    """Return the effective project dir, checking server module at call-time."""
+    import modules.app_api.server as _srv
+    return getattr(_srv, "_project_dir", None) or _project_dir
 
 
-def _normalize_export_template_id(value: str) -> str:
-    raw = str(value or "").strip().lower()
-    if not raw:
-        return ""
-    cleaned = []
-    for ch in raw:
-        if ch.isalnum() or ch == "_":
-            cleaned.append(ch)
-        elif ch in {"-", " ", "/"}:
-            cleaned.append("_")
-    out = "".join(cleaned).strip("_")
-    while "__" in out:
-        out = out.replace("__", "_")
-    return out[:64]
+def _read_project_json(filename: str, fallback=None):
+    from modules.app_api.server import _read_project_json as _impl
+    return _impl(filename, fallback=fallback)
 
 
-def _normalize_agent_template_id(value: str) -> str:
-    return _normalize_export_template_id(value)
+def _project_data_path(filename: str):
+    from modules.app_api.server import _project_data_path as _impl
+    return _impl(filename)
 
 
-# ---------------------------------------------------------------------------
-# Pure normalisation / computation functions
-# ---------------------------------------------------------------------------
+def _normalize_governance_string_list(raw: Any) -> List[str]:
+    if not isinstance(raw, list):
+        return []
+    out: List[str] = []
+    for item in raw:
+        text = str(item or "").strip()
+        if text:
+            out.append(text)
+    return list(dict.fromkeys(out))
 
-def normalize_skill_retry_policy(policy_raw: Any) -> Dict[str, Any]:
+
+# ── Functions ───────────────────────────────────────────────────────
+
+def _agent_capability_route_map() -> Dict[str, Dict[str, str]]:
+    return {
+        "topic_library": {
+            "list": "GET /api/capabilities/topic_library",
+            "upsert": "POST /api/capabilities/topic_library",
+            "bootstrap": "POST /api/capabilities/topic_library/bootstrap",
+        },
+        "topic_copy": {"draft": "POST /api/capabilities/topic_copy/draft"},
+        "text_rough_cut": {
+            "source": "GET /api/capabilities/text_rough_cut/source",
+            "plan": "POST /api/capabilities/text_rough_cut/plan",
+        },
+        "short_clip": {"plan": "POST /api/capabilities/short_clip/plan"},
+        "refinement": {
+            "plan": "POST /api/capabilities/refinement/plan",
+            "handoff": "POST /api/capabilities/refinement/handoff",
+            "execute": "POST /api/capabilities/refinement/execute",
+            "collect_master": "POST /api/capabilities/refinement/collect_master",
+        },
+        "publish_prep": {
+            "profiles": "GET /api/capabilities/publish_prep/profiles",
+            "plan": "POST /api/capabilities/publish_prep/generate",
+            "generate": "POST /api/capabilities/publish_prep/generate",
+        },
+        "subtitle_calibration": {
+            "plan": "POST /api/capabilities/subtitle_calibration/plan",
+            "run": "POST /api/capabilities/subtitle_calibration/run",
+        },
+        "image_semantic": {
+            "analyze": "POST /api/capabilities/image_semantic/analyze",
+            "search": "POST /api/capabilities/image_semantic/search",
+        },
+        "article_expand": {
+            "generate": "POST /api/capabilities/article_expand/generate",
+            "plan": "POST /api/capabilities/article_expand/generate",
+        },
+        "content_publish": {
+            "platforms": "GET /api/capabilities/content_publish/platforms",
+            "bootstrap": "POST /api/capabilities/content_publish/session/bootstrap",
+            "plan": "POST /api/capabilities/content_publish/plan",
+            "run": "POST /api/capabilities/content_publish/run",
+            "rerun": "POST /api/capabilities/content_publish/rerun",
+        },
+        "social_export": {
+            "profiles": "GET /api/capabilities/social_export/profiles",
+            "specs": "GET /api/capabilities/social_export/specs",
+            "validate_source": "POST /api/capabilities/social_export/validate_source",
+            "plan": "POST /api/capabilities/social_export/plan",
+            "run": "POST /api/capabilities/social_export/run",
+            "history": "GET /api/capabilities/social_export/history",
+            "rerun": "POST /api/capabilities/social_export/rerun",
+        },
+        "audio_voice": {
+            "plan": "POST /api/capabilities/audio_voice/plan",
+            "pick_bgm": "POST /api/capabilities/audio_voice/pick_bgm",
+            "synthesize": "POST /api/capabilities/audio_voice/synthesize",
+            "build_track": "POST /api/capabilities/audio_voice/build_track",
+            "mix_master": "POST /api/capabilities/audio_voice/mix_master",
+            "run": "POST /api/capabilities/audio_voice/run",
+        },
+    }
+
+
+def _list_agent_skills() -> List[Dict[str, Any]]:
+    out = [deepcopy(x) for x in _AGENT_SKILL_REGISTRY.values()]
+    out.sort(key=lambda item: str(item.get("skill_id", "")).lower())
+    return out
+
+
+def _normalize_skill_retry_policy(policy_raw: Any) -> Dict[str, Any]:
     raw = policy_raw if isinstance(policy_raw, dict) else {}
     try:
         max_retries = int(raw.get("max_retries", 0) or 0)
@@ -117,7 +168,7 @@ def normalize_skill_retry_policy(policy_raw: Any) -> Dict[str, Any]:
     }
 
 
-def normalize_skill_timeout_seconds(value: Any, default: float = 120.0) -> float:
+def _normalize_skill_timeout_seconds(value: Any, default: float = 120.0) -> float:
     try:
         timeout_seconds = float(value if value is not None else default)
     except Exception:
@@ -125,7 +176,7 @@ def normalize_skill_timeout_seconds(value: Any, default: float = 120.0) -> float
     return max(1.0, min(timeout_seconds, 3600.0))
 
 
-def normalize_skill_budget_limit(raw: Any) -> Dict[str, int]:
+def _normalize_skill_budget_limit(raw: Any) -> Dict[str, int]:
     src = raw if isinstance(raw, dict) else {}
     try:
         max_steps = int(src.get("max_steps", 0) or 0)
@@ -146,9 +197,9 @@ def normalize_skill_budget_limit(raw: Any) -> Dict[str, int]:
     }
 
 
-def normalize_governance_limit_item(raw: Any) -> Dict[str, int]:
+def _normalize_governance_limit_item(raw: Any) -> Dict[str, int]:
     src = raw if isinstance(raw, dict) else {}
-    base = normalize_skill_budget_limit(src)
+    base = _normalize_skill_budget_limit(src)
     try:
         max_parallel = int(src.get("max_parallel", 0) or 0)
     except Exception:
@@ -157,20 +208,9 @@ def normalize_governance_limit_item(raw: Any) -> Dict[str, int]:
     return base
 
 
-def normalize_governance_string_list(raw: Any) -> List[str]:
-    if not isinstance(raw, list):
-        return []
-    out: List[str] = []
-    for item in raw:
-        text = str(item or "").strip()
-        if text:
-            out.append(text)
-    return list(dict.fromkeys(out))
-
-
-def normalize_agent_governance_policy(raw: Any) -> Dict[str, Any]:
+def _normalize_agent_governance_policy(raw: Any) -> Dict[str, Any]:
     src = raw if isinstance(raw, dict) else {}
-    default_raw = deepcopy(AGENT_GOVERNANCE_DEFAULT)
+    default_raw = deepcopy(_AGENT_GOVERNANCE_DEFAULT)
     merged: Dict[str, Any] = deepcopy(default_raw)
     for key in (
         "default_limits",
@@ -186,12 +226,12 @@ def normalize_agent_governance_policy(raw: Any) -> Dict[str, Any]:
             merged[key] = src.get(key)
 
     out: Dict[str, Any] = {
-        "default_limits": normalize_governance_limit_item(merged.get("default_limits", {})),
+        "default_limits": _normalize_governance_limit_item(merged.get("default_limits", {})),
         "actor_limits": {},
         "capability_limits": {},
         "actor_capability_limits": {},
-        "blocked_skills": normalize_governance_string_list(merged.get("blocked_skills", [])),
-        "blocked_capabilities": normalize_governance_string_list(merged.get("blocked_capabilities", [])),
+        "blocked_skills": _normalize_governance_string_list(merged.get("blocked_skills", [])),
+        "blocked_capabilities": _normalize_governance_string_list(merged.get("blocked_capabilities", [])),
         "blocked_skills_by_actor": {},
         "blocked_capabilities_by_actor": {},
     }
@@ -201,14 +241,14 @@ def normalize_agent_governance_policy(raw: Any) -> Dict[str, Any]:
         for actor_key, item in actor_limits_raw.items():
             actor_id = str(actor_key or "").strip()
             if actor_id:
-                out["actor_limits"][actor_id] = normalize_governance_limit_item(item)
+                out["actor_limits"][actor_id] = _normalize_governance_limit_item(item)
 
     capability_limits_raw = merged.get("capability_limits", {})
     if isinstance(capability_limits_raw, dict):
         for capability_key, item in capability_limits_raw.items():
             capability_id = str(capability_key or "").strip()
             if capability_id:
-                out["capability_limits"][capability_id] = normalize_governance_limit_item(item)
+                out["capability_limits"][capability_id] = _normalize_governance_limit_item(item)
 
     actor_cap_raw = merged.get("actor_capability_limits", {})
     if isinstance(actor_cap_raw, dict):
@@ -221,7 +261,7 @@ def normalize_agent_governance_policy(raw: Any) -> Dict[str, Any]:
                 capability_id = str(capability_key or "").strip()
                 if not capability_id:
                     continue
-                bucket[capability_id] = normalize_governance_limit_item(item)
+                bucket[capability_id] = _normalize_governance_limit_item(item)
             if bucket:
                 out["actor_capability_limits"][actor_id] = bucket
 
@@ -233,12 +273,42 @@ def normalize_agent_governance_policy(raw: Any) -> Dict[str, Any]:
                 actor_id = str(actor_key or "").strip()
                 if not actor_id:
                     continue
-                bucket[actor_id] = normalize_governance_string_list(values)
+                bucket[actor_id] = _normalize_governance_string_list(values)
             out[field] = bucket
     return out
 
 
-def normalize_cost_rate_item(raw: Any, fallback: Optional[Dict[str, float]] = None) -> Dict[str, float]:
+def _read_agent_governance_policy() -> Dict[str, Any]:
+    if _get_effective_project_dir() is None:
+        return _normalize_agent_governance_policy({})
+    raw = _read_project_json("agent_governance.json", fallback={})
+    return _normalize_agent_governance_policy(raw)
+
+
+def _read_agent_governance_usage() -> Dict[str, Any]:
+    raw = _read_project_json("agent_governance_usage.json", fallback={})
+    if not isinstance(raw, dict):
+        raw = {}
+    out = deepcopy(_AGENT_GOVERNANCE_USAGE_DEFAULT)
+    actors_raw = raw.get("actors", {})
+    out["updated_at"] = str(raw.get("updated_at", "") or "")
+    if isinstance(actors_raw, dict):
+        out["actors"] = actors_raw
+    return out
+
+
+def _save_agent_governance_usage(usage: Dict[str, Any]) -> Dict[str, Any]:
+    out = usage if isinstance(usage, dict) else {}
+    out.setdefault("version", 1)
+    out["updated_at"] = datetime.now().isoformat(timespec="seconds")
+    p = _project_data_path("agent_governance_usage.json")
+    if p is not None:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
+    return out
+
+
+def _normalize_cost_rate_item(raw: Any, fallback: Optional[Dict[str, float]] = None) -> Dict[str, float]:
     base = {
         "prompt_usd_per_1k_tokens": 0.0,
         "completion_usd_per_1k_tokens": 0.0,
@@ -261,13 +331,13 @@ def normalize_cost_rate_item(raw: Any, fallback: Optional[Dict[str, float]] = No
     return base
 
 
-def normalize_agent_cost_model_config(raw: Any) -> Dict[str, Any]:
+def _normalize_agent_cost_model_config(raw: Any) -> Dict[str, Any]:
     src = raw if isinstance(raw, dict) else {}
-    out = deepcopy(AGENT_COST_MODEL_DEFAULT)
-    fallback_rates = normalize_cost_rate_item(out.get("default_rates", {}))
+    out = deepcopy(_AGENT_COST_MODEL_DEFAULT)
+    fallback_rates = _normalize_cost_rate_item(out.get("default_rates", {}))
 
     default_rates_raw = src.get("default_rates", src)
-    out["default_rates"] = normalize_cost_rate_item(default_rates_raw, fallback=fallback_rates)
+    out["default_rates"] = _normalize_cost_rate_item(default_rates_raw, fallback=fallback_rates)
     out["providers"] = {}
 
     providers_raw = src.get("providers", {})
@@ -279,7 +349,7 @@ def normalize_agent_cost_model_config(raw: Any) -> Dict[str, Any]:
         if not provider_id:
             continue
         provider_item = provider_item_raw if isinstance(provider_item_raw, dict) else {}
-        provider_default = normalize_cost_rate_item(
+        provider_default = _normalize_cost_rate_item(
             provider_item.get("default_rates", provider_item),
             fallback=out["default_rates"],
         )
@@ -290,7 +360,7 @@ def normalize_agent_cost_model_config(raw: Any) -> Dict[str, Any]:
                 model_id = str(model_key or "").strip()
                 if not model_id:
                     continue
-                models_out[model_id] = normalize_cost_rate_item(model_rate_raw, fallback=provider_default)
+                models_out[model_id] = _normalize_cost_rate_item(model_rate_raw, fallback=provider_default)
         out["providers"][provider_id] = {
             "default_rates": provider_default,
             "models": models_out,
@@ -298,7 +368,14 @@ def normalize_agent_cost_model_config(raw: Any) -> Dict[str, Any]:
     return out
 
 
-def extract_pricing_hint_from_response(payload: Dict[str, Any]) -> Dict[str, str]:
+def _read_agent_cost_model_config() -> Dict[str, Any]:
+    if _get_effective_project_dir() is None:
+        return _normalize_agent_cost_model_config({})
+    raw = _read_project_json("agent_cost_model.json", fallback={})
+    return _normalize_agent_cost_model_config(raw)
+
+
+def _extract_pricing_hint_from_response(payload: Dict[str, Any]) -> Dict[str, str]:
     data = payload if isinstance(payload, dict) else {}
 
     def _pick_text(root: Dict[str, Any], keys: List[str]) -> str:
@@ -334,14 +411,14 @@ def extract_pricing_hint_from_response(payload: Dict[str, Any]) -> Dict[str, str
     return {"provider": provider.lower(), "model": model}
 
 
-def resolve_cost_rates(
+def _resolve_cost_rates(
     *,
     provider: str,
     model: str,
     cost_model: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    cfg = normalize_agent_cost_model_config(cost_model) if isinstance(cost_model, dict) else normalize_agent_cost_model_config({})
-    default_rates = normalize_cost_rate_item(cfg.get("default_rates", {}))
+    cfg = _normalize_agent_cost_model_config(cost_model) if isinstance(cost_model, dict) else _read_agent_cost_model_config()
+    default_rates = _normalize_cost_rate_item(cfg.get("default_rates", {}))
     providers = cfg.get("providers", {})
     if not isinstance(providers, dict):
         providers = {}
@@ -354,13 +431,13 @@ def resolve_cost_rates(
     if provider_norm:
         provider_item = providers.get(provider_norm)
         if isinstance(provider_item, dict):
-            provider_default = normalize_cost_rate_item(provider_item.get("default_rates", {}), fallback=selected_rates)
+            provider_default = _normalize_cost_rate_item(provider_item.get("default_rates", {}), fallback=selected_rates)
             selected_rates = provider_default
             rate_source = f"provider:{provider_norm}:default"
             models = provider_item.get("models", {})
             if isinstance(models, dict) and model_req:
                 if model_req in models and isinstance(models.get(model_req), dict):
-                    selected_rates = normalize_cost_rate_item(models.get(model_req), fallback=selected_rates)
+                    selected_rates = _normalize_cost_rate_item(models.get(model_req), fallback=selected_rates)
                     rate_source = f"provider:{provider_norm}:model:{model_req}"
                 else:
                     lower_map = {
@@ -370,7 +447,7 @@ def resolve_cost_rates(
                     }
                     match_key = lower_map.get(model_req.lower())
                     if match_key and isinstance(models.get(match_key), dict):
-                        selected_rates = normalize_cost_rate_item(models.get(match_key), fallback=selected_rates)
+                        selected_rates = _normalize_cost_rate_item(models.get(match_key), fallback=selected_rates)
                         resolved_model = match_key
                         rate_source = f"provider:{provider_norm}:model:{match_key}"
     return {
@@ -381,7 +458,7 @@ def resolve_cost_rates(
     }
 
 
-def extract_usage_tokens_from_response(payload: Dict[str, Any]) -> Dict[str, int]:
+def _extract_usage_tokens_from_response(payload: Dict[str, Any]) -> Dict[str, int]:
     data = payload if isinstance(payload, dict) else {}
 
     def _pick_usage_obj(root: Dict[str, Any]) -> Dict[str, Any]:
@@ -417,7 +494,7 @@ def extract_usage_tokens_from_response(payload: Dict[str, Any]) -> Dict[str, int
     }
 
 
-def estimate_step_cost_metrics(
+def _estimate_step_cost_metrics(
     *,
     prompt_tokens: int,
     completion_tokens: int,
@@ -429,7 +506,7 @@ def estimate_step_cost_metrics(
     p = max(int(prompt_tokens or 0), 0)
     c = max(int(completion_tokens or 0), 0)
     d = max(float(duration_seconds or 0.0), 0.0)
-    resolved = resolve_cost_rates(provider=provider, model=model, cost_model=cost_model)
+    resolved = _resolve_cost_rates(provider=provider, model=model, cost_model=cost_model)
     rates = resolved.get("rates", {}) if isinstance(resolved.get("rates"), dict) else {}
     prompt_rate = float(rates.get("prompt_usd_per_1k_tokens", 0.0) or 0.0)
     completion_rate = float(rates.get("completion_usd_per_1k_tokens", 0.0) or 0.0)
@@ -455,7 +532,7 @@ def estimate_step_cost_metrics(
     }
 
 
-def normalize_usage_bucket(raw: Any) -> Dict[str, Any]:
+def _normalize_usage_bucket(raw: Any) -> Dict[str, Any]:
     src = raw if isinstance(raw, dict) else {}
 
     def _normalize_recent_run_item(item_raw: Any) -> Optional[Dict[str, Any]]:
@@ -514,8 +591,8 @@ def normalize_usage_bucket(raw: Any) -> Dict[str, Any]:
             normalized = _normalize_recent_run_item(item_raw)
             if isinstance(normalized, dict):
                 recent_runs.append(normalized)
-            if len(recent_runs) >= AGENT_USAGE_RECENT_RUNS_MAX:
-                recent_runs = recent_runs[-AGENT_USAGE_RECENT_RUNS_MAX:]
+            if len(recent_runs) >= _AGENT_USAGE_RECENT_RUNS_MAX:
+                recent_runs = recent_runs[-_AGENT_USAGE_RECENT_RUNS_MAX:]
 
     out = {
         "run_count": int(src.get("run_count", 0) or 0),
@@ -534,7 +611,7 @@ def normalize_usage_bucket(raw: Any) -> Dict[str, Any]:
         "last_estimated_cost_usd": float(src.get("last_estimated_cost_usd", 0.0) or 0.0),
         "last_run_at": str(src.get("last_run_at", "") or ""),
         "recent_runs": recent_runs,
-        "suggested_limits": normalize_governance_limit_item(src.get("suggested_limits", {})),
+        "suggested_limits": _normalize_governance_limit_item(src.get("suggested_limits", {})),
     }
     out["run_count"] = max(out["run_count"], 0)
     out["step_count"] = max(out["step_count"], 0)
@@ -553,7 +630,7 @@ def normalize_usage_bucket(raw: Any) -> Dict[str, Any]:
     return out
 
 
-def compute_usage_suggested_limits(bucket: Dict[str, Any]) -> Dict[str, int]:
+def _compute_usage_suggested_limits(bucket: Dict[str, Any]) -> Dict[str, int]:
     run_count = int(bucket.get("run_count", 0) or 0)
     step_count = int(bucket.get("step_count", 0) or 0)
     failed_steps = int(bucket.get("failed_step_count", 0) or 0)
@@ -643,7 +720,7 @@ def compute_usage_suggested_limits(bucket: Dict[str, Any]) -> Dict[str, int]:
     }
 
 
-def update_usage_bucket(
+def _update_usage_bucket(
     bucket_raw: Any,
     *,
     steps_total: int,
@@ -656,7 +733,7 @@ def update_usage_bucket(
     estimated_cost_usd: float,
     now_iso: str,
 ) -> Dict[str, Any]:
-    bucket = normalize_usage_bucket(bucket_raw)
+    bucket = _normalize_usage_bucket(bucket_raw)
     steps_total_i = max(int(steps_total), 0)
     steps_success_i = max(int(steps_success), 0)
     steps_failed_i = max(int(steps_failed), 0)
@@ -705,27 +782,156 @@ def update_usage_bucket(
         "total_tokens": total_tokens_i,
         "estimated_cost_usd": round(estimated_cost_f, 8),
     })
-    if len(recent_runs) > AGENT_USAGE_RECENT_RUNS_MAX:
-        recent_runs = recent_runs[-AGENT_USAGE_RECENT_RUNS_MAX:]
+    if len(recent_runs) > _AGENT_USAGE_RECENT_RUNS_MAX:
+        recent_runs = recent_runs[-_AGENT_USAGE_RECENT_RUNS_MAX:]
     bucket["recent_runs"] = recent_runs
-    bucket["suggested_limits"] = compute_usage_suggested_limits(bucket)
+    bucket["suggested_limits"] = _compute_usage_suggested_limits(bucket)
     return bucket
 
 
-def extract_dynamic_limits_from_usage(
+def _record_governance_usage_for_skill_flow(
+    *,
+    actor_id: str,
+    summary: Dict[str, Any],
+) -> Dict[str, Any]:
+    actor = str(actor_id or "").strip()
+    if not actor:
+        return {"ok": False, "reason": "actor_id 为空"}
+    usage = _read_agent_governance_usage()
+    actors = usage.get("actors", {})
+    if not isinstance(actors, dict):
+        actors = {}
+    actor_entry = actors.get(actor, {})
+    if not isinstance(actor_entry, dict):
+        actor_entry = {}
+    actor_summary_bucket = actor_entry.get("summary", {})
+    cap_buckets = actor_entry.get("capabilities", {})
+    if not isinstance(cap_buckets, dict):
+        cap_buckets = {}
+
+    total_steps = int(summary.get("total_steps", 0) or 0)
+    success_steps = int(summary.get("success_steps", 0) or 0)
+    failed_steps = int(summary.get("failed_steps", 0) or 0)
+    skipped_steps = int(summary.get("skipped_steps", 0) or 0)
+    duration_seconds = float(summary.get("duration_seconds", 0.0) or 0.0)
+    steps = summary.get("steps", [])
+    total_prompt_tokens = 0
+    total_completion_tokens = 0
+    total_estimated_cost_usd = 0.0
+    now_iso = datetime.now().isoformat(timespec="seconds")
+    if isinstance(steps, list):
+        for item in steps:
+            if not isinstance(item, dict):
+                continue
+            usage_tokens = item.get("usage_tokens", {})
+            if isinstance(usage_tokens, dict):
+                total_prompt_tokens += max(int(usage_tokens.get("prompt_tokens", 0) or 0), 0)
+                total_completion_tokens += max(int(usage_tokens.get("completion_tokens", 0) or 0), 0)
+            estimated_cost = item.get("estimated_cost", {})
+            if isinstance(estimated_cost, dict):
+                total_estimated_cost_usd += max(float(estimated_cost.get("total_cost_usd", 0.0) or 0.0), 0.0)
+
+    actor_summary_bucket = _update_usage_bucket(
+        actor_summary_bucket,
+        steps_total=total_steps,
+        steps_success=success_steps,
+        steps_failed=failed_steps,
+        steps_skipped=skipped_steps,
+        duration_seconds=duration_seconds,
+        prompt_tokens=total_prompt_tokens,
+        completion_tokens=total_completion_tokens,
+        estimated_cost_usd=total_estimated_cost_usd,
+        now_iso=now_iso,
+    )
+
+    cap_stats: Dict[str, Dict[str, Any]] = {}
+    if isinstance(steps, list):
+        for item in steps:
+            if not isinstance(item, dict):
+                continue
+            capability_id = str(item.get("capability_id", "") or "").strip()
+            if not capability_id:
+                continue
+            bucket = cap_stats.setdefault(
+                capability_id,
+                {
+                    "total": 0,
+                    "success": 0,
+                    "failed": 0,
+                    "skipped": 0,
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "estimated_cost_usd": 0.0,
+                    "duration_seconds": 0.0,
+                },
+            )
+            bucket["total"] += 1
+            st = str(item.get("status", "") or "").strip().lower()
+            if st == "done":
+                bucket["success"] += 1
+            elif st == "error":
+                bucket["failed"] += 1
+            elif st == "skipped":
+                bucket["skipped"] += 1
+            usage_tokens = item.get("usage_tokens", {})
+            if isinstance(usage_tokens, dict):
+                bucket["prompt_tokens"] += max(int(usage_tokens.get("prompt_tokens", 0) or 0), 0)
+                bucket["completion_tokens"] += max(int(usage_tokens.get("completion_tokens", 0) or 0), 0)
+            estimated_cost = item.get("estimated_cost", {})
+            if isinstance(estimated_cost, dict):
+                bucket["estimated_cost_usd"] += max(float(estimated_cost.get("total_cost_usd", 0.0) or 0.0), 0.0)
+                bucket["duration_seconds"] += max(float(estimated_cost.get("compute_seconds", 0.0) or 0.0), 0.0)
+            else:
+                bucket["duration_seconds"] += max(float(item.get("duration_seconds", 0.0) or 0.0), 0.0)
+
+    for capability_id, stat in cap_stats.items():
+        old_bucket = cap_buckets.get(capability_id, {})
+        cap_buckets[capability_id] = _update_usage_bucket(
+            old_bucket,
+            steps_total=int(stat.get("total", 0)),
+            steps_success=int(stat.get("success", 0)),
+            steps_failed=int(stat.get("failed", 0)),
+            steps_skipped=int(stat.get("skipped", 0)),
+            duration_seconds=float(stat.get("duration_seconds", 0.0) or 0.0),
+            prompt_tokens=int(stat.get("prompt_tokens", 0) or 0),
+            completion_tokens=int(stat.get("completion_tokens", 0) or 0),
+            estimated_cost_usd=float(stat.get("estimated_cost_usd", 0.0) or 0.0),
+            now_iso=now_iso,
+        )
+
+    actor_entry["summary"] = actor_summary_bucket
+    actor_entry["capabilities"] = cap_buckets
+    actors[actor] = actor_entry
+    usage["actors"] = actors
+    saved = _save_agent_governance_usage(usage)
+    return {
+        "ok": True,
+        "actor_id": actor,
+        "summary_suggested_limits": actor_summary_bucket.get("suggested_limits", {}),
+        "summary_cost": {
+            "total_estimated_cost_usd": actor_summary_bucket.get("total_estimated_cost_usd", 0.0),
+            "avg_estimated_cost_usd": actor_summary_bucket.get("avg_estimated_cost_usd", 0.0),
+            "total_tokens": actor_summary_bucket.get("total_tokens", 0),
+        },
+        "capability_suggested_limits": {
+            cap: (bucket.get("suggested_limits", {}) if isinstance(bucket, dict) else {})
+            for cap, bucket in cap_buckets.items()
+            if cap in cap_stats
+        },
+        "usage_file": "data/agent_governance_usage.json",
+        "updated_at": saved.get("updated_at", ""),
+    }
+
+
+def _extract_dynamic_limits_from_usage(
     *,
     actor_id: str,
     capability_ids: List[str],
-    usage: Dict[str, Any],
 ) -> Dict[str, Any]:
-    """Extract dynamic suggested limits from a pre-loaded usage dict.
-
-    The caller is responsible for reading usage data (IO) and passing it in
-    via the *usage* parameter.
-    """
     actor = str(actor_id or "").strip()
     if not actor:
         return {"summary": None, "by_capability": {}}
+    usage = _read_agent_governance_usage()
     actors = usage.get("actors", {})
     if not isinstance(actors, dict):
         return {"summary": None, "by_capability": {}}
@@ -733,7 +939,7 @@ def extract_dynamic_limits_from_usage(
     if not isinstance(actor_entry, dict):
         return {"summary": None, "by_capability": {}}
     summary_bucket = actor_entry.get("summary", {})
-    summary_limits = normalize_governance_limit_item(
+    summary_limits = _normalize_governance_limit_item(
         summary_bucket.get("suggested_limits", {}) if isinstance(summary_bucket, dict) else {}
     )
     cap_map = actor_entry.get("capabilities", {})
@@ -743,11 +949,11 @@ def extract_dynamic_limits_from_usage(
             b = cap_map.get(capability_id, {})
             if not isinstance(b, dict):
                 continue
-            out_caps[capability_id] = normalize_governance_limit_item(b.get("suggested_limits", {}))
+            out_caps[capability_id] = _normalize_governance_limit_item(b.get("suggested_limits", {}))
     return {"summary": summary_limits, "by_capability": out_caps}
 
 
-def pick_actor_rule(mapping: Any, actor_id: str):
+def _pick_actor_rule(mapping: Any, actor_id: str):
     if not isinstance(mapping, dict):
         return None
     actor = str(actor_id or "").strip()
@@ -761,7 +967,7 @@ def pick_actor_rule(mapping: Any, actor_id: str):
     return None
 
 
-def tighten_governance_limit(base: Dict[str, int], incoming: Dict[str, int], *, source: str, trace: Dict[str, str]):
+def _tighten_governance_limit(base: Dict[str, int], incoming: Dict[str, int], *, source: str, trace: Dict[str, str]):
     if not isinstance(base, dict) or not isinstance(incoming, dict):
         return
     for key in ("max_steps", "max_failures", "max_duration_seconds", "max_parallel"):
@@ -774,23 +980,17 @@ def tighten_governance_limit(base: Dict[str, int], incoming: Dict[str, int], *, 
             trace[key] = source
 
 
-def resolve_agent_governance_for_skill_flow(
+def _resolve_agent_governance_for_skill_flow(
     *,
     actor_id: str,
     steps: List[Dict[str, Any]],
-    policy: Dict[str, Any],
-    usage: Dict[str, Any],
 ) -> Dict[str, Any]:
-    """Resolve effective governance limits for a skill flow.
-
-    The caller must supply *policy* (normalised governance policy) and *usage*
-    (raw governance-usage dict) so that this function remains IO-free.
-    """
-    effective = normalize_governance_limit_item(policy.get("default_limits", {}))
+    policy = _read_agent_governance_policy()
+    effective = _normalize_governance_limit_item(policy.get("default_limits", {}))
     trace = {k: "default_limits" for k in effective.keys()}
-    actor_rule = pick_actor_rule(policy.get("actor_limits", {}), actor_id)
+    actor_rule = _pick_actor_rule(policy.get("actor_limits", {}), actor_id)
     if isinstance(actor_rule, dict):
-        tighten_governance_limit(effective, actor_rule, source=f"actor:{actor_id}", trace=trace)
+        _tighten_governance_limit(effective, actor_rule, source=f"actor:{actor_id}", trace=trace)
 
     capability_ids = sorted({
         str(x.get("capability_id", "") or "").strip()
@@ -800,43 +1000,42 @@ def resolve_agent_governance_for_skill_flow(
     for capability_id in capability_ids:
         cap_rule = policy.get("capability_limits", {}).get(capability_id) if isinstance(policy.get("capability_limits", {}), dict) else None
         if isinstance(cap_rule, dict):
-            tighten_governance_limit(effective, cap_rule, source=f"capability:{capability_id}", trace=trace)
+            _tighten_governance_limit(effective, cap_rule, source=f"capability:{capability_id}", trace=trace)
 
-        actor_cap_map = pick_actor_rule(policy.get("actor_capability_limits", {}), actor_id)
+        actor_cap_map = _pick_actor_rule(policy.get("actor_capability_limits", {}), actor_id)
         actor_cap_rule = actor_cap_map.get(capability_id) if isinstance(actor_cap_map, dict) else None
         if isinstance(actor_cap_rule, dict):
-            tighten_governance_limit(
+            _tighten_governance_limit(
                 effective,
                 actor_cap_rule,
                 source=f"actor_capability:{actor_id}:{capability_id}",
                 trace=trace,
             )
 
-    dynamic_limits = extract_dynamic_limits_from_usage(
+    dynamic_limits = _extract_dynamic_limits_from_usage(
         actor_id=actor_id,
         capability_ids=capability_ids,
-        usage=usage,
     )
     dyn_summary = dynamic_limits.get("summary") if isinstance(dynamic_limits, dict) else None
     if isinstance(dyn_summary, dict):
-        tighten_governance_limit(effective, dyn_summary, source=f"dynamic_actor:{actor_id}", trace=trace)
+        _tighten_governance_limit(effective, dyn_summary, source=f"dynamic_actor:{actor_id}", trace=trace)
     dyn_caps = dynamic_limits.get("by_capability") if isinstance(dynamic_limits, dict) else {}
     if isinstance(dyn_caps, dict):
         for capability_id, cap_dyn in dyn_caps.items():
             if isinstance(cap_dyn, dict):
-                tighten_governance_limit(
+                _tighten_governance_limit(
                     effective,
                     cap_dyn,
                     source=f"dynamic_actor_capability:{actor_id}:{capability_id}",
                     trace=trace,
                 )
 
-    blocked_skills = set(normalize_governance_string_list(policy.get("blocked_skills", [])))
-    blocked_caps = set(normalize_governance_string_list(policy.get("blocked_capabilities", [])))
-    blocked_skills_actor = pick_actor_rule(policy.get("blocked_skills_by_actor", {}), actor_id)
-    blocked_caps_actor = pick_actor_rule(policy.get("blocked_capabilities_by_actor", {}), actor_id)
-    blocked_skills.update(normalize_governance_string_list(blocked_skills_actor))
-    blocked_caps.update(normalize_governance_string_list(blocked_caps_actor))
+    blocked_skills = set(_normalize_governance_string_list(policy.get("blocked_skills", [])))
+    blocked_caps = set(_normalize_governance_string_list(policy.get("blocked_capabilities", [])))
+    blocked_skills_actor = _pick_actor_rule(policy.get("blocked_skills_by_actor", {}), actor_id)
+    blocked_caps_actor = _pick_actor_rule(policy.get("blocked_capabilities_by_actor", {}), actor_id)
+    blocked_skills.update(_normalize_governance_string_list(blocked_skills_actor))
+    blocked_caps.update(_normalize_governance_string_list(blocked_caps_actor))
 
     return {
         "effective_limits": effective,
@@ -848,22 +1047,15 @@ def resolve_agent_governance_for_skill_flow(
     }
 
 
-def apply_governance_to_skill_flow(
+def _apply_governance_to_skill_flow(
     *,
     actor_id: str,
     steps: List[Dict[str, Any]],
     requested_budget: Dict[str, int],
     requested_max_parallel: int,
     explicit_max_parallel: bool,
-    policy: Dict[str, Any],
-    usage: Dict[str, Any],
 ) -> Dict[str, Any]:
-    """Apply governance constraints to a skill flow.
-
-    The caller must supply *policy* and *usage* (see
-    :func:`resolve_agent_governance_for_skill_flow`).
-    """
-    governance = resolve_agent_governance_for_skill_flow(actor_id=actor_id, steps=steps, policy=policy, usage=usage)
+    governance = _resolve_agent_governance_for_skill_flow(actor_id=actor_id, steps=steps)
     limits = governance.get("effective_limits", {}) if isinstance(governance.get("effective_limits"), dict) else {}
     blocked_skills = set(governance.get("blocked_skills", [])) if isinstance(governance.get("blocked_skills"), list) else set()
     blocked_caps = set(governance.get("blocked_capabilities", [])) if isinstance(governance.get("blocked_capabilities"), list) else set()
@@ -872,59 +1064,31 @@ def apply_governance_to_skill_flow(
         skill_id = str(step.get("skill_id", "") or "").strip()
         capability_id = str(step.get("capability_id", "") or "").strip()
         if skill_id and skill_id in blocked_skills:
-            raise ValueError(f"skill \u88ab\u6cbb\u7406\u7b56\u7565\u7981\u7528: {skill_id}")
+            raise ValueError(f"skill 被治理策略禁用: {skill_id}")
         if capability_id and capability_id in blocked_caps:
-            raise ValueError(f"capability \u88ab\u6cbb\u7406\u7b56\u7565\u7981\u7528: {capability_id}")
+            raise ValueError(f"capability 被治理策略禁用: {capability_id}")
 
-    final_budget = normalize_skill_budget_limit(requested_budget)
+    final_budget = _normalize_skill_budget_limit(requested_budget)
     for field in ("max_steps", "max_failures", "max_duration_seconds"):
         req_val = int(final_budget.get(field, 0) or 0)
         limit_val = int(limits.get(field, 0) or 0)
         if req_val > 0 and limit_val > 0 and req_val > limit_val:
-            raise ValueError(f"\u8d85\u51fa\u6cbb\u7406\u989d\u5ea6: {field}={req_val} > {limit_val}")
+            raise ValueError(f"超出治理额度: {field}={req_val} > {limit_val}")
         if req_val <= 0:
             final_budget[field] = limit_val if limit_val > 0 else 0
 
     req_mp = max(1, min(int(requested_max_parallel or 1), 8))
     limit_mp = int(limits.get("max_parallel", 0) or 0)
     if explicit_max_parallel and limit_mp > 0 and req_mp > limit_mp:
-        raise ValueError(f"\u8d85\u51fa\u6cbb\u7406\u989d\u5ea6: max_parallel={req_mp} > {limit_mp}")
+        raise ValueError(f"超出治理额度: max_parallel={req_mp} > {limit_mp}")
     final_mp = req_mp
     if not explicit_max_parallel and limit_mp > 0:
         final_mp = limit_mp
     if final_budget.get("max_steps", 0) > 0 and len(steps) > int(final_budget.get("max_steps", 0)):
-        raise ValueError(f"steps \u8d85\u51fa\u9884\u7b97\u4e0a\u9650: {len(steps)} > {final_budget.get('max_steps')}")
+        raise ValueError(f"steps 超出预算上限: {len(steps)} > {final_budget.get('max_steps')}")
 
     return {
         "budget_limit": final_budget,
         "max_parallel": final_mp,
         "governance": governance,
-    }
-
-
-def normalize_agent_skill_condition(condition_raw: Any) -> Dict[str, Any]:
-    raw = condition_raw if isinstance(condition_raw, dict) else {}
-    if not raw:
-        return {}
-    depends_on_raw = raw.get("depends_on", [])
-    depends_on: List[str] = []
-    if isinstance(depends_on_raw, list):
-        for item in depends_on_raw:
-            sid = _normalize_agent_template_id(str(item or "").strip())
-            if sid:
-                depends_on.append(sid)
-    status_in_raw = raw.get("status_in", ["done"])
-    status_in: List[str] = []
-    if isinstance(status_in_raw, list):
-        for item in status_in_raw:
-            st = str(item or "").strip().lower()
-            if st in {"done", "error", "skipped"}:
-                status_in.append(st)
-    if not status_in:
-        status_in = ["done"]
-    return {
-        "depends_on": list(dict.fromkeys(depends_on)),
-        "status_in": sorted(set(status_in)),
-        "require_all": _coerce_bool(raw.get("require_all", True), default=True),
-        "if_overall_ok": _coerce_bool(raw.get("if_overall_ok", False), default=False),
     }

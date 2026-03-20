@@ -3,11 +3,20 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict
+import json
+import logging
+import secrets
+import time
+from typing import Any, Callable, Dict, Optional
 
 from flask import Blueprint, jsonify, request
 
 from modules.app_api.param_utils import parse_str_param
+
+logger = logging.getLogger(__name__)
+
+# In-memory OAuth state store (short-lived, cleared after use)
+_oauth_pending: Dict[str, dict] = {}
 
 
 def create_settings_blueprint(
@@ -26,6 +35,7 @@ def create_settings_blueprint(
     load_publish_settings: Callable[[], Dict[str, Any]],
     save_publish_settings: Callable[[Dict[str, Any]], Dict[str, Any]],
     mask_publish_connectors: Callable[[Dict[str, Dict[str, Any]]], Dict[str, Dict[str, Any]]],
+    secret_store_getter: Optional[Callable] = None,
 ) -> Blueprint:
     bp = Blueprint("settings_api", __name__)
 
@@ -98,5 +108,334 @@ def create_settings_blueprint(
             }
         )
 
+    # ── YouTube OAuth 2.0 ──────────────────────────────────────
+
+    def _get_secret_store():
+        if secret_store_getter:
+            return secret_store_getter()
+        return None
+
+    def _read_youtube_token() -> Optional[dict]:
+        store = _get_secret_store()
+        if not store:
+            return None
+        raw = store.get("youtube_oauth")
+        if not raw:
+            return None
+        try:
+            return json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return None
+
+    def _write_youtube_token(token_data: dict) -> bool:
+        store = _get_secret_store()
+        if not store:
+            return False
+        return store.set("youtube_oauth", json.dumps(token_data, ensure_ascii=False))
+
+    def _delete_youtube_token() -> bool:
+        store = _get_secret_store()
+        if not store:
+            return False
+        return store.delete("youtube_oauth")
+
+    @bp.route("/api/settings/oauth/youtube/start", methods=["POST"])
+    def api_oauth_youtube_start():
+        """Generate OAuth URL and open browser for YouTube authorization."""
+        data = request.json or {}
+        redirect_uri = parse_str_param(data.get("redirect_uri", ""))
+        if not redirect_uri:
+            port = request.host.split(":")[-1] if ":" in request.host else "9527"
+            redirect_uri = f"http://localhost:{port}/api/settings/oauth/youtube/callback"
+
+        state = secrets.token_urlsafe(32)
+        _oauth_pending[state] = {"created_at": time.time(), "redirect_uri": redirect_uri}
+
+        # Clean up stale pending states (older than 10 minutes)
+        cutoff = time.time() - 600
+        stale = [k for k, v in _oauth_pending.items() if v.get("created_at", 0) < cutoff]
+        for k in stale:
+            _oauth_pending.pop(k, None)
+
+        client_id = _resolve_google_client_id()
+        if not client_id:
+            return jsonify({"error": "未配置 Google OAuth Client ID。请在设置中配置 GOOGLE_CLIENT_ID 环境变量。"}), 400
+
+        import urllib.parse
+        params = {
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "response_type": "code",
+            "scope": "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly",
+            "access_type": "offline",
+            "prompt": "consent",
+            "state": state,
+        }
+        auth_url = f"https://accounts.google.com/o/oauth2/auth?{urllib.parse.urlencode(params)}"
+
+        # Open system browser
+        try:
+            import webbrowser
+            webbrowser.open(auth_url)
+        except Exception as exc:
+            logger.warning("Failed to open browser for OAuth: %s", exc)
+
+        return jsonify({"ok": True, "auth_url": auth_url})
+
+    @bp.route("/api/settings/oauth/youtube/callback", methods=["GET"])
+    def api_oauth_youtube_callback():
+        """Handle Google OAuth callback — exchange code for tokens."""
+        code = request.args.get("code", "")
+        state = request.args.get("state", "")
+        error = request.args.get("error", "")
+
+        html_wrap = lambda title, body: (
+            f"<!DOCTYPE html><html><head><meta charset='utf-8'><title>{title}</title>"
+            f"<style>body{{font-family:system-ui;display:flex;justify-content:center;align-items:center;"
+            f"min-height:100vh;margin:0;background:#1a1a2e;color:#e0e0e0}}"
+            f".card{{background:#16213e;border-radius:12px;padding:40px;max-width:480px;text-align:center}}"
+            f"h2{{color:#5a8dee}}p{{color:#a0a0a0;line-height:1.6}}</style></head>"
+            f"<body><div class='card'>{body}</div></body></html>"
+        )
+
+        if error:
+            return html_wrap("授权失败", f"<h2>授权失败</h2><p>{error}</p><p>请关闭此页面并重试。</p>"), 400
+
+        if not state or state not in _oauth_pending:
+            return html_wrap("授权失败", "<h2>授权失败</h2><p>无效请求（state 不匹配）</p><p>请关闭此页面并重新发起授权。</p>"), 400
+
+        pending = _oauth_pending.pop(state)
+        redirect_uri = pending.get("redirect_uri", "")
+
+        if not code:
+            return html_wrap("授权失败", "<h2>授权失败</h2><p>未收到授权码</p>"), 400
+
+        # Exchange code for tokens
+        client_id = _resolve_google_client_id()
+        client_secret = _resolve_google_client_secret()
+        if not client_id or not client_secret:
+            return html_wrap("授权失败", "<h2>配置错误</h2><p>未配置 Google OAuth Client ID/Secret</p>"), 500
+
+        try:
+            import urllib.request
+            import urllib.parse
+            token_data = urllib.parse.urlencode({
+                "code": code,
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "redirect_uri": redirect_uri,
+                "grant_type": "authorization_code",
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                "https://oauth2.googleapis.com/token",
+                data=token_data,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                token_resp = json.loads(resp.read().decode("utf-8"))
+        except Exception as exc:
+            logger.error("YouTube OAuth token exchange failed: %s", exc)
+            return html_wrap("授权失败", f"<h2>Token 交换失败</h2><p>{exc}</p>"), 500
+
+        access_token = token_resp.get("access_token", "")
+        refresh_token = token_resp.get("refresh_token", "")
+        expires_in = int(token_resp.get("expires_in", 3600))
+        expires_at = time.time() + expires_in
+
+        if not access_token:
+            return html_wrap("授权失败", "<h2>未获得 access_token</h2>"), 500
+
+        # Fetch channel info
+        channel_name = ""
+        try:
+            ch_req = urllib.request.Request(
+                "https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            with urllib.request.urlopen(ch_req, timeout=10) as ch_resp:
+                ch_data = json.loads(ch_resp.read().decode("utf-8"))
+                items = ch_data.get("items", [])
+                if items:
+                    channel_name = items[0].get("snippet", {}).get("title", "")
+        except Exception as exc:
+            logger.warning("Failed to fetch YouTube channel info: %s", exc)
+
+        # Persist token
+        stored = {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "expires_at": expires_at,
+            "channel_name": channel_name,
+            "connected_at": time.time(),
+        }
+        _write_youtube_token(stored)
+
+        # Audit log
+        try:
+            from modules.app_api.services.audit_log import audit as _audit
+            _audit("oauth_connect", "youtube", channel_name or "unknown", actor=f"local:{request.remote_addr}")
+        except Exception:
+            pass
+
+        return html_wrap(
+            "授权成功",
+            f"<h2>授权成功！</h2>"
+            f"<p>已连接频道：<strong>{channel_name or '(未知频道)'}</strong></p>"
+            f"<p>请返回应用继续操作。此页面可安全关闭。</p>",
+        )
+
+    @bp.route("/api/settings/oauth/youtube/status", methods=["GET"])
+    def api_oauth_youtube_status():
+        """Check YouTube OAuth connection status."""
+        token = _read_youtube_token()
+        if not token or not token.get("access_token"):
+            return jsonify({"connected": False})
+        return jsonify({
+            "connected": True,
+            "channel_name": token.get("channel_name", ""),
+            "expires_at": token.get("expires_at", 0),
+            "connected_at": token.get("connected_at", 0),
+        })
+
+    @bp.route("/api/settings/oauth/youtube/disconnect", methods=["POST"])
+    def api_oauth_youtube_disconnect():
+        """Disconnect YouTube OAuth — remove stored token."""
+        token = _read_youtube_token()
+        channel = token.get("channel_name", "") if token else ""
+        _delete_youtube_token()
+        try:
+            from modules.app_api.services.audit_log import audit as _audit
+            _audit("oauth_disconnect", "youtube", channel or "unknown", actor=f"local:{request.remote_addr}")
+        except Exception:
+            pass
+        return jsonify({"ok": True})
+
+    # ── Webhook Connector Configuration ────────────────────────
+
+    @bp.route("/api/settings/connectors", methods=["GET"])
+    def api_get_connectors():
+        """List all configured webhook connectors."""
+        settings = load_publish_settings()
+        connectors = settings.get("connectors", {})
+        if not isinstance(connectors, dict):
+            connectors = {}
+        return jsonify({"ok": True, "connectors": mask_publish_connectors(connectors)})
+
+    @bp.route("/api/settings/connectors/<platform_id>", methods=["PUT"])
+    def api_put_connector(platform_id):
+        """Configure or update a webhook connector for a platform."""
+        from modules.app_api.services.audit_log import audit as _audit
+        pid = parse_str_param(platform_id).strip().lower()
+        if not pid:
+            return jsonify({"error": "platform_id 不能为空"}), 400
+
+        data = request.json or {}
+        url = parse_str_param(data.get("url", data.get("endpoint", ""))).strip()
+        if not url:
+            return jsonify({"error": "Webhook URL 不能为空"}), 400
+
+        import re
+        if not re.match(r'^https?://.+', url, re.IGNORECASE):
+            return jsonify({"error": "Webhook URL 格式不正确，需要 http:// 或 https:// 开头"}), 400
+
+        headers = data.get("headers", {})
+        if not isinstance(headers, dict):
+            headers = {}
+
+        timeout_s = 30
+        if "timeout_s" in data:
+            try:
+                timeout_s = max(5, min(120, int(data["timeout_s"])))
+            except (ValueError, TypeError):
+                timeout_s = 30
+
+        connector_entry = {
+            "kind": "webhook",
+            "endpoint": url,
+            "headers": headers,
+            "timeout_s": timeout_s,
+        }
+
+        settings = load_publish_settings()
+        connectors = settings.get("connectors", {})
+        if not isinstance(connectors, dict):
+            connectors = {}
+        connectors[pid] = connector_entry
+        save_publish_settings({"connectors": connectors})
+
+        _audit("connector_config", "webhook", pid, actor=f"local:{request.remote_addr}",
+               detail={"action": "upsert", "url_prefix": url[:30]})
+        return jsonify({"ok": True})
+
+    @bp.route("/api/settings/connectors/<platform_id>", methods=["DELETE"])
+    def api_delete_connector(platform_id):
+        """Delete a webhook connector for a platform."""
+        from modules.app_api.services.audit_log import audit as _audit
+        pid = parse_str_param(platform_id).strip().lower()
+        if not pid:
+            return jsonify({"error": "platform_id 不能为空"}), 400
+
+        settings = load_publish_settings()
+        connectors = settings.get("connectors", {})
+        if not isinstance(connectors, dict):
+            connectors = {}
+        removed = connectors.pop(pid, None)
+        save_publish_settings({"connectors": connectors})
+
+        _audit("connector_config", "webhook", pid, actor=f"local:{request.remote_addr}",
+               detail={"action": "delete", "had_config": removed is not None})
+        return jsonify({"ok": True})
+
+    @bp.route("/api/settings/connectors/<platform_id>/test", methods=["POST"])
+    def api_test_connector(platform_id):
+        """Test a webhook connector by sending a test payload."""
+        pid = parse_str_param(platform_id).strip().lower()
+        if not pid:
+            return jsonify({"error": "platform_id 不能为空"}), 400
+
+        settings = load_publish_settings()
+        connectors = settings.get("connectors", {})
+        if not isinstance(connectors, dict):
+            connectors = {}
+        connector = connectors.get(pid)
+        if not isinstance(connector, dict) or not connector:
+            return jsonify({"error": "该平台尚未配置连接器"}), 404
+
+        url = str(connector.get("endpoint", connector.get("url", "")) or "").strip()
+        if not url:
+            return jsonify({"error": "连接器缺少 URL"}), 400
+
+        headers = connector.get("headers", {})
+        if not isinstance(headers, dict):
+            headers = {}
+        timeout_s = int(connector.get("timeout_s", 30) or 30)
+
+        import urllib.request
+        test_payload = json.dumps({"test": True, "platform_id": pid}).encode("utf-8")
+        req_headers = {"Content-Type": "application/json"}
+        for hk, hv in headers.items():
+            req_headers[str(hk)] = str(hv)
+
+        try:
+            req = urllib.request.Request(url, data=test_payload, headers=req_headers, method="POST")
+            t0 = time.time()
+            with urllib.request.urlopen(req, timeout=min(timeout_s, 30)) as resp:
+                latency_ms = int((time.time() - t0) * 1000)
+                return jsonify({"ok": True, "status_code": resp.status, "latency_ms": latency_ms})
+        except Exception as exc:
+            return jsonify({"error": str(exc)[:200]}), 502
+
     return bp
+
+
+def _resolve_google_client_id() -> str:
+    """Resolve Google OAuth Client ID from environment."""
+    import os
+    return os.environ.get("GOOGLE_CLIENT_ID", "").strip()
+
+
+def _resolve_google_client_secret() -> str:
+    """Resolve Google OAuth Client Secret from environment."""
+    import os
+    return os.environ.get("GOOGLE_CLIENT_SECRET", "").strip()
 

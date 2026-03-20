@@ -28,6 +28,7 @@ export const useAppStore = defineStore('app', () => {
   const config = computed({ get: () => projectStore.config, set: v => { projectStore.config = v } })
   const showInit = computed({ get: () => projectStore.showInit, set: v => { projectStore.showInit = v } })
   const initMode = computed({ get: () => projectStore.initMode, set: v => { projectStore.initMode = v } })
+  const initProjectName = computed({ get: () => projectStore.initProjectName, set: v => { projectStore.initProjectName = v } })
   const initVideosDir = computed({ get: () => projectStore.initVideosDir, set: v => { projectStore.initVideosDir = v } })
   const initProjectDir = computed({ get: () => projectStore.initProjectDir, set: v => { projectStore.initProjectDir = v } })
   const initOpenDir = computed({ get: () => projectStore.initOpenDir, set: v => { projectStore.initOpenDir = v } })
@@ -91,8 +92,8 @@ export const useAppStore = defineStore('app', () => {
     return projectStore.loadRecentProjects()
   }
 
-  async function createProject(videosDir_, projectDir_) {
-    return projectStore.createProject(videosDir_, projectDir_)
+  async function createProject(videosDir_, projectDir_, projectName_) {
+    return projectStore.createProject(videosDir_, projectDir_, projectName_)
   }
 
   async function openProject(dir) {
@@ -141,7 +142,7 @@ export const useAppStore = defineStore('app', () => {
     preflightLoading, preflightMessage, preflightReport, preflightLastRunAt,
     uiSettings, uiSettingsLoading, uiSettingsSaving, uiSettingsMessage,
     showOnboardingWizard,
-    showInit, initMode, initVideosDir, initProjectDir, initOpenDir,
+    showInit, initMode, initProjectName, initVideosDir, initProjectDir, initOpenDir,
     initLoading, initError,
     recentProjects, recentProjectsLoading,
     // computed

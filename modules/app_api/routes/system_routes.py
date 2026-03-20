@@ -7,6 +7,8 @@ from typing import Any, Callable, Dict
 
 from flask import Blueprint, jsonify, request
 
+from modules.app_api.param_utils import parse_int_param, parse_str_param
+
 
 def create_system_blueprint(
     *,
@@ -77,11 +79,11 @@ def create_system_blueprint(
     @bp.route("/api/system/audit", methods=["GET"])
     def api_system_audit():
         from modules.app_api.services.audit_log import query as audit_query, count as audit_count
-        operation = str(request.args.get("operation", "") or "").strip()
-        resource_type = str(request.args.get("resource_type", "") or "").strip()
-        actor = str(request.args.get("actor", "") or "").strip()
-        since = str(request.args.get("since", "") or "").strip()
-        limit = min(int(request.args.get("limit", 200) or 200), 1000)
+        operation = parse_str_param(request.args.get("operation"))
+        resource_type = parse_str_param(request.args.get("resource_type"))
+        actor = parse_str_param(request.args.get("actor"))
+        since = parse_str_param(request.args.get("since"))
+        limit = parse_int_param(request.args.get("limit"), default=200, min_val=1, max_val=1000)
         entries = audit_query(
             operation=operation,
             resource_type=resource_type,
@@ -110,8 +112,8 @@ def create_system_blueprint(
         if not log_file or not log_file.exists():
             return jsonify({"error": "日志文件不可用"}), 404
         payload = request.json or {}
-        fmt = str(payload.get("format", "text")).lower()
-        tail_lines = int(payload.get("tail", 500))
+        fmt = parse_str_param(payload.get("format"), default="text").lower()
+        tail_lines = parse_int_param(payload.get("tail"), default=500, min_val=0, max_val=50000)
         lines = log_file.read_text(encoding="utf-8", errors="replace").splitlines()
         picked = lines[-tail_lines:] if tail_lines > 0 else lines
         if fmt == "json":

@@ -2,7 +2,7 @@
   <div>
     <h3>文字粗剪</h3>
     <div class="cap-section">
-      <div class="form-row"><label>去除口头词</label><input v-model="input.removed_phrases" class="form-input" placeholder="嗯,啊,然后,就是 (逗号分隔)" /></div>
+      <div class="form-row"><label>去除口头词</label><input v-model="input.removed_phrases" class="form-input" :placeholder="L.panelHints.textRoughCut.removedPhrasesPlaceholder" /></div>
       <div class="form-row"><label>目标时长(秒)</label><input v-model.number="input.target_duration_s" type="number" class="form-input" /></div>
       <div class="form-row"><label>合并间隔(秒)</label><input v-model.number="input.merge_gap_s" type="number" step="0.05" class="form-input" /></div>
       <div class="form-row"><label>保留句号</label><input v-model="input.keep_span_indexes" class="form-input" placeholder="如 1-5,8,10-12" /></div>
@@ -66,7 +66,9 @@ import { useApiStore } from '../../stores/api.js'
 import { useCapabilitiesStore } from '../../stores/capabilities.js'
 import { useAppStore } from '../../stores/app.js'
 import { useFormatters } from '../../composables/useFormatters.js'
+import labels from '../../i18n/labels.js'
 
+const L = labels
 const apiStore = useApiStore()
 const capStore = useCapabilitiesStore()
 const appStore = useAppStore()
