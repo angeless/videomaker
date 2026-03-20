@@ -4,6 +4,13 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/) 规范。
 
+## [0.9.1] - 2026-03-20
+
+### 修复 (Fixed)
+- 修复 386 个 PermissionError 测试错误：macOS TCC 安全机制下 `~/Downloads` 文件 `exists()` 返回 True 但 `open()` 被拒绝（BF-001）
+- 语义系统 seed 数据导入增加 PermissionError 防护，不可读时静默跳过
+- `test_semantic_system.py` / `test_tag_recall.py` skipif 条件改为实际文件可读性检查
+
 ## [0.9.0] - 2026-03-20
 
 ### 新增 (Added)
