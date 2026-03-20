@@ -65,3 +65,6 @@ project/app_state.db
 project/logs/
 project/**/__pycache__/
 project/.pytest_cache/
+
+# 项目数据缓存
+cache/

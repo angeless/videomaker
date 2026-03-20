@@ -1,0 +1,20 @@
+{
+  "upgrade_version": "1.3",
+  "project_name": "VideoEditor",
+  "snapshot_commit": "8898b86bf9c303ce006d4a8645d95ebb16665cc8",
+  "started_at": "2026-03-20T18:00:00+08:00",
+  "last_updated": "2026-03-20T21:15:00+08:00",
+  "current_stage": 2,
+  "git_available": true,
+  "project_scale": "L",
+  "branch_strategy": "S",
+  "stages": {
+    "1": { "status": "completed", "commit": null, "completed_at": "2026-03-20T21:15:00+08:00", "summary": "项目现状审计与规整 — 文件归档、目录创建、基线文件产出" },
+    "2": { "status": "in_progress", "commit": null, "completed_at": null, "summary": "CLAUDE.md 升级" },
+    "3": { "status": "pending", "commit": null, "completed_at": null, "summary": "技术规范四件套升级" },
+    "4": { "status": "pending", "commit": null, "completed_at": null, "summary": "UI 设计规范" },
+    "5": { "status": "pending", "commit": null, "completed_at": null, "summary": "测试基础设施构建" },
+    "6": { "status": "pending", "commit": null, "completed_at": null, "summary": "收尾与文档规范化" },
+    "7": { "status": "pending", "commit": null, "completed_at": null, "summary": "端到端验证" }
+  }
+}
