@@ -1,0 +1,45 @@
+# 变更日志
+
+所有重要变更都将被记录在此文件中。
+
+格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/) 规范。
+
+## [0.9.0] - 2026-03-20
+
+### 新增 (Added)
+- Playwright E2E 测试框架 + 15 个测试覆盖 5 条核心用户路径（T-0902）
+- 发布链路 OpenAPI 3.0 规范文档（29 个端点）+ `/api/docs/publish` 路由（T-0903）
+- 安全事件审计日志（Origin/CSRF/Token 失败记录）+ 暴力破解检测（T-0904）
+
+### 修改 (Changed)
+- server.py 从 7,643 行拆分至 1,936 行，提取 workflow_runner / publish_orchestrator / settings_service / template_service / governance_service 等 services 层（T-0901）
+- system_routes.py 补全 `parse_str_param` / `parse_int_param` 输入校验（T-0904）
+
+## [0.8.0] - 2026-03-19
+
+### 新增 (Added)
+- YouTube OAuth 2.0 完整授权流程（浏览器授权 + Keychain 存储 + 自动刷新）（T-0801）
+- 平台就绪状态标识（connector_ready / connector_kind / setup_hint）+ 前端三色芯片（T-0802）
+- 发布历史结构化展示（三标签页 + 可展开详情 + 分页加载）（T-0803）
+- 队列恢复 UI（中断任务检测 + 批量重试/忽略 + 启动横幅）（T-0804）
+- Webhook 连接器配置向导 + CRUD 4 端点 + 连接测试（T-0805）
+
+## [0.7.0] - 2026-03-19
+
+### 新增 (Added)
+- 发布面板术语人性化 + 平台 checkbox picker，移除 input_mode / session_id 等开发术语（T-0601）
+- 导出面板 toggle 卡片多选 + 结构化计划/结果展示（T-0602）
+- 发布面板错误恢复引导（recovery_hint 消费 + 错误分类 + 重试按钮）（T-0603）
+- 项目名可读化 + inline 重命名能力（project_meta.json）（T-0604）
+- 引导流程增强（交互式 3 步向导 + 文件夹导入）（T-0605）
+- 12 个能力面板表单默认值 + 占位符文案集中管理（T-0606）
+
+## [0.6.0] - 2026-03-19
+
+### 新增 (Added)
+- 审计日志系统
+- 队列恢复 UX 改进
+- YouTube 发布 connector 骨架
+
+### 修复 (Fixed)
+- 修复 23/26 UX 问题
