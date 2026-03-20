@@ -1,5 +1,8 @@
 """Security middleware extracted from server.py."""
 
+import time
+from typing import Dict, List
+
 from flask import jsonify, request
 
 
@@ -8,6 +11,11 @@ _REQUIRE_LOCAL_API_TOKEN = False
 _REQUIRE_CSRF_PROTECTION = True
 _LOCAL_API_TOKEN = ""
 _LOCAL_CSRF_TOKEN = ""
+
+# ── Brute-force detection state ──
+_auth_fail_counter: Dict[str, List[float]] = {}
+_BRUTE_FORCE_WINDOW = 60  # seconds
+_BRUTE_FORCE_THRESHOLD = 5  # failures per window
 
 
 def init(
@@ -68,6 +76,46 @@ def _get_security_state():
         return (_REQUIRE_LOCAL_API_TOKEN, _REQUIRE_CSRF_PROTECTION, _LOCAL_API_TOKEN, _LOCAL_CSRF_TOKEN)
 
 
+def _audit_security_event(operation: str, *, detail: dict | None = None) -> None:
+    """Best-effort write a security event to audit_log."""
+    try:
+        from modules.app_api.services.audit_log import audit
+        audit(
+            operation,
+            "security",
+            resource_id=str(request.path or ""),
+            actor=str(request.remote_addr or "unknown"),
+            status="blocked",
+            detail=detail,
+        )
+    except Exception:
+        pass
+
+
+def _record_auth_failure(ip: str) -> None:
+    """Track auth failure for brute-force detection.
+
+    When the same IP reaches _BRUTE_FORCE_THRESHOLD failures within
+    _BRUTE_FORCE_WINDOW seconds, emit a security_brute_force audit event.
+    """
+    now = time.time()
+    cutoff = now - _BRUTE_FORCE_WINDOW
+
+    # Append and prune in one pass
+    timestamps = _auth_fail_counter.get(ip, [])
+    timestamps = [t for t in timestamps if t > cutoff]
+    timestamps.append(now)
+    _auth_fail_counter[ip] = timestamps
+
+    if len(timestamps) >= _BRUTE_FORCE_THRESHOLD:
+        _audit_security_event(
+            "security_brute_force",
+            detail={"ip": ip, "failures": len(timestamps), "window_seconds": _BRUTE_FORCE_WINDOW},
+        )
+        # Reset counter after firing to avoid repeated events
+        _auth_fail_counter[ip] = []
+
+
 def _guard_local_api_token():
     if request.method == "OPTIONS":
         return None
@@ -78,6 +126,10 @@ def _guard_local_api_token():
     enforce_csrf = bool(req_csrf and req_token)
     origin = str(request.headers.get("Origin", "") or "").strip()
     if enforce_csrf and _is_mutating_method(request.method) and not _is_allowed_local_origin(origin):
+        _audit_security_event(
+            "security_origin_fail",
+            detail={"origin": origin, "method": request.method, "path": path},
+        )
         return jsonify({"error": "非法来源，请在本地应用内发起请求。", "code": "origin_forbidden"}), 403
     if path == "/api/session/bootstrap":
         return None
@@ -86,6 +138,10 @@ def _guard_local_api_token():
         if not provided_csrf:
             provided_csrf = str(request.args.get("_csrf", "") or "").strip()
         if provided_csrf != csrf_token:
+            _audit_security_event(
+                "security_csrf_fail",
+                detail={"method": request.method, "path": path},
+            )
             return (
                 jsonify(
                     {
@@ -103,6 +159,12 @@ def _guard_local_api_token():
     if not provided:
         provided = str(request.args.get("_vt", "") or "").strip()
     if provided != api_token:
+        ip = str(request.remote_addr or "unknown")
+        _audit_security_event(
+            "security_token_fail",
+            detail={"method": request.method, "path": path, "ip": ip},
+        )
+        _record_auth_failure(ip)
         return (
             jsonify(
                 {
