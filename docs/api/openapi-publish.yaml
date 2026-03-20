@@ -1,0 +1,1270 @@
+openapi: "3.0.3"
+info:
+  title: VideoEditor 发布链路 API
+  description: |
+    VideoEditor 桌面端发布相关的 REST API 文档。
+    覆盖内容发布、社媒导出、发布准备、YouTube OAuth、Webhook 连接器五组端点。
+    所有端点通过 Flask 服务于 `http://127.0.0.1:9527`。
+  version: "0.9.0"
+  contact:
+    name: VideoEditor Team
+
+servers:
+  - url: http://127.0.0.1:9527
+    description: 本地桌面开发服务器
+
+tags:
+  - name: content_publish
+    description: 内容发布——生成计划、执行发布、查看历史
+  - name: social_export
+    description: 社媒导出——按平台规格转码输出视频
+  - name: publish_prep
+    description: 发布准备——生成各平台文案包
+  - name: youtube_oauth
+    description: YouTube OAuth 2.0 授权管理
+  - name: connectors
+    description: Webhook 连接器配置与测试
+
+# ─────────────────────────────────────────────────────────────
+# PATHS
+# ─────────────────────────────────────────────────────────────
+paths:
+
+  # ══════════════════════════════════════════════════════════
+  #  GROUP 1: CONTENT PUBLISH (6 endpoints)
+  # ══════════════════════════════════════════════════════════
+
+  /api/capabilities/content_publish/platforms:
+    get:
+      tags: [content_publish]
+      summary: 获取可用发布平台列表
+      operationId: getPublishPlatforms
+      responses:
+        "200":
+          description: 成功返回平台列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkResponse"
+                  - type: object
+                    properties:
+                      platforms:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/PublishPlatform"
+              example:
+                ok: true
+                platforms:
+                  - platform_id: douyin
+                    name: 抖音
+                    supported: true
+                  - platform_id: xiaohongshu
+                    name: 小红书
+                    supported: true
+
+  /api/capabilities/content_publish/session/bootstrap:
+    post:
+      tags: [content_publish]
+      summary: 创建或续约发布会话
+      operationId: bootstrapPublishSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                input_mode:
+                  $ref: "#/components/schemas/InputMode"
+                actor_id:
+                  type: string
+                  description: 发布者标识
+                session_id:
+                  type: string
+                  description: 现有会话 ID（续约时提供）
+                authenticated:
+                  type: boolean
+                  default: false
+                expires_in_minutes:
+                  type: integer
+                  minimum: 1
+                  maximum: 43200
+                  default: 120
+            example:
+              input_mode: project
+              actor_id: user_local
+              authenticated: true
+              expires_in_minutes: 120
+      responses:
+        "200":
+          description: 会话创建成功
+          content:
+            application/json:
+              example:
+                ok: true
+                session:
+                  session_id: "abc123"
+                  actor_id: user_local
+                  authenticated: true
+                  created_at: "2026-03-20T10:00:00"
+                  expires_at: "2026-03-20T12:00:00"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/capabilities/content_publish/plan:
+    post:
+      tags: [content_publish]
+      summary: 生成内容发布计划
+      operationId: buildPublishPlan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [platforms]
+              properties:
+                input_mode:
+                  $ref: "#/components/schemas/InputMode"
+                platforms:
+                  type: array
+                  items:
+                    type: string
+                  description: 目标平台 ID 列表
+                platform_content_type:
+                  type: string
+                  enum: [video_post, article_post]
+                  default: video_post
+                dry_run:
+                  type: boolean
+                  default: true
+                session_id:
+                  type: string
+                humanization:
+                  type: object
+                  description: 人设参数（可选）
+            example:
+              input_mode: project
+              platforms: [douyin, xiaohongshu]
+              platform_content_type: video_post
+              dry_run: true
+      responses:
+        "200":
+          description: 计划生成成功
+          content:
+            application/json:
+              example:
+                ok: true
+                plan:
+                  plan_id: "a1b2c3d4e5"
+                  created_at: "2026-03-20T10:00:00"
+                  input_mode: project
+                  connector_count: 2
+                  platforms: [douyin, xiaohongshu]
+                  steps:
+                    - platform_id: douyin
+                      action: post
+                      dry_run: true
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/capabilities/content_publish/run:
+    post:
+      tags: [content_publish]
+      summary: 执行内容发布计划
+      description: |
+        执行已生成的发布计划。支持幂等性缓存——相同计划+连接器+dry_run
+        组合的成功结果会被缓存，重复调用直接返回缓存结果。
+      operationId: runPublishPlan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                input_mode:
+                  $ref: "#/components/schemas/InputMode"
+                plan:
+                  type: object
+                  description: 发布计划对象（省略则读取上次生成的计划）
+                session_id:
+                  type: string
+                dry_run:
+                  type: boolean
+                  default: false
+                rerun_failed_only:
+                  type: boolean
+                  default: false
+                random_seed:
+                  type: integer
+                  default: 7
+                output_root:
+                  type: string
+                  description: 输出目录（project 模式下默认为项目 output/content_publish）
+            example:
+              input_mode: project
+              dry_run: false
+      responses:
+        "200":
+          description: 执行完成
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OkResponse"
+                  - type: object
+                    properties:
+                      run:
+                        type: object
+                      state:
+                        type: string
+                        enum: [posted, planned, failed, waiting_auth]
+                      auth_required:
+                        type: boolean
+                      auth_hint:
+                        type: string
+              example:
+                ok: true
+                run:
+                  run_id: "f5g6h7i8j9"
+                  requested_at: "2026-03-20T10:05:00"
+                  input_mode: project
+                  result:
+                    status: posted
+                    summary:
+                      posted: 2
+                      failed: 0
+                      blocked: 0
+                state: posted
+                auth_required: false
+                auth_hint: ""
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/capabilities/content_publish/rerun:
+    post:
+      tags: [content_publish]
+      summary: 复跑历史发布记录
+      operationId: rerunPublishPlan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [run_id]
+              properties:
+                input_mode:
+                  $ref: "#/components/schemas/InputMode"
+                run_id:
+                  type: string
+                  description: 要复跑的 run_id
+                session_id:
+                  type: string
+                dry_run:
+                  type: boolean
+                  default: false
+                rerun_failed_only:
+                  type: boolean
+                  default: true
+                random_seed:
+                  type: integer
+                  default: 7
+                output_root:
+                  type: string
+            example:
+              input_mode: project
+              run_id: "f5g6h7i8j9"
+              rerun_failed_only: true
+      responses:
+        "200":
+          description: 复跑完成
+          content:
+            application/json:
+              example:
+                ok: true
+                run:
+                  run_id: "k1l2m3n4o5"
+                  requested_at: "2026-03-20T10:10:00"
+                  rerun_from: "f5g6h7i8j9"
+                state: posted
+                auth_required: false
+                rerun_from: "f5g6h7i8j9"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/capabilities/content_publish/history:
+    get:
+      tags: [content_publish]
+      summary: 查询发布历史
+      operationId: getPublishHistory
+      parameters:
+        - name: platform
+          in: query
+          schema:
+            type: string
+          description: 按平台过滤
+        - name: status
+          in: query
+          schema:
+            type: string
+          description: 按状态过滤（posted/failed/planned）
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 300
+            default: 50
+      responses:
+        "200":
+          description: 返回历史列表
+          content:
+            application/json:
+              example:
+                ok: true
+                runs:
+                  - run_id: "f5g6h7i8j9"
+                    requested_at: "2026-03-20T10:05:00"
+                    result:
+                      status: posted
+                total: 1
+
+  # ══════════════════════════════════════════════════════════
+  #  GROUP 2: SOCIAL EXPORT (10 endpoints)
+  # ══════════════════════════════════════════════════════════
+
+  /api/capabilities/social_export/profiles:
+    get:
+      tags: [social_export]
+      summary: 获取社媒导出配置列表
+      operationId: getSocialExportProfiles
+      parameters:
+        - $ref: "#/components/parameters/InputModeQuery"
+      responses:
+        "200":
+          description: 配置列表
+          content:
+            application/json:
+              example:
+                ok: true
+                input_mode: project
+                profiles:
+                  - platform_id: douyin
+                    max_duration: 900
+                    max_size_mb: 128
+                    is_custom: false
+                  - platform_id: xiaohongshu
+                    max_duration: 300
+                    max_size_mb: 100
+                    is_custom: true
+
+  /api/capabilities/social_export/specs:
+    get:
+      tags: [social_export]
+      summary: 获取各平台导出规格
+      operationId: getSocialExportSpecs
+      parameters:
+        - $ref: "#/components/parameters/InputModeQuery"
+      responses:
+        "200":
+          description: 规格列表
+          content:
+            application/json:
+              example:
+                ok: true
+                input_mode: project
+                specs:
+                  - platform_id: douyin
+                    resolution: "1080x1920"
+                    codec: h264
+                    fps: 30
+
+  /api/capabilities/social_export/templates:
+    get:
+      tags: [social_export]
+      summary: 获取已保存的导出模板
+      operationId: getSocialExportTemplates
+      parameters:
+        - $ref: "#/components/parameters/InputModeQuery"
+      responses:
+        "200":
+          description: 模板列表
+          content:
+            application/json:
+              example:
+                ok: true
+                input_mode: project
+                templates:
+                  - platform_id: douyin
+                    max_duration: 600
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+    post:
+      tags: [social_export]
+      summary: 创建或更新导出模板
+      operationId: upsertSocialExportTemplate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [platform_id]
+              properties:
+                input_mode:
+                  $ref: "#/components/schemas/InputMode"
+                platform_id:
+                  type: string
+            example:
+              input_mode: project
+              platform_id: douyin
+              max_duration: 600
+              max_size_mb: 200
+      responses:
+        "200":
+          description: 模板保存成功
+          content:
+            application/json:
+              example:
+                ok: true
+                input_mode: project
+                template:
+                  platform_id: douyin
+                  max_duration: 600
+                templates:
+                  - platform_id: douyin
+                    max_duration: 600
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/capabilities/social_export/templates/{template_id}:
+    delete:
+      tags: [social_export]
+      summary: 删除导出模板
+      operationId: deleteSocialExportTemplate
+      parameters:
+        - name: template_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 平台 ID（作为模板标识）
+        - $ref: "#/components/parameters/InputModeQuery"
+      responses:
+        "200":
+          description: 模板已删除
+          content:
+            application/json:
+              example:
+                ok: true
+                input_mode: project
+                deleted: douyin
+                templates: []
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/capabilities/social_export/history:
+    get:
+      tags: [social_export]
+      summary: 查询导出历史
+      operationId: getSocialExportHistory
+      parameters:
+        - $ref: "#/components/parameters/InputModeQuery"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 30
+      responses:
+        "200":
+          description: 导出历史列表
+          content:
+            application/json:
+              example:
+                ok: true
+                input_mode: project
+                history:
+                  - batch_id: "abc123"
+                    platforms: [douyin]
+                    status: done
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/capabilities/social_export/validate_source:
+    post:
+      tags: [social_export]
+      summary: 校验源视频是否符合平台规格
+      operationId: validateSourceForExport
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                input_mode:
+                  $ref: "#/components/schemas/InputMode"
+                input_video:
+                  type: string
+                  description: 视频路径（inline 模式必填，project 模式可省略使用母版）
+                platforms:
+                  type: array
+                  items:
+                    type: string
+                  default: [douyin, xiaohongshu, tiktok]
+                strict_duration_limit:
+                  type: boolean
+                  default: true
+                ffprobe_bin:
+                  type: string
+                  default: ffprobe
+            example:
+              input_mode: project
+              platforms: [douyin, xiaohongshu]
+              strict_duration_limit: true
+      responses:
+        "200":
+          description: 校验报告
+          content:
+            application/json:
+              example:
+                ok: true
+                input_mode: project
+                report:
+                  douyin:
+                    pass: true
+                    warnings: []
+                  xiaohongshu:
+                    pass: false
+                    warnings: ["视频时长超过平台限制"]
+                output: "/project/data/social_export_validation_last.json"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/capabilities/social_export/plan:
+    post:
+      tags: [social_export]
+      summary: 生成社媒导出计划
+      operationId: buildExportPlan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                input_mode:
+                  $ref: "#/components/schemas/InputMode"
+                input_video:
+                  type: string
+                platforms:
+                  type: array
+                  items:
+                    type: string
+                  default: [douyin, xiaohongshu, tiktok]
+                quality:
+                  type: string
+                  enum: [low, medium, high, lossless]
+                  default: high
+                ffmpeg_bin:
+                  type: string
+                  default: ffmpeg
+                ffprobe_bin:
+                  type: string
+                  default: ffprobe
+                strict_duration_limit:
+                  type: boolean
+                  default: true
+                output_dir:
+                  type: string
+                store_result:
+                  type: boolean
+                  default: true
+            example:
+              input_mode: project
+              platforms: [douyin, xiaohongshu]
+              quality: high
+      responses:
+        "200":
+          description: 导出计划
+          content:
+            application/json:
+              example:
+                ok: true
+                input_mode: project
+                plan:
+                  platforms:
+                    - platform_id: douyin
+                      output_file: "douyin_1080x1920.mp4"
+                      ffmpeg_args: ["-vf", "scale=1080:1920"]
+                output: "/project/data/social_export_plan.json"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/capabilities/social_export/run:
+    post:
+      tags: [social_export]
+      summary: 执行社媒导出（异步后台任务）
+      operationId: runSocialExport
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                input_mode:
+                  $ref: "#/components/schemas/InputMode"
+                input_video:
+                  type: string
+                output_dir:
+                  type: string
+                platforms:
+                  type: array
+                  items:
+                    type: string
+                quality:
+                  type: string
+                  enum: [low, medium, high, lossless]
+                  default: high
+                ffmpeg_bin:
+                  type: string
+                  default: ffmpeg
+                ffprobe_bin:
+                  type: string
+                  default: ffprobe
+                strict_duration_limit:
+                  type: boolean
+                  default: true
+                timeout_seconds:
+                  type: number
+                  minimum: 10
+                  maximum: 7200
+                  default: 3600
+            example:
+              input_mode: project
+              platforms: [douyin, xiaohongshu]
+              quality: high
+              timeout_seconds: 3600
+      responses:
+        "200":
+          description: 任务已提交
+          content:
+            application/json:
+              example:
+                ok: true
+                input_mode: project
+                job_id: "e1f2g3h4"
+                task_queue:
+                  running: 1
+                  pending: 0
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/capabilities/social_export/rerun:
+    post:
+      tags: [social_export]
+      summary: 复跑社媒导出批次
+      operationId: rerunSocialExport
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                input_mode:
+                  $ref: "#/components/schemas/InputMode"
+                batch_id:
+                  type: string
+                  description: 要复跑的批次 ID
+                batch:
+                  type: object
+                  description: inline 模式下直接传入历史批次对象
+                input_video:
+                  type: string
+                output_dir:
+                  type: string
+                platforms:
+                  type: array
+                  items:
+                    type: string
+                quality:
+                  type: string
+                  enum: [low, medium, high, lossless]
+                  default: high
+                timeout_seconds:
+                  type: number
+                  minimum: 10
+                  maximum: 7200
+                  default: 3600
+            example:
+              input_mode: project
+              batch_id: "abc123"
+              rerun_failed_only: true
+      responses:
+        "200":
+          description: 复跑任务已提交
+          content:
+            application/json:
+              example:
+                ok: true
+                input_mode: project
+                job_id: "i5j6k7l8"
+                rerun_from: "abc123"
+                task_queue:
+                  running: 1
+                  pending: 0
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ══════════════════════════════════════════════════════════
+  #  GROUP 3: PUBLISH PREP (3 endpoints)
+  # ══════════════════════════════════════════════════════════
+
+  /api/capabilities/publish_prep/profiles:
+    get:
+      tags: [publish_prep]
+      summary: 获取发布准备配置列表
+      operationId: getPublishPrepProfiles
+      responses:
+        "200":
+          description: 配置列表
+          content:
+            application/json:
+              example:
+                ok: true
+                profiles:
+                  - platform_id: douyin
+                    title_max_length: 55
+                    hashtag_count: 5
+                profile_count: 8
+                override_count: 1
+                profiles_file: "/project/data/publish_prep_profiles.json"
+
+    post:
+      tags: [publish_prep]
+      summary: 保存或合并配置覆盖
+      operationId: upsertPublishPrepProfiles
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profiles]
+              properties:
+                profiles:
+                  oneOf:
+                    - type: object
+                      description: 按平台 ID 为键的配置字典
+                    - type: array
+                      items:
+                        type: object
+                      description: 配置对象数组（需含 platform_id）
+                merge:
+                  type: boolean
+                  default: true
+                  description: 是否与现有配置合并（false 则覆盖）
+            example:
+              profiles:
+                douyin:
+                  platform_id: douyin
+                  title_max_length: 60
+              merge: true
+      responses:
+        "200":
+          description: 保存成功
+          content:
+            application/json:
+              example:
+                ok: true
+                profiles:
+                  - platform_id: douyin
+                    title_max_length: 60
+                profile_count: 8
+                override_count: 1
+                profiles_file: "/project/data/publish_prep_profiles.json"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/capabilities/publish_prep/generate:
+    post:
+      tags: [publish_prep]
+      summary: 生成各平台发布文案包
+      description: |
+        根据脚本和旁白文本，为指定平台生成标题、描述、标签等文案包。
+        支持可选 LLM 增强（配置 use_llm=true），无可用 API Key 时自动降级为规则引擎。
+      operationId: generatePublishPrep
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                input_mode:
+                  $ref: "#/components/schemas/InputMode"
+                script_text:
+                  type: string
+                  description: 脚本文本（project 模式可省略，自动从项目数据读取）
+                voiceover_text:
+                  type: string
+                  description: 旁白文本
+                platforms:
+                  type: array
+                  items:
+                    type: string
+                  default: [generic]
+                platform_content_type:
+                  type: string
+                  enum: [video_post, article_post]
+                  default: video_post
+                use_saved_profiles:
+                  type: boolean
+                  default: true
+                profile_overrides:
+                  type: object
+                  description: 临时配置覆盖
+                use_llm:
+                  type: boolean
+                  default: false
+                llm_provider:
+                  type: string
+                  description: LLM 服务商（优先级高于全局设置）
+                llm_model:
+                  type: string
+                llm_base_url:
+                  type: string
+                llm_api_key:
+                  type: string
+                store_result:
+                  type: boolean
+                  default: true
+            example:
+              input_mode: project
+              platforms: [douyin, xiaohongshu]
+              platform_content_type: video_post
+              use_llm: false
+      responses:
+        "200":
+          description: 文案包生成成功
+          content:
+            application/json:
+              example:
+                ok: true
+                input_mode: project
+                platforms: [douyin, xiaohongshu]
+                platform_content_type: video_post
+                use_llm: false
+                llm:
+                  enabled: false
+                  provider: ""
+                  model: ""
+                  fallback: true
+                result:
+                  douyin:
+                    title: "精彩旅行记录"
+                    description: "用镜头记录每一刻..."
+                    hashtags: ["旅行", "vlog"]
+                warnings: []
+                output: "/project/data/publish_prep_last.json"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  # ══════════════════════════════════════════════════════════
+  #  GROUP 4: YOUTUBE OAUTH (4 endpoints)
+  # ══════════════════════════════════════════════════════════
+
+  /api/settings/oauth/youtube/start:
+    post:
+      tags: [youtube_oauth]
+      summary: 发起 YouTube OAuth 授权流程
+      description: 生成 OAuth URL 并打开浏览器进行 Google 授权。
+      operationId: startYouTubeOAuth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                redirect_uri:
+                  type: string
+                  description: 回调 URI（默认 http://localhost:9527/api/settings/oauth/youtube/callback）
+            example:
+              redirect_uri: ""
+      responses:
+        "200":
+          description: OAuth URL 已生成
+          content:
+            application/json:
+              example:
+                ok: true
+                auth_url: "https://accounts.google.com/o/oauth2/v2/auth?client_id=...&state=..."
+        "400":
+          description: 未配置 Google OAuth Client ID
+          content:
+            application/json:
+              example:
+                error: "未配置 Google OAuth Client ID。请在设置中配置 GOOGLE_CLIENT_ID 环境变量。"
+
+  /api/settings/oauth/youtube/callback:
+    get:
+      tags: [youtube_oauth]
+      summary: Google OAuth 回调处理
+      description: |
+        由 Google 重定向调用，不应手动请求。
+        成功后存储 token 并返回 HTML 成功页面。
+      operationId: handleYouTubeOAuthCallback
+      parameters:
+        - name: code
+          in: query
+          schema:
+            type: string
+          description: Google 授权码
+        - name: state
+          in: query
+          schema:
+            type: string
+          description: CSRF 防护 state 参数
+        - name: error
+          in: query
+          schema:
+            type: string
+          description: 错误信息（授权失败时）
+      responses:
+        "200":
+          description: 授权成功（返回 HTML 页面）
+          content:
+            text/html:
+              example: "<html>...<h2>YouTube 授权成功</h2>...</html>"
+        "400":
+          description: 授权失败（返回 HTML 错误页面）
+          content:
+            text/html:
+              example: "<html>...<h2>授权失败</h2>...</html>"
+
+  /api/settings/oauth/youtube/status:
+    get:
+      tags: [youtube_oauth]
+      summary: 查询 YouTube 连接状态
+      operationId: getYouTubeOAuthStatus
+      responses:
+        "200":
+          description: 连接状态
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  connected:
+                    type: boolean
+                  channel_name:
+                    type: string
+                  expires_at:
+                    type: number
+                    description: Token 过期时间戳（0 表示未连接）
+                  connected_at:
+                    type: number
+                    description: 连接时间戳（0 表示未连接）
+              examples:
+                connected:
+                  summary: 已连接
+                  value:
+                    connected: true
+                    channel_name: "My Channel"
+                    expires_at: 1711000000
+                    connected_at: 1710900000
+                disconnected:
+                  summary: 未连接
+                  value:
+                    connected: false
+
+  /api/settings/oauth/youtube/disconnect:
+    post:
+      tags: [youtube_oauth]
+      summary: 断开 YouTube 连接
+      operationId: disconnectYouTubeOAuth
+      responses:
+        "200":
+          description: 已断开
+          content:
+            application/json:
+              example:
+                ok: true
+
+  # ══════════════════════════════════════════════════════════
+  #  GROUP 5: CONNECTORS (6 endpoints)
+  # ══════════════════════════════════════════════════════════
+
+  /api/settings/publish:
+    get:
+      tags: [connectors]
+      summary: 获取发布设置（含连接器摘要）
+      operationId: getPublishSettings
+      responses:
+        "200":
+          description: 发布设置
+          content:
+            application/json:
+              example:
+                ok: true
+                connectors:
+                  douyin:
+                    endpoint: "https://hook.exam***"
+                    configured: true
+                connector_count: 1
+
+    post:
+      tags: [connectors]
+      summary: 保存发布设置
+      operationId: savePublishSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                connectors:
+                  type: object
+                  description: 按平台 ID 为键的连接器配置字典
+            example:
+              connectors:
+                douyin:
+                  endpoint: "https://hooks.example.com/douyin"
+                  headers:
+                    Authorization: "Bearer token123"
+                  timeout_s: 30
+      responses:
+        "200":
+          description: 保存成功
+          content:
+            application/json:
+              example:
+                ok: true
+                connectors:
+                  douyin:
+                    endpoint: "https://hook.exam***"
+                    configured: true
+                connector_count: 1
+
+  /api/settings/connectors:
+    get:
+      tags: [connectors]
+      summary: 列出所有 Webhook 连接器
+      operationId: listConnectors
+      responses:
+        "200":
+          description: 连接器列表（URL 已脱敏）
+          content:
+            application/json:
+              example:
+                ok: true
+                connectors:
+                  douyin:
+                    endpoint: "https://hook.exam***"
+                    configured: true
+                  xiaohongshu:
+                    endpoint: ""
+                    configured: false
+
+  /api/settings/connectors/{platform_id}:
+    put:
+      tags: [connectors]
+      summary: 配置 Webhook 连接器
+      operationId: putConnector
+      parameters:
+        - name: platform_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 平台标识（如 douyin, xiaohongshu）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url:
+                  type: string
+                  description: Webhook URL（http 或 https）
+                endpoint:
+                  type: string
+                  description: url 的别名
+                headers:
+                  type: object
+                  additionalProperties:
+                    type: string
+                  description: 自定义请求头
+                timeout_s:
+                  type: integer
+                  minimum: 5
+                  maximum: 120
+                  default: 30
+            example:
+              url: "https://hooks.example.com/douyin"
+              headers:
+                Authorization: "Bearer token123"
+              timeout_s: 30
+      responses:
+        "200":
+          description: 配置成功
+          content:
+            application/json:
+              example:
+                ok: true
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+    delete:
+      tags: [connectors]
+      summary: 删除 Webhook 连接器
+      operationId: deleteConnector
+      parameters:
+        - name: platform_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 已删除
+          content:
+            application/json:
+              example:
+                ok: true
+
+  /api/settings/connectors/{platform_id}/test:
+    post:
+      tags: [connectors]
+      summary: 测试 Webhook 连接器
+      operationId: testConnector
+      parameters:
+        - name: platform_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 测试成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  status_code:
+                    type: integer
+                  latency_ms:
+                    type: integer
+              example:
+                ok: true
+                status_code: 200
+                latency_ms: 150
+        "404":
+          description: 平台未配置连接器
+          content:
+            application/json:
+              example:
+                error: "该平台尚未配置连接器"
+        "502":
+          description: Webhook 请求失败
+          content:
+            application/json:
+              example:
+                error: "Webhook 请求失败: Connection refused"
+
+# ─────────────────────────────────────────────────────────────
+# COMPONENTS
+# ─────────────────────────────────────────────────────────────
+components:
+
+  schemas:
+    OkResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "请求参数错误"
+
+    InputMode:
+      type: string
+      enum: [project, inline]
+      default: project
+      description: |
+        输入模式。project 需要已加载项目目录，inline 完全独立运行。
+
+    PublishPlatform:
+      type: object
+      properties:
+        platform_id:
+          type: string
+        name:
+          type: string
+        supported:
+          type: boolean
+
+  parameters:
+    InputModeQuery:
+      name: input_mode
+      in: query
+      schema:
+        $ref: "#/components/schemas/InputMode"
+      description: 输入模式（project 或 inline）
+
+  responses:
+    BadRequest:
+      description: 请求参数错误
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "请求参数错误"
+
+    NotFound:
+      description: 资源不存在
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "未找到指定资源"
+
+    ServerError:
+      description: 服务器内部错误
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "内部错误"

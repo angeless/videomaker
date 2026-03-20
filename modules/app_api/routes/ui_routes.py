@@ -8,9 +8,20 @@ from typing import Callable
 
 from flask import Blueprint, abort, send_file
 
+_DOCS_DIR = Path(__file__).resolve().parent.parent.parent.parent / "docs" / "api"
+
 
 def create_ui_blueprint(*, app_ui_dir_getter: Callable[[], Path]) -> Blueprint:
     bp = Blueprint("ui_api", __name__)
+
+    @bp.route("/api/docs/publish")
+    def serve_publish_openapi():
+        yaml_path = _DOCS_DIR / "openapi-publish.yaml"
+        if not yaml_path.exists():
+            abort(404)
+        resp = send_file(str(yaml_path), mimetype="application/x-yaml")
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
 
     @bp.route("/")
     def serve_index():
