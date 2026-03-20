@@ -1,6 +1,6 @@
 # VideoEditor — 项目主指令文件
 
-> 版本: v2.0 | 日期: 2026-03-19
+> 版本: v2.2 | 日期: 2026-03-20
 > 本文件是 VideoEditor 项目的统一入口指令，同时约束 Cowork（产品控制台）和 Claude Code（开发工作区）两种工作模式。
 
 ---
@@ -13,16 +13,25 @@
 1. project/docs/tech-specs/architecture.md        ← 架构与模块边界（了解系统结构）
 2. project/docs/tech-specs/dev-governance.md       ← 开发治理流程（了解怎么做开发）
 3. project/docs/tech-specs/coding-standards.md     ← 编码标准与质量要求（了解怎么写代码）
+4. project/docs/tech-specs/testing-strategy.md     ← 测试策略与规范（了解怎么做测试）
 ```
 
 **状态文件路由（每次开发循环必读）：**
 
 ```
-4. project/VERSION                                 ← 当前版本号
-5. project/CHANGELOG.md                            ← 变更日志（了解已完成的工作）
-6. project/docs/dev-plans/                         ← 开发计划文档（了解当前要做什么）
-7. project/docs/audit/                             ← 最近一次审计记录
-8. project/docs/test-reports/                      ← 最近一次测试报告
+5. project/VERSION                                 ← 当前版本号
+6. project/CHANGELOG.md                            ← 变更日志（了解已完成的工作）
+7. project/TODO_NEXT.md                            ← 待办进度（自动任务选择入口）
+8. project/docs/dev-plans/                         ← 开发计划文档（了解当前要做什么）
+9. project/docs/audit/                             ← 最近一次审计记录
+10. project/docs/test-reports/                     ← 最近一次测试报告
+```
+
+**经验文件路由（编码实现时按需读取）：**
+
+```
+11. docs/experience/common-errors.md               ← 已知错误模式（Phase 2 门禁自查）
+12. project/WISHLIST.md                            ← 衍生建议清单（Phase 7 写入）
 ```
 
 > 路径迁移已完成（2026-03-20）。以上路径相对于项目根目录，开发代码在 `project/` 子目录中。
@@ -194,11 +203,13 @@ PRD 至少应包含：文档标题、文档版本、日期、作者、需求背�
 1. project/docs/tech-specs/architecture.md        → 了解系统架构
 2. project/docs/tech-specs/dev-governance.md       → 了解开发流程
 3. project/docs/tech-specs/coding-standards.md     → 了解编码标准
-4. project/VERSION                                 → 了解当前版本
-5. project/CHANGELOG.md                            → 了解已完成工作
-6. git log --oneline -10                           → 了解最近 10 次提交
-7. project/docs/dev-plans/ 下最新的计划文档          → 了解当前任务
-8. project/docs/audit/ 下最新的审计记录（如有）       → 了解上次审计结果
+4. project/docs/tech-specs/testing-strategy.md     → 了解测试策略
+5. project/VERSION                                 → 了解当前版本
+6. project/CHANGELOG.md                            → 了解已完成工作
+7. project/TODO_NEXT.md                            → 了解待办进度（自动任务选择入口）
+8. git log --oneline -10                           → 了解最近 10 次提交
+9. project/docs/dev-plans/ 下最新的计划文档          → 了解当前任务
+10. project/docs/audit/ 下最新的审计记录（如有）      → 了解上次审计结果
 ```
 
 读取完成后，先输出一段"上下文摘要"：
@@ -207,8 +218,9 @@ PRD 至少应包含：文档标题、文档版本、日期、作者、需求背�
 当前版本: v{X.Y.Z}
 最近完成: {上次 commit 的任务概要}
 当前计划: {当前开发计划文件名}
-下一个待完成任务: R{N} — {任务名称}
+下一个待完成任务: v{X.Y.Z} — {任务名称}
 上次审计结果: {通过/有问题需处理}
+规范加载状态: {已加载/部分加载}
 ==============
 ```
 
@@ -402,7 +414,10 @@ videoeditor/                           # 根目录 — Cowork 产品控制台
 ├── CLAUDE.md                          # 本文件（双模式指令）
 ├── README.md                          # 项目总说明
 ├── docs/                              # 产品文档（PRD、竞品分析、UX 审计）
-│   └── PATH-MIGRATION-INSTRUCTIONS.md # 路径迁移指令
+│   ├── experience/common-errors.md    # 已知错误模式清单
+│   ├── prd/                           # PRD 文档
+│   ├── ux-audit/                      # UX 审计报告
+│   └── versions/                      # 版本发布说明
 │
 └── project/                           # Claude Code 开发工作区
     ├── .claude/CLAUDE.md              # Claude Code 项目级入口指令
@@ -412,9 +427,11 @@ videoeditor/                           # 根目录 — Cowork 产品控制台
     ├── tools/                         # 开发工具
     ├── VERSION                        # 版本号
     ├── CHANGELOG.md                   # 变更日志
+    ├── TODO_NEXT.md                   # 待办进度（自动任务选择入口）
+    ├── WISHLIST.md                    # 衍生建议清单
     ├── requirements.txt               # Python 依赖
     └── docs/                          # 技术文档
-        ├── tech-specs/                # 技术规范（架构/治理/编码标准）
+        ├── tech-specs/                # 技术规范（架构/治理/编码标准/测试策略）
         ├── dev-plans/                 # 开发计划（按版本/阶段）
         ├── audit/                     # 审计记录（每次迭代）
         ├── test-reports/              # 测试报告（每次迭代）
@@ -435,22 +452,27 @@ videoeditor/                           # 根目录 — Cowork 产品控制台
 | `project/docs/tech-specs/architecture.md` | 系统架构与模块边界 | Cowork + Claude Code |
 | `project/docs/tech-specs/dev-governance.md` | 开发治理流程 | Cowork |
 | `project/docs/tech-specs/coding-standards.md` | 编码标准与质量要求 | Cowork |
+| `project/docs/tech-specs/testing-strategy.md` | 测试策略与规范 | Cowork |
 | `project/VERSION` | 当前版本号 | Claude Code |
 | `project/CHANGELOG.md` | 变更日志 | Claude Code |
+| `project/TODO_NEXT.md` | 待办进度（自动任务选择入口） | Claude Code |
+| `project/WISHLIST.md` | 衍生建议清单 | Claude Code |
+| `docs/experience/common-errors.md` | 已知错误模式 | Claude Code |
 | `project/docs/dev-plans/*.md` | 开发计划 | Cowork 制定，Claude Code 执行 |
 | `project/docs/audit/*.md` | 审计记录 | Claude Code 产出，Cowork 审查 |
 | `project/docs/test-reports/*.md` | 测试报告 | Claude Code 产出 |
 | `project/docs/decisions/*.md` | 架构决策记录 | 双方共同维护 |
 
-## 三份技术规范文档的关系
+## 四份技术规范文档的关系
 
 ```
 architecture.md       →  定义"系统长什么样"（架构、模块、数据流）
 dev-governance.md     →  定义"怎么做开发"（流程、治理、留痕、接力）
 coding-standards.md   →  定义"怎么写代码"（编码、测试、错误处理、质量）
+testing-strategy.md   →  定义"怎么做测试"（测试类型、频次、流程、报告）
 ```
 
-三份文档共同约束所有开发行为，缺一不可。
+四份文档共同约束所有开发行为，缺一不可。
 
 ## 版本号与里程碑
 
@@ -474,6 +496,7 @@ coding-standards.md   →  定义"怎么写代码"（编码、测试、错误处
 | v1.0 | 2026-03-15 | 初版，仅含 Cowork 产品控制台指令 |
 | v2.0 | 2026-03-19 | 增加 Claude Code 自动化开发指令、技术规范文档路由、路径管理、项目上下文 |
 | v2.1 | 2026-03-20 | 路径迁移完成，所有路径引用更新为 project/ 前缀 |
+| v2.2 | 2026-03-20 | 升级流程阶段 2：添加 testing-strategy.md、TODO_NEXT.md、WISHLIST.md、common-errors.md 到路由；技术规范三件套升级为四件套 |
 
 ---
 
