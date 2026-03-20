@@ -3,8 +3,8 @@
   "project_name": "VideoEditor",
   "snapshot_commit": "8898b86bf9c303ce006d4a8645d95ebb16665cc8",
   "started_at": "2026-03-20T18:00:00+08:00",
-  "last_updated": "2026-03-20T22:30:00+08:00",
-  "current_stage": 5,
+  "last_updated": "2026-03-20T22:45:00+08:00",
+  "current_stage": 6,
   "git_available": true,
   "project_scale": "L",
   "branch_strategy": "S",
@@ -13,8 +13,8 @@
     "2": { "status": "completed", "commit": "d2836ad", "completed_at": "2026-03-20T21:25:00+08:00", "summary": "CLAUDE.md 升级 — 四件套路由、TODO_NEXT/WISHLIST/common-errors 引用" },
     "3": { "status": "completed", "commit": "ab093de", "completed_at": "2026-03-20T22:00:00+08:00", "summary": "技术规范四件套升级 — testing-strategy.md 新建、dev-governance.md 第12章自动化基础设施" },
     "4": { "status": "completed", "commit": "3ec5b3d", "completed_at": "2026-03-20T22:30:00+08:00", "summary": "UI 设计规范 — VideoEditor-Design-System-v1.0.html 含双主题 Token 体系" },
-    "5": { "status": "in_progress", "commit": null, "completed_at": null, "summary": "测试基础设施构建" },
-    "6": { "status": "pending", "commit": null, "completed_at": null, "summary": "收尾与文档规范化" },
+    "5": { "status": "completed", "commit": "130a17e", "completed_at": "2026-03-20T22:45:00+08:00", "summary": "测试基础设施构建 — ci_verify.sh 8项检查全部基线通过" },
+    "6": { "status": "in_progress", "commit": null, "completed_at": null, "summary": "收尾与文档规范化" },
     "7": { "status": "pending", "commit": null, "completed_at": null, "summary": "端到端验证" }
   }
 }

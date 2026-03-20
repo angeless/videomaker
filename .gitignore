@@ -68,3 +68,16 @@ project/.pytest_cache/
 
 # 项目数据缓存
 cache/
+
+# === 自动化工作流 ===
+# 临时数据库文件
+.tmp_*.db
+# 发布恢复测试
+.tmp_publish_recovery_test/
+project/.tmp_publish_recovery_test/
+# blog 输出
+blog/
+project/blog/
+project/apps/desktop/ui-vue/blog/
+# 视频输出
+output_*/
