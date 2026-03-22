@@ -11,7 +11,7 @@ from typing import Any, Callable, Dict, Optional
 
 from flask import Blueprint, jsonify, request
 
-from modules.app_api.param_utils import parse_str_param
+from modules.app_api.param_utils import parse_str_param, safe_error_response
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +53,14 @@ def create_settings_blueprint(
             }
         )
 
+    @bp.route("/api/settings", methods=["GET"])
+    def api_get_settings_aggregated():
+        from modules.app_api.services.settings_service import _mask_secret
+        ai = load_ai_settings()
+        ai_public = public_ai_settings(ai)
+        ui = load_ui_settings()
+        return jsonify({"ok": True, "ai": ai_public, "ui": ui})
+
     @bp.route("/api/settings/ai", methods=["GET"])
     def api_get_ai_settings():
         ai = load_ai_settings()
@@ -61,11 +69,54 @@ def create_settings_blueprint(
     @bp.route("/api/settings/ai", methods=["POST"])
     def api_save_ai_settings():
         from modules.app_api.services.audit_log import audit as _audit
+        from modules.app_api.services.settings_service import _AI_PROVIDER_CATALOG, _AI_PROVIDER_ALIASES
         data = request.json or {}
+        raw_provider = parse_str_param(data.get("provider", "")).lower()
+        if raw_provider:
+            normalized = _AI_PROVIDER_ALIASES.get(raw_provider)
+            if normalized is None or normalized not in _AI_PROVIDER_CATALOG:
+                valid = sorted(_AI_PROVIDER_CATALOG.keys())
+                return jsonify({"error": f"provider 不合法，合法值为：{' / '.join(valid)}"}), 400
         ai = save_ai_settings(data)
         apply_ai_env(ai)
         _audit("config_change", "settings", "ai", actor=f"local:{request.remote_addr}", detail={"keys_changed": sorted(data.keys())})
         return jsonify({"ok": True, **public_ai_settings(ai)})
+
+    @bp.route("/api/settings/ai/test", methods=["POST"])
+    def api_test_ai_connection():
+        import socket
+        ai = load_ai_settings()
+        provider = ai.get("provider", "")
+        api_key = ai.get("openai_api_key", "") or ai.get("anthropic_api_key", "")
+        if not provider:
+            return jsonify({"ok": False, "error": "未配置 AI 服务商"})
+        if not api_key:
+            return jsonify({"ok": False, "error": "未配置 API Key"})
+        base_url = ai.get("ai_base_url", "") or ""
+        try:
+            import urllib.request
+            import urllib.error
+            test_url = base_url.rstrip("/") + "/models" if base_url else ""
+            if not test_url:
+                from modules.app_api.services.settings_service import _AI_PROVIDER_CATALOG
+                cat = _AI_PROVIDER_CATALOG.get(provider, {})
+                test_url = (cat.get("default_base_url", "") or "").rstrip("/") + "/models"
+            if not test_url:
+                return jsonify({"ok": False, "error": f"无法确定 {provider} 的 API 地址"})
+            req = urllib.request.Request(test_url, method="GET")
+            req.add_header("Authorization", f"Bearer {api_key}")
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                return jsonify({"ok": True})
+        except urllib.error.HTTPError as e:
+            if e.code == 401:
+                return jsonify({"ok": False, "error": "API Key 无效（401 认证失败）"})
+            if e.code == 403:
+                return jsonify({"ok": False, "error": "API Key 权限不足（403）"})
+            return jsonify({"ok": False, "error": f"服务端返回 HTTP {e.code}"})
+        except (urllib.error.URLError, socket.timeout, OSError) as e:
+            return jsonify({"ok": False, "error": f"连接失败：{e}"})
+        except Exception as e:
+            return jsonify({"ok": False, "error": f"连接失败：{e}"})
 
     @bp.route("/api/settings/ui", methods=["GET"])
     def api_get_ui_settings():
@@ -423,7 +474,41 @@ def create_settings_blueprint(
                 latency_ms = int((time.time() - t0) * 1000)
                 return jsonify({"ok": True, "status_code": resp.status, "latency_ms": latency_ms})
         except Exception as exc:
-            return jsonify({"error": str(exc)[:200]}), 502
+            return jsonify({"error": safe_error_response(exc, "连接测试失败")}), 502
+
+    # ── R9: Subscription feature gate ──
+
+    def _feature_gate():
+        from modules.subscription import FeatureGate
+        from modules.app_api.services.settings_service import _settings_path
+        return FeatureGate(settings_path=_settings_path())
+
+    @bp.route("/api/subscription/status", methods=["GET"])
+    def api_subscription_status():
+        gate = _feature_gate()
+        return jsonify({
+            "tier": gate.tier.value,
+            "features": gate.all_features(),
+        })
+
+    @bp.route("/api/subscription/gate", methods=["GET"])
+    def api_subscription_gate():
+        feature = (request.args.get("feature", "") or "").strip()
+        if not feature:
+            return jsonify({"error": "feature param required"}), 400
+        gate = _feature_gate()
+        return jsonify(gate.gate(feature))
+
+    @bp.route("/api/subscription/upgrade", methods=["POST"])
+    def api_subscription_upgrade():
+        from modules.subscription import Tier
+        body = request.get_json(silent=True) or {}
+        tier_str = str(body.get("tier", "") or "").lower()
+        if tier_str not in ("free", "pro"):
+            return jsonify({"error": "tier must be 'free' or 'pro'"}), 400
+        gate = _feature_gate()
+        gate.set_tier(Tier(tier_str))
+        return jsonify({"ok": True, "tier": tier_str})
 
     return bp
 

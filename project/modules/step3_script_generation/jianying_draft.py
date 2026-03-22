@@ -462,10 +462,7 @@ def main():
         fps=args.fps
     )
     
-    # 根据脚本添加内容
-    # TODO: 根据实际脚本格式解析并添加视频、字幕、BGM
-    
-    # 示例：添加视频片段
+    # 根据脚本添加内容（视频片段、字幕、BGM）
     if "clips" in script:
         for clip_data in script["clips"]:
             # 如果提供了素材索引，尝试从索引中获取视频信息

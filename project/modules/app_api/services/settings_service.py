@@ -267,6 +267,8 @@ def _get_recent_projects() -> List[Dict[str, Any]]:
                 status = "draft"
         else:
             status = "missing"
+        if status == "missing" and not proj_path.exists():
+            continue  # M3: skip missing/deleted projects
         result.append({
             "path": p,
             "name": entry.get("name", proj_path.name),
@@ -278,6 +280,25 @@ def _get_recent_projects() -> List[Dict[str, Any]]:
             "exists": proj_path.exists(),
         })
     return result
+
+
+def cleanup_missing_projects() -> int:
+    """Remove projects whose directories no longer exist from recent list.
+
+    Returns the number of removed entries.
+    """
+    settings = _read_settings()
+    recents = settings.get("recent_projects", [])
+    if not isinstance(recents, list):
+        return 0
+    original_count = len(recents)
+    cleaned = [
+        entry for entry in recents
+        if isinstance(entry, dict) and Path(entry.get("path", "")).exists()
+    ]
+    settings["recent_projects"] = cleaned
+    _write_settings(settings)
+    return original_count - len(cleaned)
 
 
 def _normalize_publish_connectors(raw: Any) -> Dict[str, Dict[str, Any]]:

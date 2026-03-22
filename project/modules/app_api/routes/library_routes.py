@@ -10,7 +10,7 @@ import uuid
 
 from flask import Blueprint, jsonify, request, send_file, abort
 
-from modules.app_api.param_utils import parse_int_param
+from modules.app_api.param_utils import parse_int_param, safe_error_response
 
 logger = logging.getLogger(__name__)
 
@@ -82,11 +82,13 @@ def create_library_blueprint(
     @bp.route("/api/library/search")
     def api_library_search():
         query = (request.args.get("q", "") or "").strip()
+        if len(query) > 500:
+            return jsonify({"error": "query 长度超出限制（最大 500 字符）"}), 400
         retrieval_mode = (request.args.get("mode", "hybrid") or "hybrid").strip().lower()
         media_type = (request.args.get("media_type", "all") or "all").strip().lower()
         if media_type not in {"all", "video", "image"}:
             media_type = "all"
-        if retrieval_mode not in {"hybrid", "keyword", "vector"}:
+        if retrieval_mode not in {"hybrid", "keyword", "vector", "visual", "fusion"}:
             retrieval_mode = "hybrid"
         default_limit = 120 if not query else 150
         limit = parse_int_param(request.args.get("limit", default_limit), default=default_limit, min_val=1, max_val=500)
@@ -122,6 +124,8 @@ def create_library_blueprint(
                 "embedding_status": stats.get("embedding_status", ""),
                 "embedding_status_message": stats.get("embedding_status_message", ""),
                 "embedding_ready_assets": int(stats.get("embedding_ready_assets", 0)),
+                "visual_search_enabled": bool(stats.get("visual_search_enabled", False)),
+                "visual_embeddings_count": int(stats.get("visual_embeddings_count", 0)),
                 "truncated": has_more,
                 "has_more": has_more,
                 "results": results,
@@ -579,7 +583,7 @@ def create_library_blueprint(
                 max_results=max_results,
             )
         except Exception as exc:
-            return jsonify({"error": str(exc)}), 400
+            return jsonify({"error": safe_error_response(exc, "导入预览失败")}), 400
         return jsonify({"ok": True, "preview": preview})
 
     @bp.route("/api/library/ingest/gdrive/images", methods=["POST"])
@@ -676,7 +680,7 @@ def create_library_blueprint(
                 max_results=max_results,
             )
         except Exception as exc:
-            return jsonify({"error": str(exc)}), 400
+            return jsonify({"error": safe_error_response(exc, "导入预览失败")}), 400
         return jsonify({"ok": True, "preview": preview})
 
     # ── v0.7 Fingerprint / Path Relocation / Dedup endpoints ──

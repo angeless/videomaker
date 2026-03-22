@@ -11,7 +11,7 @@ import uuid
 
 from flask import Blueprint, jsonify, request
 
-from modules.app_api.param_utils import parse_float_param, parse_int_param, parse_str_param
+from modules.app_api.param_utils import parse_float_param, parse_int_param, parse_str_param, safe_error_response
 
 
 def create_agent_task_run_blueprint(
@@ -416,7 +416,7 @@ def create_agent_task_run_blueprint(
             try:
                 resolved = resolve_agent_primary_call(capability_id=capability_id, routes=routes, action=action)
             except Exception as exc:
-                return jsonify({"error": str(exc)}), 400
+                return jsonify({"error": safe_error_response(exc, "任务调度失败")}), 400
             method = resolved["method"]
             endpoint = resolved["endpoint"]
 

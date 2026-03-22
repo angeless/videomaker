@@ -36,7 +36,9 @@ def create_content_publish_capability_blueprint(
         from modules.capabilities.content_publish import list_publish_platforms
 
         connectors = resolve_content_publish_connectors({})
-        return jsonify({"ok": True, **list_publish_platforms(connectors=connectors)})
+        resp = jsonify({"ok": True, **list_publish_platforms(connectors=connectors)})
+        resp.headers["Content-Type"] = "application/json; charset=utf-8"
+        return resp
 
     @bp.route("/api/capabilities/content_publish/session/bootstrap", methods=["POST"])
     def api_content_publish_session_bootstrap():

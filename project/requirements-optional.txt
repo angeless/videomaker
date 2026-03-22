@@ -1,0 +1,17 @@
+# VideoEditor 可选依赖（AI / 高级功能）
+# 按需安装：pip install -r requirements-optional.txt
+
+# ── 语义搜索 CLIP ──
+torch>=1.12.0
+torchvision>=0.13.0
+transformers>=4.20.0
+sentence-transformers>=2.2.0
+ftfy
+regex
+
+# ── 高级磨皮 ──
+mediapipe>=0.10.0
+
+# ── 音频分析 ──
+librosa>=0.9.0
+faster-whisper>=0.10.0

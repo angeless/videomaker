@@ -16,6 +16,8 @@ class _FakeLibraryNoKey:
 
 
 class _FakeLibraryReady:
+    _clip_encoder = True  # R6: simulate CLIP available
+
     @staticmethod
     def _vision_enrich_enabled():
         return True

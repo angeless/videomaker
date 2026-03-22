@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 
 
 def create_timeline_blueprint(
@@ -64,7 +64,7 @@ def create_timeline_blueprint(
 
         clips_raw = script.get("clips", [])
         subtitles_raw = script.get("subtitles", [])
-        transition_dur = float(config.get("transition_duration", 0.35) or 0.35)
+        transition_dur = max(0.0, min(float(config.get("transition_duration", 0.35) or 0.35), 5.0))
         status = _clip_processing_status(project_dir, ws)
 
         # Build timeline clips with absolute positions
@@ -125,10 +125,10 @@ def create_timeline_blueprint(
             "ok": True,
             "timeline": {
                 "total_duration": total_duration,
-                "fps": int(config.get("fps", 30) or 30),
+                "fps": max(1, min(int(config.get("fps", 30) or 30), 120)),
                 "resolution": {
-                    "width": int(config.get("width", 1080) or 1080),
-                    "height": int(config.get("height", 1920) or 1920),
+                    "width": max(1, min(int(config.get("width", 1080) or 1080), 7680)),
+                    "height": max(1, min(int(config.get("height", 1920) or 1920), 7680)),
                 },
                 "transition": {
                     "style": str(config.get("transition_style", "fade") or "fade"),
@@ -139,5 +139,173 @@ def create_timeline_blueprint(
                 "audio": audio,
             },
         })
+
+    @bp.route("/api/timeline/edit-by-prompt", methods=["POST"])
+    def api_timeline_edit_by_prompt():
+        """Apply a natural language editing command to the timeline."""
+        project_dir = project_dir_getter()
+        if project_dir is None:
+            return jsonify({"error": "no project"}), 400
+
+        body = request.get_json(silent=True) or {}
+        prompt = str(body.get("prompt", "") or "").strip()
+        if not prompt:
+            return jsonify({"error": "prompt is required"}), 400
+        if len(prompt) > 500:
+            return jsonify({"error": "prompt too long (max 500 chars)"}), 400
+
+        script_path = project_dir / "data" / "script_matched.json"
+        if not script_path.exists():
+            return jsonify({"error": "script_matched.json not found"}), 404
+
+        try:
+            script = json.loads(script_path.read_text(encoding="utf-8"))
+        except Exception as e:
+            return jsonify({"error": f"failed to read script: {e}"}), 500
+
+        clips = script.get("clips", [])
+        if not clips:
+            return jsonify({"error": "no clips in timeline"}), 400
+
+        from modules.prompt_editing import parse_edit_command, execute_edit_command
+
+        command = parse_edit_command(prompt)
+        if not command.valid:
+            return jsonify({
+                "ok": False,
+                "error": "无法理解该编辑指令",
+                "raw": prompt,
+                "hint": "支持的指令：删除/移动/裁剪/倒序/加速减速 + 片段编号",
+            }), 400
+
+        new_clips, summary = execute_edit_command(clips, command)
+        if "error" in summary:
+            return jsonify({"ok": False, "error": summary["error"]}), 400
+
+        # Persist
+        script["clips"] = new_clips
+        script_path.write_text(
+            json.dumps(script, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        return jsonify({
+            "ok": True,
+            "command": {
+                "action": command.action,
+                "targets": command.targets,
+                "params": command.params,
+            },
+            "summary": summary,
+            "clips_count": len(new_clips),
+        })
+
+    @bp.route("/api/timeline/reorder", methods=["POST"])
+    def api_timeline_reorder():
+        """Reorder clips in script_matched.json by new clip_index order."""
+        project_dir = project_dir_getter()
+        if project_dir is None:
+            return jsonify({"error": "no project"}), 400
+
+        body = request.get_json(silent=True) or {}
+        new_order = body.get("order")
+        if not isinstance(new_order, list) or not new_order:
+            return jsonify({"error": "order must be a non-empty list of clip_index values"}), 400
+
+        script_path = project_dir / "data" / "script_matched.json"
+        if not script_path.exists():
+            return jsonify({"error": "script_matched.json not found"}), 404
+
+        try:
+            script = json.loads(script_path.read_text(encoding="utf-8"))
+        except Exception as e:
+            return jsonify({"error": f"failed to read script: {e}"}), 500
+
+        clips = script.get("clips", [])
+        if not clips:
+            return jsonify({"error": "no clips in script"}), 400
+
+        # Build index map: clip_index → clip dict
+        by_index = {}
+        for clip in clips:
+            if isinstance(clip, dict):
+                idx = clip.get("clip_index")
+                if idx is not None:
+                    by_index[idx] = clip
+
+        # Validate all requested indices exist
+        for idx in new_order:
+            if idx not in by_index:
+                return jsonify({"error": f"clip_index {idx} not found"}), 400
+
+        # Reorder clips and reassign clip_index
+        reordered = []
+        for new_idx, old_idx in enumerate(new_order, start=1):
+            clip = dict(by_index[old_idx])
+            clip["clip_index"] = new_idx
+            reordered.append(clip)
+
+        script["clips"] = reordered
+        script_path.write_text(
+            json.dumps(script, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        return jsonify({"ok": True, "reordered_count": len(reordered)})
+
+    @bp.route("/api/timeline/trim", methods=["POST"])
+    def api_timeline_trim():
+        """Trim a clip's source_start/source_end in script_matched.json."""
+        project_dir = project_dir_getter()
+        if project_dir is None:
+            return jsonify({"error": "no project"}), 400
+
+        body = request.get_json(silent=True) or {}
+        clip_index = body.get("clip_index")
+        source_start = body.get("source_start")
+        source_end = body.get("source_end")
+
+        if clip_index is None:
+            return jsonify({"error": "clip_index required"}), 400
+        if source_start is None or source_end is None:
+            return jsonify({"error": "source_start and source_end required"}), 400
+
+        try:
+            source_start = float(source_start)
+            source_end = float(source_end)
+        except (ValueError, TypeError):
+            return jsonify({"error": "source_start/source_end must be numbers"}), 400
+
+        if source_end <= source_start:
+            return jsonify({"error": "source_end must be > source_start"}), 400
+
+        script_path = project_dir / "data" / "script_matched.json"
+        if not script_path.exists():
+            return jsonify({"error": "script_matched.json not found"}), 404
+
+        try:
+            script = json.loads(script_path.read_text(encoding="utf-8"))
+        except Exception as e:
+            return jsonify({"error": f"failed to read script: {e}"}), 500
+
+        clips = script.get("clips", [])
+        updated = False
+        for clip in clips:
+            if isinstance(clip, dict) and clip.get("clip_index") == clip_index:
+                clip["source_start"] = round(source_start, 3)
+                clip["source_end"] = round(source_end, 3)
+                clip["duration"] = round(source_end - source_start, 3)
+                updated = True
+                break
+
+        if not updated:
+            return jsonify({"error": f"clip_index {clip_index} not found"}), 404
+
+        script_path.write_text(
+            json.dumps(script, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        return jsonify({"ok": True})
 
     return bp

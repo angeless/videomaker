@@ -19,6 +19,11 @@ export const useAppStore = defineStore('app', () => {
   const prefsStore = usePreferencesStore()
 
   const loading = ref(true)
+  const preflightAcknowledged = ref(false)
+  const preflightErrorCount = computed(() => {
+    const report = systemStore.preflightReport
+    return report?.summary?.error || 0
+  })
 
   // ── 向后兼容 re-export (project) ──
   const projectDir = computed({ get: () => projectStore.projectDir, set: v => { projectStore.projectDir = v } })
@@ -136,7 +141,7 @@ export const useAppStore = defineStore('app', () => {
 
   return {
     // state
-    loading,
+    loading, preflightAcknowledged, preflightErrorCount,
     projectDir, videosDir, currentStep, steps, config,
     systemLoad, runningHeavyJobs, taskQueue,
     preflightLoading, preflightMessage, preflightReport, preflightLastRunAt,

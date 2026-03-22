@@ -89,7 +89,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useAppStore } from '../../stores/app.js'
 import { usePreferencesStore } from '../../stores/preferences.js'
 import { useApiStore } from '../../stores/api.js'
@@ -131,6 +131,12 @@ function prevStep() {
     persistStep(step.value)
   }
 }
+
+function onEscKey(e) {
+  if (e.key === 'Escape') skip()
+}
+onMounted(() => window.addEventListener('keydown', onEscKey))
+onUnmounted(() => window.removeEventListener('keydown', onEscKey))
 
 function skip() {
   appStore.dismissOnboarding(true)

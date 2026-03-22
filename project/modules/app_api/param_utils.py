@@ -76,6 +76,18 @@ def parse_str_param(value: Any, default: str = "") -> str:
     return str(value or default).strip()
 
 
+def safe_error_response(exc: Exception, fallback_msg: str = "操作失败，请重试") -> str:
+    """Return a user-friendly error string from an exception.
+
+    Strips Python-internal traceback details; keeps the first line of the
+    message up to 120 chars so it is safe to display in a toast.
+    """
+    msg = str(exc).strip().split("\n")[0][:120]
+    if not msg or msg.startswith("Traceback") or "Error" in type(exc).__name__:
+        return fallback_msg
+    return msg
+
+
 def write_json_result(path_obj: Any, data: Any) -> bool:
     """Write *data* as pretty-printed JSON to *path_obj* if it is not None.
 

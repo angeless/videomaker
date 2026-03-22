@@ -172,6 +172,43 @@ def run_startup_preflight(
         data={"path": ffprobe_path},
     )
 
+    # Hardware detection (best-effort, never blocks startup)
+    hw_profile = None
+    try:
+        from modules.hardware.detector import get_system_profile
+        from modules.hardware.encoding_strategy import choose_encoder, suggest_max_concurrent
+        hw_profile = get_system_profile()
+        enc = choose_encoder(hw_profile)
+        max_conc = suggest_max_concurrent(hw_profile)
+        _check(
+            checks,
+            check_id="hardware.profile",
+            title="硬件自适应",
+            ok=True,
+            detail_ok=f"CPU {hw_profile.cpu.physical_cores}核 / RAM {hw_profile.memory.total_gb}GB / 编码器: {enc.label}",
+            detail_bad="",
+            severity_on_bad="warning",
+            data={
+                "cpu_cores": hw_profile.cpu.physical_cores,
+                "ram_gb": hw_profile.memory.total_gb,
+                "gpu_vendor": hw_profile.gpu.vendor,
+                "encoder": enc.video_encoder,
+                "encoder_label": enc.label,
+                "hwaccels": hw_profile.ffmpeg_hwaccels,
+                "suggested_max_concurrent": max_conc,
+            },
+        )
+    except Exception:
+        _check(
+            checks,
+            check_id="hardware.profile",
+            title="硬件自适应",
+            ok=True,
+            detail_ok="硬件探测跳过（不影响核心功能）",
+            detail_bad="",
+            severity_on_bad="warning",
+        )
+
     repo_writable = _is_writable_dir(Path(repo_root))
     _check(
         checks,

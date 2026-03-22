@@ -126,11 +126,19 @@ def check_ai_status(library: Optional[Any] = None) -> Dict[str, Any]:
             if not any("API Key" in r for r in reasons):
                 reasons.append("视觉分析需要 OpenAI API Key")
 
+    # R6: Check CLIP visual search capability
+    clip_ok = False
+    if library is not None and hasattr(library, "_clip_encoder"):
+        clip_ok = library._clip_encoder is not None
+    if not clip_ok:
+        reasons.append("CLIP 视觉搜索不可用（需要 torch + transformers）")
+
     degraded = not vision_ok or not vector_ok
     return {
         "degraded": degraded,
         "vision_available": vision_ok,
         "vector_available": vector_ok,
+        "clip_available": clip_ok,
         "keyword_available": True,
         "reasons": reasons,
         "message": "；".join(reasons) if reasons else "",

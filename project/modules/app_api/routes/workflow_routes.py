@@ -8,7 +8,7 @@ from typing import Any, Callable, Dict, List
 
 from flask import Blueprint, jsonify, request
 
-from modules.app_api.param_utils import parse_int_param, parse_str_param
+from modules.app_api.param_utils import parse_int_param, parse_str_param, safe_error_response
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -512,7 +512,7 @@ def create_workflow_blueprint(
             try:
                 workflow = build_failed_only_workflow_subset(workflow=workflow, base_run=base)
             except Exception as exc:
-                return jsonify({"error": str(exc)}), 400
+                return jsonify({"error": safe_error_response(exc, "工作流构建失败")}), 400
 
         run_payload = deepcopy(payload)
         run_payload["workflow"] = workflow

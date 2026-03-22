@@ -72,6 +72,9 @@
         >
           🧩 {{ labels.createSidebar.canvas }}
         </div>
+        <div class="sidebar-hint" style="padding: 0 8px; font-size: 11px; color: var(--muted)">
+          自由组合能力节点，适合非线性或复杂工作流
+        </div>
       </div>
 
       <!-- 最近项目（有项目或正在加载时才显示） -->
@@ -112,8 +115,21 @@
     <div class="content" :class="{ 'content-full': isFullBleed }">
       <router-view />
 
+      <!-- 无项目时显示引导 -->
+      <div v-if="!appStore.hasProject && !hasChildRoute" class="content-narrow">
+        <div class="empty-state">
+          <div class="empty-state-icon">🎬</div>
+          <div class="empty-state-title">还没有项目</div>
+          <div class="empty-state-text">先导入素材，再新建项目开始创作</div>
+          <div class="empty-state-actions">
+            <button class="btn btn-primary" @click="appStore.showInit = true; appStore.initMode = 'new'">
+              新建项目
+            </button>
+          </div>
+        </div>
+      </div>
       <!-- 无子路由时显示默认 -->
-      <div v-if="!hasChildRoute" class="content-narrow">
+      <div v-else-if="!hasChildRoute" class="content-narrow">
         <div class="empty-state">
           <div class="empty-state-icon">🎬</div>
           <div class="empty-state-title">选择一个模块开始</div>

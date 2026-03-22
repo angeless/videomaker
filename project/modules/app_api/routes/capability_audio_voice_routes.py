@@ -72,6 +72,8 @@ def create_audio_voice_capability_blueprint(
         target_duration_s = payload.get("target_duration_s", None)
         try:
             target_duration_s = float(target_duration_s) if target_duration_s is not None else None
+            if target_duration_s is not None:
+                target_duration_s = max(0.1, min(target_duration_s, 7200.0))  # 0.1s ~ 2h
         except Exception:
             target_duration_s = None
 

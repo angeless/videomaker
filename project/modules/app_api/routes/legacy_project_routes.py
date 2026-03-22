@@ -37,11 +37,52 @@ def create_legacy_project_blueprint(
     def api_project_list():
         return jsonify({"ok": True, "projects": recent_projects_getter()})
 
+    @bp.route("/api/projects", methods=["GET"])
+    def api_projects():
+        projects = recent_projects_getter()
+        items = []
+        for p in projects:
+            if isinstance(p, dict):
+                items.append({
+                    "project_id": p.get("project_id", p.get("name", "")),
+                    "name": p.get("name", ""),
+                    "project_dir": p.get("project_dir", ""),
+                    "videos_dir": p.get("videos_dir", ""),
+                    "created_at": p.get("created_at", ""),
+                    "updated_at": p.get("updated_at", ""),
+                    "workflow_count": p.get("workflow_count", 0),
+                })
+            elif isinstance(p, str):
+                items.append({"project_id": p, "name": Path(p).name, "project_dir": p, "videos_dir": "", "created_at": "", "updated_at": "", "workflow_count": 0})
+        return jsonify({"projects": items, "count": len(items)})
+
+    @bp.route("/api/projects/cleanup", methods=["POST"])
+    def api_projects_cleanup():
+        """Remove projects whose directories no longer exist."""
+        from modules.app_api.services.settings_service import cleanup_missing_projects
+        removed = cleanup_missing_projects()
+        return jsonify({"ok": True, "removed": removed})
+
+    @bp.route("/api/workflow/status", methods=["GET"])
+    def api_workflow_status():
+        ws = workflow_state_getter()
+        if ws is None:
+            return jsonify({"persisted": False, "current_run_id": None, "status": "idle", "current_step": None, "guidedAvailable": False})
+        data = ws.data if hasattr(ws, "data") else {}
+        return jsonify({
+            "persisted": True,
+            "current_run_id": data.get("run_id"),
+            "status": data.get("status", "idle"),
+            "current_step": data.get("current_step"),
+            "guidedAvailable": True,
+        })
+
     @bp.route("/api/init", methods=["POST"])
     def api_init():
         data = request.json or {}
         videos_dir = (data.get("videos_dir", "") or "").strip()
-        project_dir = data.get("project_dir", "").strip()
+        project_dir = (data.get("project_dir", "") or "").strip()
+        project_name = (data.get("project_name", "") or "").strip()
         selected_uids = data.get("selected_video_uids") or []
         if isinstance(selected_uids, str):
             selected_uids = [x.strip() for x in selected_uids.split(",") if x.strip()]
@@ -74,6 +115,8 @@ def create_legacy_project_blueprint(
                 "selected_video_paths": selected_paths,
             })
             ws = WorkflowState.create(project_path, "", config)
+            if project_name:
+                ws.data["project_display_name"] = project_name
 
             materials_path = project_path / "data" / "materials.json"
             write_json_result(materials_path, materials)
@@ -111,6 +154,8 @@ def create_legacy_project_blueprint(
         project_path = Path(project_dir).expanduser().resolve()
         prepare_project_dirs(project_path)
         ws = WorkflowState.create(project_path, str(videos_path), default_project_config())
+        if project_name:
+            ws.data["project_display_name"] = project_name
         ws.save()
         load_state(project_path)
         remember_last_project(project_path)
@@ -232,8 +277,20 @@ def create_legacy_project_blueprint(
         if ws is None:
             return jsonify({"error": "项目未加载"}), 400
 
+        data = request.json or {}
+        raw_step = data.get("step")
+        if raw_step is not None:
+            try:
+                target = int(raw_step)
+            except (TypeError, ValueError):
+                return jsonify({"error": f"step 参数不合法: {raw_step}"}), 400
+        else:
+            target = ws.data.get("current_step", 1)
+
+        if not isinstance(target, int) or target < 1 or target > 7:
+            return jsonify({"error": f"step 超出合法范围 1-7: {target}"}), 400
+
         job_id = str(uuid.uuid4())[:8]
-        target = ws.data.get("current_step", 1)
 
         step_method_map = {
             1: "step1_analyze",
@@ -373,7 +430,7 @@ def create_legacy_project_blueprint(
                 try:
                     return jsonify(json.loads(p.read_text(encoding="utf-8")))
                 except Exception:
-                    pass
+                    return jsonify({"error": f"脚本文件 {name} 格式损坏，请检查"}), 500
         return jsonify({})
 
     @bp.route("/api/script", methods=["POST"])
@@ -401,7 +458,7 @@ def create_legacy_project_blueprint(
         try:
             return jsonify(json.loads(p.read_text(encoding="utf-8")))
         except Exception:
-            return jsonify({})
+            return jsonify({"error": "素材文件 materials.json 格式损坏"}), 500
 
     # ── 项目元数据 (T-0604) ──────────────────────────────────────────
 

@@ -1,10 +1,16 @@
 <template>
   <div
     class="tl-clip-block"
-    :class="[statusClass, { 'tl-clip-selected': isSelected, 'tl-clip-face': clip.has_face }]"
+    :class="[statusClass, { 'tl-clip-selected': isSelected, 'tl-clip-face': clip.has_face, 'tl-clip-drag-over': isDragOver }]"
     :style="style"
     :title="tooltip"
+    draggable="true"
     @click.stop="onClick"
+    @dragstart="onDragStart"
+    @dragover.prevent="onDragOver"
+    @dragleave="onDragLeave"
+    @drop.prevent="onDrop"
+    @dragend="onDragEnd"
   >
     <span v-if="showLabel" class="tl-clip-label">
       #{{ clip.clip_index }}
@@ -14,7 +20,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useTimelineStore } from '../../stores/timeline.js'
 import { useTimeline } from '../../composables/useTimeline.js'
 import { useFormatters } from '../../composables/useFormatters.js'
@@ -46,9 +52,40 @@ const tooltip = computed(() => {
   return `#${c.clip_index} ${c.filename || c.video_id || ''} (${formatDuration(c.duration)})${c.has_face ? ' [人脸]' : ''}`
 })
 
+const isDragOver = ref(false)
+
 function onClick() {
   store.selectClip(props.clip.clip_index)
 }
+
+function onDragStart(e) {
+  e.dataTransfer.effectAllowed = 'move'
+  e.dataTransfer.setData('text/plain', String(clipArrayIndex.value))
+}
+
+function onDragOver() {
+  isDragOver.value = true
+}
+
+function onDragLeave() {
+  isDragOver.value = false
+}
+
+function onDrop(e) {
+  isDragOver.value = false
+  const fromStr = e.dataTransfer.getData('text/plain')
+  const fromIdx = parseInt(fromStr, 10)
+  if (Number.isNaN(fromIdx) || fromIdx === clipArrayIndex.value) return
+  store.reorderClips(fromIdx, clipArrayIndex.value)
+}
+
+function onDragEnd() {
+  isDragOver.value = false
+}
+
+const clipArrayIndex = computed(() => {
+  return store.clips.findIndex(c => c.clip_index === props.clip.clip_index)
+})
 </script>
 
 <style scoped>
@@ -87,6 +124,11 @@ function onClick() {
 
 .tl-clip-selected {
   outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.tl-clip-drag-over {
+  outline: 2px dashed var(--warn);
   outline-offset: 1px;
 }
 

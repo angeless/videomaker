@@ -4,6 +4,160 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/) 规范。
 
+## [0.12.12] - 2026-03-22
+
+### 新增 (Added)
+- R12: 集成测试 + 最终审计
+  - 917 全量测试通过
+  - 8 项跨模块集成验证全部通过
+  - R1-R11 任务完成度确认
+  - 最终审计报告 `docs/audit/2026-03-22-r12-final-audit.md`
+
+## [0.12.11] - 2026-03-22
+
+### 修复 (Fixed)
+- R11: 产品体验修复批次
+  - API 错误响应标准化：5 处 `str(exc)` 裸露异常替换为 `safe_error_response()` 用户友好消息
+  - 前端 IngestPanel 文件夹选择添加 try/catch 错误反馈
+  - 隐藏未实现功能入口：云端导入 tab + ContentPublish 设置 tab
+  - 关键 JSON 解析（script/materials）静默失败改为返回明确错误
+  - API 参数验证加固：target_duration_s 范围限制、timeline fps/resolution/transition 边界检查
+  - 新增 `safe_error_response()` 工具函数到 param_utils.py
+
+## [0.12.10] - 2026-03-22
+
+### 新增 (Added)
+- R10: 硬件自适应 + 性能优化
+  - `modules/hardware/` 新模块：硬件探测 + 自适应编码策略
+  - CPU/RAM/GPU 自动检测（macOS/Linux）
+  - FFmpeg 硬件加速三级策略：VideoToolbox → NVENC → libx264 CPU
+  - 渲染并发数基于系统资源智能推荐（1-4）
+  - RenderConfig 支持 `video_encoder` / `hwaccel` / `encoder_extra_args`
+  - auto_render.py 全部硬编码 libx264 替换为可配置编码器
+  - Preflight 集成硬件画像检测项
+  - API：`/api/system/hardware` 端点
+  - 22 个新增测试，917 全量通过
+
+## [0.12.9] - 2026-03-22
+
+### 新增 (Added)
+- R9: 订阅制开关
+  - `modules/subscription/` 新模块：FeatureGate + Tier 枚举
+  - Free/Pro 双层功能控制（8 个免费功能 + 11 个 Pro 功能）
+  - API：`/api/subscription/status` + `/api/subscription/gate` + `/api/subscription/upgrade`
+  - 持久化到 settings.json
+  - 11 个新增测试
+
+## [0.12.8] - 2026-03-22
+
+### 新增 (Added)
+- R8: Prompt 剪辑引擎 — 自然语言时间线编辑
+  - `modules/prompt_editing/` 新模块：规则引擎解析器 + 执行器
+  - 支持 5 种编辑指令：删除/移动/裁剪/倒序/变速
+  - 中英文双语指令支持（"删除第2个片段" / "remove clip 3"）
+  - `POST /api/timeline/edit-by-prompt` API 端点
+  - 17 个新增测试覆盖解析器 + 执行器
+
+## [0.12.7] - 2026-03-22
+
+### 新增 (Added)
+- R7: Step 6 拖拽时间线编辑
+  - `POST /api/timeline/reorder` — 片段重排序，持久化到 script_matched.json
+  - `POST /api/timeline/trim` — 片段裁剪（source_start/source_end 调整）
+  - TimelineClipBlock.vue 支持 HTML5 拖拽重排序（dragstart/drop/dragover）
+  - Pinia store 新增 `reorderClips()` action（乐观更新 + 后端持久化）
+  - 拖拽悬停视觉反馈（黄色虚线边框）
+  - 7 个新增测试覆盖 reorder/trim API
+
+## [0.12.6] - 2026-03-22
+
+### 新增 (Added)
+- R6: 融合检索模式（`retrieval_mode="fusion"`）— 通过 RRF 加权合并文本向量 + 视觉向量搜索结果
+- R6: 搜索 UI 新增"视觉"和"融合"检索模式按钮
+- R6: 视觉搜索状态徽章（显示 CLIP 可用性和视觉嵌入数量）
+- R6: `check_ai_status()` 新增 `clip_available` 字段
+- R6: API 响应新增 `visual_search_enabled` / `visual_embeddings_count`
+- R6: `retrievalModeZh()` 支持"视觉检索"和"融合检索"中文标签
+- 11 个新增测试，全量回归 860 passed / 50 skipped
+
+## [0.12.5] - 2026-03-22
+
+### 改进 (Changed)
+- R5: 向量搜索引擎 API 完整暴露
+  - `/api/library/search?mode=visual` 支持 CLIP 跨模态图文搜索
+  - `count_matching_assets()` 支持 visual 模式
+  - `stats()` 新增 `visual_search_enabled` 和 `visual_embeddings_count`
+  - 6 个新增测试覆盖 API 模式验证和 stats 字段
+
+## [0.12.4] - 2026-03-22
+
+### 改进 (Changed)
+- R4: `_build_embedding_source()` 纳入 ASR 转录文本，语音内容可通过向量搜索发现
+  - 支持 `analysis_json.asr_text` 和 `analysis_json.transcription.text` 双路径提取
+  - 转录文本截断 2000 字符，保留语义元数据空间
+  - `_upsert_embedding_for_asset` / `_refresh_embeddings_incremental` 管道适配
+  - 7 个新增测试覆盖 ASR 纳入、截断、降级
+
+## [0.12.3] - 2026-03-22
+
+### 新增 (Added)
+- R3: `modules/library/vision/` 子模块 — CLIP 视觉分析通道
+  - `CLIPEncoder`: 延迟加载 CLIP 模型，支持图像/文本编码（512 维）
+  - `VisionMixin`: 关键帧提取 → CLIP 编码 → 视觉索引
+  - 双 VectorIndex 架构：文本嵌入（1536 维）+ 视觉嵌入（512 维）并行
+  - `search_assets(retrieval_mode="visual")` 跨模态图文搜索
+  - `asset_visual_embeddings` 数据库表
+  - 11 个新增测试（mock CLIP）
+  - 全量回归 836 passed / 50 skipped
+
+## [0.12.2] - 2026-03-22
+
+### 新增 (Added)
+- R2: `modules/library/semantic/` 子模块 — 独立的向量索引引擎和查询嵌入缓存
+  - `VectorIndex`: FAISS IndexFlatIP 优先，NumPy 暴力搜索降级
+  - `EmbeddingCache`: LRU 查询嵌入缓存（128 条，3600s TTL）
+  - FAISS 索引持久化到磁盘（`cache/faiss/`），支持增量 add/remove
+  - OMP 冲突防护（torch + FAISS 共存）
+  - 29 个新增测试覆盖 VectorIndex + EmbeddingCache
+
+### 重构 (Refactored)
+- `core_mixin.py` 向量搜索逻辑委托给 `VectorIndex`，减少约 80 行内联代码
+- `_get_query_embedding()` 支持 `EmbeddingCache` 新后端，保留 legacy dict fallback
+- `GlobalMediaLibrary.__init__()` 初始化语义基础设施实例
+
+## [0.12.1] - 2026-03-22
+
+### 修复 (Fixed)
+- M3: `/api/projects` 不再返回已删除的残留项目，新增 `/api/projects/cleanup` 清理端点
+- H2: Library Facade 新增 `sync_project_materials()` 方法，支持项目分析结果回写全局库
+- M5: `RenderConfig.from_aesthetic_preset()` 根据美学预设自动适配横竖屏方向
+
+### 新增 (Added)
+- `PRESET_ORIENTATIONS` 常量（refinement.py），定义每个美学预设的推荐方向
+- 9 个新测试覆盖 M3/H2/M5 三项修复
+
+## [0.11.0] - 2026-03-22
+
+### 修复 (Fixed)
+- R1: P0 两处 Segfault（null 参数 /api/init + step=99 越界 /api/run_step）(BUG-001, BUG-002)
+- R2: P0 安全修复（CSRF 双开关逻辑 + provider 枚举校验 + 搜索长度限制）(SEC-001, BUG-004, SEC-002)
+- R3: P1 接口补全（health/projects/workflow-status/settings 路由 + UnicodeDecodeError + run_step 防御）(BUG-006/007/008)
+- R8: P1 Step 3 AI 脚本生成实现，清除残留 TODO (BUG-003)
+- R10: P3 视觉一致性（图标统一 + 空状态文案 + ESC 关弹窗 + 标题统一 + Canvas 说明）(UX-P3-001~005)
+
+### 新增 (Added)
+- R4: 预检路由守卫 + 向导断点补救引导 (UX-P1-001, UX-P1-002)
+- R5: 项目弹窗优化（路径 readonly + 目录说明 + 项目名生效）(UX-P2-001, UX-P2-007)
+- R6: 破坏性操作二次确认 + AI 设置测试连接 (UX-P2-003, UX-P2-004)
+- R7: Job 进度可视化 + 无项目新建引导 + 标签种子数据 (UX-P2-005/006, DATA-001)
+- R9: SQLite 外键约束启用 + requirements.txt 依赖分层 (DATA-002, DEP-001)
+
+### 重构 (Refactored)
+- R11: Library 单体拆分 — global_media_library.py 从 13,282 行精简为 269 行 Facade (ARCH-001)
+  - 提取 8 个 Mixin：FingerprintMixin, GDriveMixin, DuplicateDetectionMixin, PathRelinkMixin, TagManagerMixin, AutoTaggerMixin, CoreMixin, SchemaMixin
+  - 提取 _constants.py 共享常量（避免循环导入）
+  - 所有公共接口零变更，全量回归测试 787 passed / 50 skipped
+
 ## [0.10.0] - 2026-03-20
 
 ### 修改 (Changed)

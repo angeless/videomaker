@@ -55,6 +55,43 @@ class RenderConfig:
     crf: int = 18  # 质量 (0-51, 越小越好)
     preset: str = "slow"  # 编码速度
 
+    # 硬件加速（由 hardware.encoding_strategy 自动填充）
+    video_encoder: str = "libx264"        # e.g. "h264_videotoolbox"
+    hwaccel: Optional[str] = None         # e.g. "videotoolbox"
+    encoder_extra_args: Optional[List[str]] = None  # additional ffmpeg flags
+
+    def apply_hardware_profile(self) -> "RenderConfig":
+        """Auto-detect hardware and update encoder settings in-place."""
+        try:
+            from modules.hardware.detector import get_system_profile
+            from modules.hardware.encoding_strategy import choose_encoder
+            profile = get_system_profile()
+            params = choose_encoder(profile)
+            self.video_encoder = params.video_encoder
+            self.hwaccel = params.hwaccel
+            self.encoder_extra_args = list(params.extra_args)
+        except Exception:
+            pass  # keep CPU defaults
+        return self
+
+    @classmethod
+    def from_aesthetic_preset(cls, aesthetic: str = "travel_story", **overrides) -> "RenderConfig":
+        """Create RenderConfig with orientation matching the aesthetic preset.
+
+        Uses PRESET_ORIENTATIONS from refinement.py to set width/height.
+        """
+        try:
+            from modules.capabilities.refinement import PRESET_ORIENTATIONS
+            orientation = PRESET_ORIENTATIONS.get(aesthetic, "vertical")
+        except ImportError:
+            orientation = "vertical"
+        if orientation == "horizontal":
+            defaults = {"width": 1920, "height": 1080}
+        else:
+            defaults = {"width": 1080, "height": 1920}
+        defaults.update(overrides)
+        return cls(**defaults)
+
 
 class FFmpegRenderer:
     """FFmpeg 渲染器"""
@@ -64,6 +101,27 @@ class FFmpegRenderer:
         self.ffmpeg_path = self._find_ffmpeg()
         self.ffprobe_path = self._find_ffprobe()
         self._has_subtitles_filter = self._check_subtitles_filter()
+
+    def _encoder_args(self) -> List[str]:
+        """Build encoder arguments from config, respecting hardware acceleration."""
+        c = self.config
+        encoder = c.video_encoder or "libx264"
+        args = ["-c:v", encoder]
+
+        if encoder == "libx264":
+            args.extend(["-crf", str(c.crf), "-preset", c.preset])
+        elif encoder == "h264_videotoolbox":
+            # VideoToolbox uses -q:v instead of -crf (range ~1-100, lower=better)
+            vt_quality = max(1, min(100, int(c.crf * 2)))
+            args.extend(["-q:v", str(vt_quality)])
+        elif encoder == "h264_nvenc":
+            args.extend(["-cq", str(c.crf)])
+
+        args.extend(["-b:v", c.video_bitrate, "-pix_fmt", "yuv420p"])
+
+        if c.encoder_extra_args:
+            args.extend(c.encoder_extra_args)
+        return args
 
     def _check_subtitles_filter(self) -> bool:
         """检测当前 FFmpeg 是否支持 subtitles filter（需要 libass）"""
@@ -222,13 +280,7 @@ class FFmpegRenderer:
         cmd.extend(["-vf", video_filter])
         
         # 视频编码设置
-        cmd.extend([
-            "-c:v", "libx264",
-            "-crf", str(self.config.crf),
-            "-preset", self.config.preset,
-            "-b:v", self.config.video_bitrate,
-            "-pix_fmt", "yuv420p"
-        ])
+        cmd.extend(self._encoder_args())
         
         # 音频处理
         if bgm_audio or narration_audio:
@@ -349,8 +401,7 @@ class FFmpegRenderer:
                 "-i", concat_file,
                 # 重编码以统一帧率时间基，避免 VFR 拼接断帧
                 "-vf", f"fps={self.config.fps}",
-                "-c:v", "libx264", "-crf", str(self.config.crf),
-                "-preset", self.config.preset,
+                *self._encoder_args(),
                 "-c:a", "aac", "-b:a", self.config.audio_bitrate,
                 output_video
             ]
@@ -434,7 +485,7 @@ class VideoPipeline:
                     if src_end:
                         clip_cmd.extend(["-t", str(src_end - src_start)])
                     clip_cmd.extend(["-r", "30", "-vsync", "cfr",
-                                     "-c:v", "libx264", "-crf", "18", "-preset", "fast",
+                                     *self.renderer._encoder_args(),
                                      "-c:a", "aac", clipped])
                     subprocess.run(clip_cmd, capture_output=True, check=True, timeout=300)
 
@@ -622,7 +673,7 @@ class VideoPipeline:
             "-i", video_only,
             "-i", video_path,
             "-map", "0:v", "-map", "1:a?",  # a? 表示音频可选
-            "-c:v", "libx264", "-crf", "18", "-preset", "fast",
+            *self.renderer._encoder_args(),
             "-c:a", "aac",
             output_path
         ]

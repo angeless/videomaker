@@ -15,6 +15,14 @@ class RefinePlan:
     notes: str
 
 
+# Preset orientation metadata (used by RenderConfig to auto-detect default orientation)
+PRESET_ORIENTATIONS = {
+    "travel_story": "vertical",    # 9:16, typical for social media short-form
+    "cinematic": "horizontal",     # 16:9, wide cinematic framing
+    "clean_vlog": "vertical",      # 9:16, standard vlog format
+}
+
+
 def build_refine_plan(
     style: str = "travel_story",
     editor: str = "internal_ffmpeg",

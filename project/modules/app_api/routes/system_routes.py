@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Callable, Dict
 
 from flask import Blueprint, jsonify, request
@@ -22,6 +23,17 @@ def create_system_blueprint(
     queue_max_running_setter: Callable[[int], None] = lambda v: None,
 ) -> Blueprint:
     bp = Blueprint("system_api", __name__)
+
+    @bp.route("/api/system/health", methods=["GET"])
+    def api_system_health():
+        version = "unknown"
+        try:
+            vp = Path(__file__).resolve().parents[3] / "VERSION"
+            if vp.exists():
+                version = vp.read_text(encoding="utf-8").strip()
+        except Exception:
+            pass
+        return jsonify({"status": "ok", "version": version})
 
     @bp.route("/api/status", methods=["GET"])
     def api_status():
@@ -75,6 +87,46 @@ def create_system_blueprint(
             "stats": query_stats(operation=operation, since=since),
             "recent": recent(limit=50),
         })
+
+    @bp.route("/api/system/hardware", methods=["GET"])
+    def api_system_hardware():
+        try:
+            from modules.hardware.detector import get_system_profile
+            from modules.hardware.encoding_strategy import choose_encoder, suggest_max_concurrent
+            profile = get_system_profile()
+            enc = choose_encoder(profile)
+            return jsonify({
+                "ok": True,
+                "cpu": {
+                    "physical_cores": profile.cpu.physical_cores,
+                    "logical_cores": profile.cpu.logical_cores,
+                    "architecture": profile.cpu.architecture,
+                    "model": profile.cpu.model,
+                },
+                "memory": {
+                    "total_gb": profile.memory.total_gb,
+                    "available_gb": profile.memory.available_gb,
+                },
+                "gpu": {
+                    "vendor": profile.gpu.vendor,
+                    "model": profile.gpu.model,
+                    "has_videotoolbox": profile.gpu.has_videotoolbox,
+                    "has_nvenc": profile.gpu.has_nvenc,
+                    "has_vaapi": profile.gpu.has_vaapi,
+                },
+                "ffmpeg": {
+                    "path": profile.ffmpeg_path,
+                    "hwaccels": profile.ffmpeg_hwaccels,
+                },
+                "encoding": {
+                    "encoder": enc.video_encoder,
+                    "hwaccel": enc.hwaccel,
+                    "label": enc.label,
+                },
+                "suggested_max_concurrent": suggest_max_concurrent(profile),
+            })
+        except Exception as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 500
 
     @bp.route("/api/system/audit", methods=["GET"])
     def api_system_audit():
