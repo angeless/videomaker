@@ -23,7 +23,9 @@ VECTOR_RRF_K = 60
 
 # ── FAISS / vector index ──
 DEFAULT_FAISS_INDEX_DIR = "cache/faiss"  # relative to library_dir
+DEFAULT_FAISS_CLIP_INDEX_DIR = "cache/faiss_clip"  # CLIP visual embeddings
 DEFAULT_EMBEDDING_DIM = 1536
+DEFAULT_CLIP_DIM = 512
 
 # ── 25-category taxonomy ──
 TAG_CATEGORIES = (

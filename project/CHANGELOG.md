@@ -4,6 +4,18 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/) 规范。
 
+## [0.12.3] - 2026-03-22
+
+### 新增 (Added)
+- R3: `modules/library/vision/` 子模块 — CLIP 视觉分析通道
+  - `CLIPEncoder`: 延迟加载 CLIP 模型，支持图像/文本编码（512 维）
+  - `VisionMixin`: 关键帧提取 → CLIP 编码 → 视觉索引
+  - 双 VectorIndex 架构：文本嵌入（1536 维）+ 视觉嵌入（512 维）并行
+  - `search_assets(retrieval_mode="visual")` 跨模态图文搜索
+  - `asset_visual_embeddings` 数据库表
+  - 11 个新增测试（mock CLIP）
+  - 全量回归 836 passed / 50 skipped
+
 ## [0.12.2] - 2026-03-22
 
 ### 新增 (Added)

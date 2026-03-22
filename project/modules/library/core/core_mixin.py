@@ -5551,13 +5551,25 @@ class CoreMixin:
         q = (query or "").strip().lower()
         keywords = self._tokenize_query(q) if q else []
         mode = str(retrieval_mode or "hybrid").strip().lower()
-        if mode not in {"hybrid", "keyword", "vector"}:
+        if mode not in {"hybrid", "keyword", "vector", "visual"}:
             mode = "hybrid"
         media = self._normalize_media_type(media_type)
         try:
             limit = max(1, int(limit))
         except Exception:
             limit = 100
+        # Visual search shortcut — delegates to VisionMixin
+        if mode == "visual" and q:
+            visual_scores = self.visual_search(q, top_k=limit) if hasattr(self, "visual_search") else {}
+            if visual_scores:
+                visual_uids = list(visual_scores.keys())[:limit]
+                assets = self.get_assets(visual_uids) if hasattr(self, "get_assets") else []
+                for asset in assets:
+                    asset["vector_score"] = visual_scores.get(asset.get("uid", ""), 0.0)
+                    asset["keyword_score"] = 0.0
+                    asset["tag_score"] = 0.0
+                return assets
+            return []
         try:
             offset = max(0, int(offset))
         except Exception:

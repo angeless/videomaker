@@ -81,6 +81,16 @@ class SchemaMixin:
 
                 CREATE INDEX IF NOT EXISTS idx_asset_embeddings_model ON asset_embeddings(model);
                 CREATE INDEX IF NOT EXISTS idx_asset_embeddings_updated ON asset_embeddings(updated_at);
+
+                CREATE TABLE IF NOT EXISTS asset_visual_embeddings (
+                    uid TEXT NOT NULL,
+                    frame_index INTEGER NOT NULL,
+                    model TEXT NOT NULL DEFAULT 'clip-vit-base-patch32',
+                    embedding_json TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (uid, frame_index),
+                    FOREIGN KEY(uid) REFERENCES assets(uid) ON DELETE CASCADE
+                );
                 """
             )
 
