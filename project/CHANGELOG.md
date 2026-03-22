@@ -4,6 +4,15 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/) 规范。
 
+## [0.12.4] - 2026-03-22
+
+### 改进 (Changed)
+- R4: `_build_embedding_source()` 纳入 ASR 转录文本，语音内容可通过向量搜索发现
+  - 支持 `analysis_json.asr_text` 和 `analysis_json.transcription.text` 双路径提取
+  - 转录文本截断 2000 字符，保留语义元数据空间
+  - `_upsert_embedding_for_asset` / `_refresh_embeddings_incremental` 管道适配
+  - 7 个新增测试覆盖 ASR 纳入、截断、降级
+
 ## [0.12.3] - 2026-03-22
 
 ### 新增 (Added)

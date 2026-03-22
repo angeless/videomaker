@@ -968,6 +968,7 @@ class CoreMixin:
         semantic_text: Optional[str],
         keywords_json: Any,
         semantic_json: Any,
+        analysis_json: Any = None,
     ) -> str:
         parts: List[str] = []
         if filename:
@@ -999,6 +1000,20 @@ class CoreMixin:
                     parts.append(val.strip())
                 elif isinstance(val, list):
                     parts.extend([str(x).strip() for x in val if str(x).strip()])
+
+        # R4: Include ASR transcription text from analysis_json
+        analysis = analysis_json
+        if isinstance(analysis_json, str):
+            analysis = self._safe_json_loads(analysis_json, {})
+        if isinstance(analysis, dict):
+            asr = str(analysis.get("asr_text", "") or "").strip()
+            if not asr:
+                tx = analysis.get("transcription")
+                if isinstance(tx, dict):
+                    asr = str(tx.get("text", "") or "").strip()
+            if asr:
+                # Cap transcription at 2000 chars to preserve room for other signals
+                parts.append(asr[:2000])
 
         compact = " | ".join([p for p in parts if p])
         if len(compact) > 6000:
@@ -1164,12 +1179,14 @@ class CoreMixin:
         semantic_text: Optional[str],
         keywords_json: Any,
         semantic_json: Any,
+        analysis_json: Any = None,
     ) -> bool:
         source = self._build_embedding_source(
             filename=filename,
             semantic_text=semantic_text,
             keywords_json=keywords_json,
             semantic_json=semantic_json,
+            analysis_json=analysis_json,
         )
         if not source:
             return False
@@ -1232,6 +1249,7 @@ class CoreMixin:
         rows = conn.execute(
             """
             SELECT a.uid, a.filename, a.semantic_text, a.keywords_json, a.semantic_json,
+                   a.analysis_json,
                    e.content_hash, e.model, e.embedding_version
             FROM assets a
             LEFT JOIN asset_embeddings e ON e.uid = a.uid
@@ -1247,6 +1265,7 @@ class CoreMixin:
                 semantic_text=row["semantic_text"],
                 keywords_json=row["keywords_json"],
                 semantic_json=row["semantic_json"],
+                analysis_json=row["analysis_json"],
             )
             if not source:
                 continue
@@ -1265,6 +1284,7 @@ class CoreMixin:
                 semantic_text=row["semantic_text"],
                 keywords_json=row["keywords_json"],
                 semantic_json=row["semantic_json"],
+                analysis_json=row["analysis_json"],
             ):
                 done += 1
                 if done >= max_items:
