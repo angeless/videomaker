@@ -114,12 +114,21 @@
         </div>
         <div v-else-if="libraryStore.results.length === 0" class="empty-state">
           <div class="empty-state-icon">📁</div>
-          <div class="empty-state-title">{{ labels.library.empty }}</div>
-          <div class="empty-state-text">{{ labels.library.emptyHint }}</div>
-          <div v-if="isLibraryEmpty" class="empty-state-actions">
-            <button class="btn btn-primary" @click="scrollToIngest">导入素材</button>
-            <router-link to="/settings" class="btn btn-ghost">配置 AI</router-link>
+          <div v-if="showOnboardingRescue" class="empty-state-rescue">
+            <div class="empty-state-title">还没有开始</div>
+            <div class="empty-state-text">先导入你的视频素材，然后新建项目开始创作</div>
+            <div class="empty-state-actions">
+              <button class="btn btn-primary" @click="scrollToIngest">导入素材</button>
+            </div>
           </div>
+          <template v-else>
+            <div class="empty-state-title">{{ labels.library.empty }}</div>
+            <div class="empty-state-text">{{ labels.library.emptyHint }}</div>
+            <div v-if="isLibraryEmpty" class="empty-state-actions">
+              <button class="btn btn-primary" @click="scrollToIngest">导入素材</button>
+              <router-link to="/settings" class="btn btn-ghost">配置 AI</router-link>
+            </div>
+          </template>
         </div>
 
         <!-- 网格视图 -->
@@ -228,6 +237,11 @@ function openDetail(asset) {
 
 // Empty library detection
 const isLibraryEmpty = computed(() => libraryStore.stats.total_assets === 0)
+// Rescue guidance: onboarding completed (possibly skipped) + empty library
+const showOnboardingRescue = computed(() => {
+  const prefs = appStore.uiSettings || {}
+  return prefs.onboarding_completed && isLibraryEmpty.value
+})
 
 function openEvidence({ assetId, filename }) {
   evidenceAssetId.value = assetId

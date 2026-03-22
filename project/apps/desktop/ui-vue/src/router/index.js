@@ -118,6 +118,22 @@ const router = createRouter({
   routes,
 })
 
+// 预检 error 路由守卫：有未确认的 error 时阻止离开 startup
+router.beforeEach((to, from) => {
+  if (to.name === 'startup') return true
+  try {
+    const { useAppStore } = require('../stores/app.js')
+    const appStore = useAppStore()
+    if (appStore.preflightErrorCount > 0 && !appStore.preflightAcknowledged) {
+      // 阻止导航，由 StartupView 的弹窗处理
+      return { name: 'startup' }
+    }
+  } catch {
+    // pinia not ready during initial load — allow navigation
+  }
+  return true
+})
+
 // 跨页面导航时清理 toast，防止上一页的提示残留
 router.afterEach((to, from) => {
   const toTop = (to.path || '').split('/').slice(0, 3).join('/')

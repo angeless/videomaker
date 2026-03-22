@@ -27,9 +27,14 @@
         <p v-if="appStore.preflightMessage" class="text-danger" style="margin-top: 12px">
           {{ appStore.preflightMessage }}
         </p>
-        <button class="btn btn-primary" style="margin-top: 16px" @click="retry">
-          重新检查
-        </button>
+        <div class="startup-actions" style="margin-top: 16px; display: flex; gap: 8px">
+          <button class="btn btn-primary" @click="retry">
+            返回检查
+          </button>
+          <button class="btn btn-ghost" @click="acknowledgeAndContinue">
+            了解风险，继续进入
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -123,6 +128,15 @@ async function retry() {
   showDetails.value = false
   done.value = false
   await runStartup()
+}
+
+function acknowledgeAndContinue() {
+  appStore.preflightAcknowledged = true
+  if (appStore.hasProject) {
+    router.replace('/create/workflow')
+  } else {
+    router.replace('/library')
+  }
 }
 
 onMounted(() => {

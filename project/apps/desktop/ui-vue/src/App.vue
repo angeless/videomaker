@@ -1,5 +1,10 @@
 <template>
   <div id="app-root">
+    <!-- 预检 error 警告横幅 -->
+    <div v-if="appStore.preflightAcknowledged && appStore.preflightErrorCount > 0" class="preflight-warn-banner">
+      <span>环境检查发现 {{ appStore.preflightErrorCount }} 个问题，部分功能可能受影响</span>
+    </div>
+
     <!-- 中断任务恢复横幅 -->
     <div v-if="system.interruptedBannerVisible" class="interrupted-banner">
       <span class="interrupted-banner-text">
@@ -47,6 +52,20 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.preflight-warn-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 8999;
+  padding: 6px 16px;
+  background: rgba(248, 113, 113, 0.9);
+  color: #fff;
+  font-size: 12px;
+  text-align: center;
+  backdrop-filter: blur(8px);
+}
+
 .interrupted-banner {
   position: fixed;
   top: 0;
