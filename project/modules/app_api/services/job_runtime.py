@@ -274,14 +274,28 @@ class JobRuntime:
                 self._real = real
 
             def write(self, s):
-                self._real.write(s)
-                if s.strip():
-                    current = self_runtime.jobs.get(job_id)
-                    if isinstance(current, dict):
-                        current["log"].append(s.rstrip())
+                try:
+                    if hasattr(self, "_real") and self._real is not None:
+                        self._real.write(s)
+                except Exception:
+                    pass
+                try:
+                    if s.strip():
+                        current = self_runtime.jobs.get(job_id)
+                        if isinstance(current, dict):
+                            current["log"].append(s.rstrip())
+                except Exception:
+                    pass
 
             def flush(self):
-                self._real.flush()
+                try:
+                    if hasattr(self, "_real") and self._real is not None:
+                        self._real.flush()
+                except Exception:
+                    pass
+
+            def __del__(self):
+                self._real = None
 
         self_runtime = self
 

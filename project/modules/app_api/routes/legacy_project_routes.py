@@ -41,7 +41,7 @@ def create_legacy_project_blueprint(
     def api_init():
         data = request.json or {}
         videos_dir = (data.get("videos_dir", "") or "").strip()
-        project_dir = data.get("project_dir", "").strip()
+        project_dir = (data.get("project_dir", "") or "").strip()
         selected_uids = data.get("selected_video_uids") or []
         if isinstance(selected_uids, str):
             selected_uids = [x.strip() for x in selected_uids.split(",") if x.strip()]
@@ -232,8 +232,20 @@ def create_legacy_project_blueprint(
         if ws is None:
             return jsonify({"error": "项目未加载"}), 400
 
+        data = request.json or {}
+        raw_step = data.get("step")
+        if raw_step is not None:
+            try:
+                target = int(raw_step)
+            except (TypeError, ValueError):
+                return jsonify({"error": f"step 参数不合法: {raw_step}"}), 400
+        else:
+            target = ws.data.get("current_step", 1)
+
+        if not isinstance(target, int) or target < 1 or target > 7:
+            return jsonify({"error": f"step 超出合法范围 1-7: {target}"}), 400
+
         job_id = str(uuid.uuid4())[:8]
-        target = ws.data.get("current_step", 1)
 
         step_method_map = {
             1: "step1_analyze",
