@@ -46,3 +46,21 @@
 - **描述**: 人脸区域分级磨皮、肤色保护、场景 LUT 预设、A/B 对比预览
 - **优先级**: 中
 - **状态**: 待评估
+
+### W-006: VectorIndex compact 自动触发
+- **来源**: v0.12.2 R2
+- **描述**: VectorIndex.remove() 使用 lazy deletion，deleted 集合超过 20% 时 `needs_compact` 为 True，但目前无自动 compact 触发机制。建议在 `_refresh_vector_cache` 中检测并自动 rebuild。
+- **优先级**: 低
+- **状态**: 待评估
+
+### W-007: FAISS IndexIVFFlat 大规模升级路径
+- **来源**: v0.12.2 R2
+- **描述**: 当前使用 IndexFlatIP（精确搜索），资产超过 100k 时性能下降。未来可增加 IndexIVFFlat 自动切换策略：<10k 用 Flat，>10k 自动训练 IVF。
+- **优先级**: 低
+- **状态**: 待评估
+
+### W-008: 向量索引增量持久化优化
+- **来源**: v0.12.2 R2
+- **描述**: 当前每次 rebuild 后全量 save。对于增量 add 场景，可考虑 WAL-style 增量日志，减少大索引的写入开销。
+- **优先级**: 低
+- **状态**: 待评估
