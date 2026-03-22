@@ -4,6 +4,28 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/) 规范。
 
+## [0.11.0] - 2026-03-22
+
+### 修复 (Fixed)
+- R1: P0 两处 Segfault（null 参数 /api/init + step=99 越界 /api/run_step）(BUG-001, BUG-002)
+- R2: P0 安全修复（CSRF 双开关逻辑 + provider 枚举校验 + 搜索长度限制）(SEC-001, BUG-004, SEC-002)
+- R3: P1 接口补全（health/projects/workflow-status/settings 路由 + UnicodeDecodeError + run_step 防御）(BUG-006/007/008)
+- R8: P1 Step 3 AI 脚本生成实现，清除残留 TODO (BUG-003)
+- R10: P3 视觉一致性（图标统一 + 空状态文案 + ESC 关弹窗 + 标题统一 + Canvas 说明）(UX-P3-001~005)
+
+### 新增 (Added)
+- R4: 预检路由守卫 + 向导断点补救引导 (UX-P1-001, UX-P1-002)
+- R5: 项目弹窗优化（路径 readonly + 目录说明 + 项目名生效）(UX-P2-001, UX-P2-007)
+- R6: 破坏性操作二次确认 + AI 设置测试连接 (UX-P2-003, UX-P2-004)
+- R7: Job 进度可视化 + 无项目新建引导 + 标签种子数据 (UX-P2-005/006, DATA-001)
+- R9: SQLite 外键约束启用 + requirements.txt 依赖分层 (DATA-002, DEP-001)
+
+### 重构 (Refactored)
+- R11: Library 单体拆分 — global_media_library.py 从 13,282 行精简为 269 行 Facade (ARCH-001)
+  - 提取 8 个 Mixin：FingerprintMixin, GDriveMixin, DuplicateDetectionMixin, PathRelinkMixin, TagManagerMixin, AutoTaggerMixin, CoreMixin, SchemaMixin
+  - 提取 _constants.py 共享常量（避免循环导入）
+  - 所有公共接口零变更，全量回归测试 787 passed / 50 skipped
+
 ## [0.10.0] - 2026-03-20
 
 ### 修改 (Changed)
