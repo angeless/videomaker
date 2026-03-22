@@ -90,9 +90,14 @@
             {{ settings.aiMessage }}
           </div>
 
-          <button class="btn btn-primary" :disabled="settings.aiSaving" @click="settings.saveAiSettings()">
-            {{ settings.aiSaving ? labels.settings.ai.saving : labels.settings.ai.save }}
-          </button>
+          <div style="display: flex; gap: 8px; align-items: center">
+            <button class="btn btn-primary" :disabled="settings.aiSaving" @click="settings.saveAiSettings()">
+              {{ settings.aiSaving ? labels.settings.ai.saving : labels.settings.ai.save }}
+            </button>
+            <button class="btn btn-ghost" :disabled="aiTesting" @click="testAiConnection">
+              {{ aiTestResult ? aiTestResult : (aiTesting ? '测试中...' : '测试连接') }}
+            </button>
+          </div>
         </div>
 
         <!-- 平台连接 -->
@@ -303,6 +308,22 @@ const youtubeChannel = ref('')
 const youtubeLoading = ref(false)
 const youtubeWaiting = ref(false)
 let ytPollTimer = null
+
+const aiTesting = ref(false)
+const aiTestResult = ref('')
+
+async function testAiConnection() {
+  aiTesting.value = true
+  aiTestResult.value = ''
+  const data = await apiStore.api('POST', '/api/settings/ai/test', {})
+  aiTesting.value = false
+  if (data.ok) {
+    aiTestResult.value = '✓ 连接成功'
+  } else {
+    aiTestResult.value = `连接失败：${data.error || '未知错误'}`
+  }
+  setTimeout(() => { aiTestResult.value = '' }, 5000)
+}
 
 async function loadYouTubeStatus() {
   const data = await apiStore.api('GET', '/api/settings/oauth/youtube/status')

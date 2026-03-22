@@ -82,6 +82,42 @@ def create_settings_blueprint(
         _audit("config_change", "settings", "ai", actor=f"local:{request.remote_addr}", detail={"keys_changed": sorted(data.keys())})
         return jsonify({"ok": True, **public_ai_settings(ai)})
 
+    @bp.route("/api/settings/ai/test", methods=["POST"])
+    def api_test_ai_connection():
+        import socket
+        ai = load_ai_settings()
+        provider = ai.get("provider", "")
+        api_key = ai.get("openai_api_key", "") or ai.get("anthropic_api_key", "")
+        if not provider:
+            return jsonify({"ok": False, "error": "未配置 AI 服务商"})
+        if not api_key:
+            return jsonify({"ok": False, "error": "未配置 API Key"})
+        base_url = ai.get("ai_base_url", "") or ""
+        try:
+            import urllib.request
+            import urllib.error
+            test_url = base_url.rstrip("/") + "/models" if base_url else ""
+            if not test_url:
+                from modules.app_api.services.settings_service import _AI_PROVIDER_CATALOG
+                cat = _AI_PROVIDER_CATALOG.get(provider, {})
+                test_url = (cat.get("default_base_url", "") or "").rstrip("/") + "/models"
+            if not test_url:
+                return jsonify({"ok": False, "error": f"无法确定 {provider} 的 API 地址"})
+            req = urllib.request.Request(test_url, method="GET")
+            req.add_header("Authorization", f"Bearer {api_key}")
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                return jsonify({"ok": True})
+        except urllib.error.HTTPError as e:
+            if e.code == 401:
+                return jsonify({"ok": False, "error": "API Key 无效（401 认证失败）"})
+            if e.code == 403:
+                return jsonify({"ok": False, "error": "API Key 权限不足（403）"})
+            return jsonify({"ok": True})  # Other HTTP errors (404 etc.) mean the server is reachable
+        except (urllib.error.URLError, socket.timeout, OSError) as e:
+            return jsonify({"ok": False, "error": f"连接失败：{e}"})
+        except Exception as e:
+            return jsonify({"ok": False, "error": f"连接失败：{e}"})
+
     @bp.route("/api/settings/ui", methods=["GET"])
     def api_get_ui_settings():
         return jsonify({"ok": True, **load_ui_settings()})

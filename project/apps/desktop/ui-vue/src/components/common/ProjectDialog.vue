@@ -1,6 +1,6 @@
 <template>
   <Teleport to="body">
-    <div class="modal-overlay" @click.self="appStore.showInit = false">
+    <div class="modal-overlay" @click.self="closeDialog">
       <div class="modal">
         <div class="modal-title">
           {{ appStore.initMode === 'new' ? labels.project.new : labels.project.open }}
@@ -99,6 +99,12 @@ const v = useValidation({
   projectDir: [{ type: 'required', message: '请选择项目保存位置' }],
   openDir: [{ type: 'required', message: '请选择项目文件夹' }],
 })
+
+function closeDialog() {
+  const hasContent = !!(appStore.initProjectName || appStore.initVideosDir || appStore.initProjectDir || appStore.initOpenDir)
+  if (hasContent && !confirm('内容尚未保存，确认关闭？')) return
+  appStore.showInit = false
+}
 
 const canSubmit = computed(() => {
   if (appStore.initMode === 'new') {

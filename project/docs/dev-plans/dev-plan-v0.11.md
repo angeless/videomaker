@@ -68,7 +68,7 @@
 | R3 | 接口补全与编码修复 | app_api / routes | v0.11.0 | Done | P1 |
 | R4 | UX 引导体验修复（预检守卫 + 向导断点）| vue_ui | v0.11.0 | Done | P1 |
 | R5 | 项目弹窗优化与项目名生效 | vue_ui / app_api | v0.11.0 | Done | P2 |
-| R6 | 操作确认机制 + AI 测试连接 | vue_ui / app_api | v0.11.0 | Planned | P2 |
+| R6 | 操作确认机制 + AI 测试连接 | vue_ui / app_api | v0.11.0 | Done | P2 |
 | R7 | Job 进度 + 无项目引导 + 标签种子数据 | vue_ui / app_api / library | v0.11.0 | Planned | P2 |
 | R8 | Step 3 AI 脚本生成实现 | step3_script_generation | v0.11.0 | Planned | P1 |
 | R9 | 数据库外键约束 + 依赖分层 | library / 工程配置 | v0.11.0 | Planned | P2 |
