@@ -4,6 +4,16 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/) 规范。
 
+## [0.12.9] - 2026-03-22
+
+### 新增 (Added)
+- R9: 订阅制开关
+  - `modules/subscription/` 新模块：FeatureGate + Tier 枚举
+  - Free/Pro 双层功能控制（8 个免费功能 + 11 个 Pro 功能）
+  - API：`/api/subscription/status` + `/api/subscription/gate` + `/api/subscription/upgrade`
+  - 持久化到 settings.json
+  - 11 个新增测试
+
 ## [0.12.8] - 2026-03-22
 
 ### 新增 (Added)

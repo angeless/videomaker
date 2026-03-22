@@ -476,6 +476,37 @@ def create_settings_blueprint(
         except Exception as exc:
             return jsonify({"error": str(exc)[:200]}), 502
 
+    # ── R9: Subscription feature gate ──
+
+    @bp.route("/api/subscription/status", methods=["GET"])
+    def api_subscription_status():
+        from modules.subscription import FeatureGate
+        gate = FeatureGate()
+        return jsonify({
+            "tier": gate.tier.value,
+            "features": gate.all_features(),
+        })
+
+    @bp.route("/api/subscription/gate", methods=["GET"])
+    def api_subscription_gate():
+        from modules.subscription import FeatureGate
+        feature = (request.args.get("feature", "") or "").strip()
+        if not feature:
+            return jsonify({"error": "feature param required"}), 400
+        gate = FeatureGate()
+        return jsonify(gate.gate(feature))
+
+    @bp.route("/api/subscription/upgrade", methods=["POST"])
+    def api_subscription_upgrade():
+        from modules.subscription import FeatureGate, Tier
+        body = request.get_json(silent=True) or {}
+        tier_str = str(body.get("tier", "") or "").lower()
+        if tier_str not in ("free", "pro"):
+            return jsonify({"error": "tier must be 'free' or 'pro'"}), 400
+        gate = FeatureGate()
+        gate.set_tier(Tier(tier_str))
+        return jsonify({"ok": True, "tier": tier_str})
+
     return bp
 
 
