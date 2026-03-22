@@ -846,14 +846,15 @@ class GlobalMediaLibrary:
         json_path = _SEED_DATA_DIR / "semantic_keyword_library_zh_v1.json"
         rules_path = _SEED_DATA_DIR / "semantic_tag_scoring_rules_v1.json"
 
-        if not jsonl_path.exists():
-            return  # seed data not available, skip silently
+        seed_available = jsonl_path.exists()
+        if seed_available:
+            try:
+                jsonl_path.open("r").close()
+            except (PermissionError, OSError):
+                seed_available = False
 
-        # Guard against macOS TCC PermissionError (~/Downloads may be
-        # metadata-readable but content-blocked in sandboxed environments).
-        try:
-            jsonl_path.open("r").close()
-        except (PermissionError, OSError):
+        if not seed_available:
+            self._seed_minimal_tags(conn)
             return
 
         # ── Step 1: Insert tag_category ──
@@ -1330,6 +1331,42 @@ class GlobalMediaLibrary:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_assets_usability ON assets(usability_score)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_assets_trash ON assets(trash_level)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_assets_material_type ON assets(material_type)")
+
+    def _seed_minimal_tags(self, conn: sqlite3.Connection):
+        """Fallback seed when external JSONL data is unavailable."""
+        categories = [
+            ("场景", "scene", 1), ("人物", "person", 2), ("动作", "action", 3),
+            ("情绪", "mood", 4), ("构图", "composition", 5), ("色调", "color_tone", 6),
+            ("画质", "quality", 7),
+        ]
+        cat_ids = {}
+        for name, code, order in categories:
+            conn.execute(
+                "INSERT OR IGNORE INTO tag_category (category_name, category_code, sort_order) VALUES (?, ?, ?)",
+                (name, code, order),
+            )
+            row = conn.execute("SELECT category_id FROM tag_category WHERE category_code = ?", (code,)).fetchone()
+            if row:
+                cat_ids[code] = row[0]
+        tags = [
+            ("scene", [("室内", "indoor"), ("室外", "outdoor"), ("城市", "city"), ("自然", "nature"), ("水面", "water"), ("山地", "mountain"), ("夜景", "night")]),
+            ("person", [("单人", "single_person"), ("多人", "multi_person"), ("无人", "no_person"), ("近景人物", "closeup_person"), ("群体", "crowd")]),
+            ("action", [("行走", "walking"), ("静止", "still"), ("运动", "sports"), ("交谈", "talking"), ("特写动作", "action_closeup")]),
+            ("mood", [("轻松", "relaxed"), ("活力", "energetic"), ("安静", "quiet"), ("戏剧性", "dramatic")]),
+            ("composition", [("横构图", "landscape"), ("竖构图", "portrait"), ("中心构图", "center"), ("三分法", "rule_of_thirds")]),
+            ("color_tone", [("暖色调", "warm"), ("冷色调", "cool"), ("高饱和", "saturated"), ("低饱和", "desaturated")]),
+            ("quality", [("高清", "hd"), ("标清", "sd"), ("4K", "4k"), ("模糊", "blurry")]),
+        ]
+        for cat_code, tag_list in tags:
+            cid = cat_ids.get(cat_code)
+            if not cid:
+                continue
+            for tag_name, tag_code in tag_list:
+                full_code = f"{cat_code}_{tag_code}"
+                conn.execute(
+                    "INSERT OR IGNORE INTO tag (tag_name, normalized_name, tag_code, category_id, semantic_slot, source_type) VALUES (?, ?, ?, ?, ?, ?)",
+                    (tag_name, tag_name.lower(), full_code, cid, "object", "system_seed"),
+                )
 
     def _get_library_stats(self, conn: sqlite3.Connection) -> Dict[str, Any]:
         """收集素材库统计信息，供独特性评分使用。"""
