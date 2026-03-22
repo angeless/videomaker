@@ -52,6 +52,8 @@
       this.libraryEmbeddingStatus = `${data.embedding_status || ""}`;
       this.libraryEmbeddingStatusMessage = `${data.embedding_status_message || ""}`;
       this.libraryEmbeddingReadyAssets = parseInt(data.embedding_ready_assets || 0, 10) || 0;
+      this.libraryVisualSearchEnabled = !!data.visual_search_enabled;
+      this.libraryVisualEmbeddingsCount = parseInt(data.visual_embeddings_count || 0, 10) || 0;
       const totalMatches = Number.isFinite(Number(data.total_matches))
         ? Number(data.total_matches)
         : (this.libraryResults.length || 0);

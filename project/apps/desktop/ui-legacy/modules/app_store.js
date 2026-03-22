@@ -53,6 +53,8 @@
     libraryEmbeddingReadyAssets: 0,
     libraryEmbeddingStatus: "",
     libraryEmbeddingStatusMessage: "",
+    libraryVisualSearchEnabled: false,
+    libraryVisualEmbeddingsCount: 0,
     ingestLocalPath:  "",
     ingestLocalMaxVideos: 600,
     ingestLocalPreviewLoading: false,

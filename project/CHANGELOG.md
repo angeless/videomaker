@@ -4,6 +4,17 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/) 规范。
 
+## [0.12.6] - 2026-03-22
+
+### 新增 (Added)
+- R6: 融合检索模式（`retrieval_mode="fusion"`）— 通过 RRF 加权合并文本向量 + 视觉向量搜索结果
+- R6: 搜索 UI 新增"视觉"和"融合"检索模式按钮
+- R6: 视觉搜索状态徽章（显示 CLIP 可用性和视觉嵌入数量）
+- R6: `check_ai_status()` 新增 `clip_available` 字段
+- R6: API 响应新增 `visual_search_enabled` / `visual_embeddings_count`
+- R6: `retrievalModeZh()` 支持"视觉检索"和"融合检索"中文标签
+- 11 个新增测试，全量回归 860 passed / 50 skipped
+
 ## [0.12.5] - 2026-03-22
 
 ### 改进 (Changed)

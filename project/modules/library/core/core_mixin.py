@@ -5531,12 +5531,18 @@ class CoreMixin:
         q = (query or "").strip().lower()
         keywords = self._tokenize_query(q) if q else []
         mode = str(retrieval_mode or "hybrid").strip().lower()
-        if mode not in {"hybrid", "keyword", "vector", "visual"}:
+        if mode not in {"hybrid", "keyword", "vector", "visual", "fusion"}:
             mode = "hybrid"
         # Visual count shortcut
         if mode == "visual" and q:
             visual_scores = self.visual_search(q, top_k=500) if hasattr(self, "visual_search") else {}
             return len(visual_scores)
+        # Fusion count: union of hybrid + visual
+        if mode == "fusion" and q:
+            hybrid_count = self.count_matching_assets(query=q, retrieval_mode="hybrid", media_type=media_type)
+            visual_scores = self.visual_search(q, top_k=500) if hasattr(self, "visual_search") else {}
+            # Approximate: union is at most sum, but likely overlapping
+            return max(hybrid_count, len(visual_scores))
         media = self._normalize_media_type(media_type)
         with self._connect() as conn:
             if not q:
@@ -5575,7 +5581,7 @@ class CoreMixin:
         q = (query or "").strip().lower()
         keywords = self._tokenize_query(q) if q else []
         mode = str(retrieval_mode or "hybrid").strip().lower()
-        if mode not in {"hybrid", "keyword", "vector", "visual"}:
+        if mode not in {"hybrid", "keyword", "vector", "visual", "fusion"}:
             mode = "hybrid"
         media = self._normalize_media_type(media_type)
         try:
@@ -5594,6 +5600,36 @@ class CoreMixin:
                     asset["tag_score"] = 0.0
                 return assets
             return []
+        # Fusion: combine hybrid text results with visual results via RRF
+        if mode == "fusion" and q:
+            hybrid_results = self.search_assets(
+                query=q, limit=limit * 2, offset=0,
+                retrieval_mode="hybrid", media_type=media_type,
+            )
+            visual_scores = self.visual_search(q, top_k=limit * 2) if hasattr(self, "visual_search") else {}
+            uid_scores: Dict[str, float] = {}
+            for rank, asset in enumerate(hybrid_results):
+                uid = asset.get("uid", "")
+                if uid:
+                    uid_scores[uid] = uid_scores.get(uid, 0.0) + 1.0 / (60 + rank)
+            for rank, (uid, _vs) in enumerate(sorted(visual_scores.items(), key=lambda x: -x[1])):
+                uid_scores[uid] = uid_scores.get(uid, 0.0) + 1.0 / (60 + rank)
+            sorted_uids = sorted(uid_scores.keys(), key=lambda u: -uid_scores[u])
+            page_uids = sorted_uids[offset:offset + limit]
+            if not page_uids:
+                return []
+            assets = self.get_assets(page_uids) if hasattr(self, "get_assets") else []
+            hybrid_by_uid = {a.get("uid"): a for a in hybrid_results}
+            for asset in assets:
+                uid = asset.get("uid", "")
+                asset["match_score"] = uid_scores.get(uid, 0.0)
+                h = hybrid_by_uid.get(uid, {})
+                asset["keyword_score"] = h.get("keyword_score", 0.0)
+                asset["vector_score"] = h.get("vector_score", 0.0)
+                asset["visual_score"] = visual_scores.get(uid, 0.0)
+                asset["tag_score"] = h.get("tag_score", 0.0)
+            assets.sort(key=lambda a: -a.get("match_score", 0.0))
+            return assets
         try:
             offset = max(0, int(offset))
         except Exception:

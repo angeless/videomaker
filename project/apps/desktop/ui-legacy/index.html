@@ -626,6 +626,12 @@
         <button class="btn" :class="librarySearchMode==='vector' ? 'btn-primary' : 'btn-ghost'"
                 style="font-size:12px;padding:5px 10px"
                 @click="setLibrarySearchMode('vector')">向量</button>
+        <button class="btn" :class="librarySearchMode==='visual' ? 'btn-primary' : 'btn-ghost'"
+                style="font-size:12px;padding:5px 10px"
+                @click="setLibrarySearchMode('visual')">视觉</button>
+        <button class="btn" :class="librarySearchMode==='fusion' ? 'btn-primary' : 'btn-ghost'"
+                style="font-size:12px;padding:5px 10px"
+                @click="setLibrarySearchMode('fusion')">融合</button>
         <span style="font-size:12px;color:var(--muted);margin-left:6px">类型</span>
         <button class="btn" :class="libraryMediaType==='all' ? 'btn-primary' : 'btn-ghost'"
                 style="font-size:12px;padding:5px 10px"
@@ -639,6 +645,8 @@
         <span class="badge badge-info" x-text="`当前: ${retrievalModeZh(libraryRetrievalMode)}`"></span>
         <span class="badge" :class="libraryEmbeddingEnabled ? 'badge-success' : 'badge-warn'"
               x-text="libraryEmbeddingEnabled ? `向量可用（${libraryEmbeddingReadyAssets}）` : `向量不可用（${embeddingStatusZh(libraryEmbeddingStatus)}）`"></span>
+        <span class="badge" :class="libraryVisualSearchEnabled ? 'badge-success' : 'badge-warn'"
+              x-text="libraryVisualSearchEnabled ? `视觉可用（${libraryVisualEmbeddingsCount}）` : '视觉不可用'"></span>
       </div>
       <div class="card" style="margin-bottom:10px;padding:10px" x-show="!libraryEmbeddingEnabled">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">

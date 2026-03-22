@@ -45,6 +45,8 @@
           hybrid: "混合检索",
           keyword: "关键词检索",
           vector: "向量检索",
+          visual: "视觉检索",
+          fusion: "融合检索",
           browse: "素材浏览",
         };
         return map[key] || key || "未知模式";
