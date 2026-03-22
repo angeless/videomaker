@@ -4,6 +4,15 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/) 规范。
 
+## [0.12.5] - 2026-03-22
+
+### 改进 (Changed)
+- R5: 向量搜索引擎 API 完整暴露
+  - `/api/library/search?mode=visual` 支持 CLIP 跨模态图文搜索
+  - `count_matching_assets()` 支持 visual 模式
+  - `stats()` 新增 `visual_search_enabled` 和 `visual_embeddings_count`
+  - 6 个新增测试覆盖 API 模式验证和 stats 字段
+
 ## [0.12.4] - 2026-03-22
 
 ### 改进 (Changed)

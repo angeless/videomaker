@@ -253,6 +253,13 @@ class GlobalMediaLibrary(SchemaMixin, CoreMixin, VisionMixin, FingerprintMixin, 
                 """,
                 (EMBEDDING_SCHEMA_VERSION,),
             ).fetchone()[0]
+            # R5: visual search stats
+            try:
+                visual_embeddings_count = conn.execute(
+                    "SELECT COUNT(DISTINCT uid) FROM asset_visual_embeddings"
+                ).fetchone()[0]
+            except Exception:
+                visual_embeddings_count = 0
 
         return {
             "db_path": str(self.db_path),
@@ -276,6 +283,8 @@ class GlobalMediaLibrary(SchemaMixin, CoreMixin, VisionMixin, FingerprintMixin, 
             "embedding_ready_assets": embedding_ready_assets,
             "embedding_pending_assets": max(0, int(total_assets) - int(embedding_ready_assets)),
             "hybrid_search_enabled": True,
+            "visual_search_enabled": self._clip_encoder is not None,
+            "visual_embeddings_count": visual_embeddings_count,
         }
 
 

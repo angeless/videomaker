@@ -88,7 +88,7 @@ def create_library_blueprint(
         media_type = (request.args.get("media_type", "all") or "all").strip().lower()
         if media_type not in {"all", "video", "image"}:
             media_type = "all"
-        if retrieval_mode not in {"hybrid", "keyword", "vector"}:
+        if retrieval_mode not in {"hybrid", "keyword", "vector", "visual"}:
             retrieval_mode = "hybrid"
         default_limit = 120 if not query else 150
         limit = parse_int_param(request.args.get("limit", default_limit), default=default_limit, min_val=1, max_val=500)

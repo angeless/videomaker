@@ -5531,8 +5531,12 @@ class CoreMixin:
         q = (query or "").strip().lower()
         keywords = self._tokenize_query(q) if q else []
         mode = str(retrieval_mode or "hybrid").strip().lower()
-        if mode not in {"hybrid", "keyword", "vector"}:
+        if mode not in {"hybrid", "keyword", "vector", "visual"}:
             mode = "hybrid"
+        # Visual count shortcut
+        if mode == "visual" and q:
+            visual_scores = self.visual_search(q, top_k=500) if hasattr(self, "visual_search") else {}
+            return len(visual_scores)
         media = self._normalize_media_type(media_type)
         with self._connect() as conn:
             if not q:
