@@ -71,7 +71,7 @@
 | R6 | 操作确认机制 + AI 测试连接 | vue_ui / app_api | v0.11.0 | Done | P2 |
 | R7 | Job 进度 + 无项目引导 + 标签种子数据 | vue_ui / app_api / library | v0.11.0 | Done | P2 |
 | R8 | Step 3 AI 脚本生成实现 | step3_script_generation | v0.11.0 | Done | P1 |
-| R9 | 数据库外键约束 + 依赖分层 | library / 工程配置 | v0.11.0 | Planned | P2 |
+| R9 | 数据库外键约束 + 依赖分层 | library / 工程配置 | v0.11.0 | Done | P2 |
 | R10 | 视觉一致性修复（图标 + 空状态 + ESC + 标题 + Canvas 说明）| vue_ui | v0.11.0 | Planned | P3 |
 | R11 | Library 模块拆分 | library | v0.11.0 | Planned | P1 |
 
