@@ -6,7 +6,7 @@
     <div class="tab-bar">
       <button class="tab-btn" :class="{ active: activeTab === 'publish' }" @click="activeTab = 'publish'">{{ L.contentPublish.tabs.publish }}</button>
       <button class="tab-btn" :class="{ active: activeTab === 'history' }" @click="switchToHistory">{{ L.contentPublish.tabs.history }}</button>
-      <button class="tab-btn" :class="{ active: activeTab === 'settings' }" @click="activeTab = 'settings'">{{ L.contentPublish.tabs.settings }}</button>
+      <!-- settings tab hidden — not yet implemented -->
     </div>
 
     <!-- Tab 1: 发布 -->
@@ -171,12 +171,7 @@
       </div>
     </div>
 
-    <!-- Tab 3: 设置 (placeholder) -->
-    <div v-show="activeTab === 'settings'">
-      <div class="cap-section">
-        <div class="text-muted" style="font-size:13px; padding:20px 0">{{ L.contentPublish.tabs.settingsPlaceholder }}</div>
-      </div>
-    </div>
+    <!-- settings tab hidden — not yet implemented -->
   </div>
 </template>
 

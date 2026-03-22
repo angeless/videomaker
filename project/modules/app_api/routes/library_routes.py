@@ -10,7 +10,7 @@ import uuid
 
 from flask import Blueprint, jsonify, request, send_file, abort
 
-from modules.app_api.param_utils import parse_int_param
+from modules.app_api.param_utils import parse_int_param, safe_error_response
 
 logger = logging.getLogger(__name__)
 
@@ -583,7 +583,7 @@ def create_library_blueprint(
                 max_results=max_results,
             )
         except Exception as exc:
-            return jsonify({"error": str(exc)}), 400
+            return jsonify({"error": safe_error_response(exc, "导入预览失败")}), 400
         return jsonify({"ok": True, "preview": preview})
 
     @bp.route("/api/library/ingest/gdrive/images", methods=["POST"])
@@ -680,7 +680,7 @@ def create_library_blueprint(
                 max_results=max_results,
             )
         except Exception as exc:
-            return jsonify({"error": str(exc)}), 400
+            return jsonify({"error": safe_error_response(exc, "导入预览失败")}), 400
         return jsonify({"ok": True, "preview": preview})
 
     # ── v0.7 Fingerprint / Path Relocation / Dedup endpoints ──

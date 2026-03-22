@@ -430,7 +430,7 @@ def create_legacy_project_blueprint(
                 try:
                     return jsonify(json.loads(p.read_text(encoding="utf-8")))
                 except Exception:
-                    pass
+                    return jsonify({"error": f"脚本文件 {name} 格式损坏，请检查"}), 500
         return jsonify({})
 
     @bp.route("/api/script", methods=["POST"])
@@ -458,7 +458,7 @@ def create_legacy_project_blueprint(
         try:
             return jsonify(json.loads(p.read_text(encoding="utf-8")))
         except Exception:
-            return jsonify({})
+            return jsonify({"error": "素材文件 materials.json 格式损坏"}), 500
 
     # ── 项目元数据 (T-0604) ──────────────────────────────────────────
 

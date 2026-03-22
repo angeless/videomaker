@@ -64,15 +64,6 @@
         </div>
       </div>
 
-      <!-- 云端 placeholder -->
-      <div v-if="activeTab === 'cloud'">
-        <div class="form-group">
-          <label class="form-label">Google Drive 分享链接</label>
-          <input v-model="lib.ingestDriveUrl" class="form-input" placeholder="https://drive.google.com/..." />
-        </div>
-        <button class="btn btn-primary btn-sm" disabled>即将支持</button>
-      </div>
-
       <!-- 入库进度 -->
       <IngestProgress v-if="lib.ingestLoading || lib.ingestMessage" />
     </template>
@@ -96,17 +87,25 @@ const activeTab = ref('local')
 const tabs = [
   { key: 'local', label: labels.library.ingestLocal },
   { key: 'image', label: labels.library.ingestImage },
-  { key: 'cloud', label: labels.library.ingestCloud },
+  // cloud tab hidden — not yet implemented (W-004)
 ]
 
 async function pickLocalPath() {
-  const result = await apiStore.api('POST', '/api/dialog/folder')
-  if (result.path) lib.ingestLocalPath = result.path
+  try {
+    const result = await apiStore.api('POST', '/api/dialog/folder')
+    if (result.path) lib.ingestLocalPath = result.path
+  } catch (e) {
+    lib.ingestMessage = e.message || '文件夹选择失败'
+  }
 }
 
 async function pickImagePath() {
-  const result = await apiStore.api('POST', '/api/dialog/folder')
-  if (result.path) lib.ingestImagePath = result.path
+  try {
+    const result = await apiStore.api('POST', '/api/dialog/folder')
+    if (result.path) lib.ingestImagePath = result.path
+  } catch (e) {
+    lib.ingestMessage = e.message || '文件夹选择失败'
+  }
 }
 
 // Expose methods for parent to programmatically expand and scroll

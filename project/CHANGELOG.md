@@ -4,6 +4,17 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/) 规范。
 
+## [0.12.11] - 2026-03-22
+
+### 修复 (Fixed)
+- R11: 产品体验修复批次
+  - API 错误响应标准化：5 处 `str(exc)` 裸露异常替换为 `safe_error_response()` 用户友好消息
+  - 前端 IngestPanel 文件夹选择添加 try/catch 错误反馈
+  - 隐藏未实现功能入口：云端导入 tab + ContentPublish 设置 tab
+  - 关键 JSON 解析（script/materials）静默失败改为返回明确错误
+  - API 参数验证加固：target_duration_s 范围限制、timeline fps/resolution/transition 边界检查
+  - 新增 `safe_error_response()` 工具函数到 param_utils.py
+
 ## [0.12.10] - 2026-03-22
 
 ### 新增 (Added)

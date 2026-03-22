@@ -11,7 +11,7 @@ from typing import Any, Callable, Dict, Optional
 
 from flask import Blueprint, jsonify, request
 
-from modules.app_api.param_utils import parse_str_param
+from modules.app_api.param_utils import parse_str_param, safe_error_response
 
 logger = logging.getLogger(__name__)
 
@@ -474,7 +474,7 @@ def create_settings_blueprint(
                 latency_ms = int((time.time() - t0) * 1000)
                 return jsonify({"ok": True, "status_code": resp.status, "latency_ms": latency_ms})
         except Exception as exc:
-            return jsonify({"error": str(exc)[:200]}), 502
+            return jsonify({"error": safe_error_response(exc, "连接测试失败")}), 502
 
     # ── R9: Subscription feature gate ──
 

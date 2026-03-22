@@ -64,7 +64,7 @@ def create_timeline_blueprint(
 
         clips_raw = script.get("clips", [])
         subtitles_raw = script.get("subtitles", [])
-        transition_dur = float(config.get("transition_duration", 0.35) or 0.35)
+        transition_dur = max(0.0, min(float(config.get("transition_duration", 0.35) or 0.35), 5.0))
         status = _clip_processing_status(project_dir, ws)
 
         # Build timeline clips with absolute positions
@@ -125,10 +125,10 @@ def create_timeline_blueprint(
             "ok": True,
             "timeline": {
                 "total_duration": total_duration,
-                "fps": int(config.get("fps", 30) or 30),
+                "fps": max(1, min(int(config.get("fps", 30) or 30), 120)),
                 "resolution": {
-                    "width": int(config.get("width", 1080) or 1080),
-                    "height": int(config.get("height", 1920) or 1920),
+                    "width": max(1, min(int(config.get("width", 1080) or 1080), 7680)),
+                    "height": max(1, min(int(config.get("height", 1920) or 1920), 7680)),
                 },
                 "transition": {
                     "style": str(config.get("transition_style", "fade") or "fade"),
