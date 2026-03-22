@@ -82,6 +82,8 @@ def create_library_blueprint(
     @bp.route("/api/library/search")
     def api_library_search():
         query = (request.args.get("q", "") or "").strip()
+        if len(query) > 500:
+            return jsonify({"error": "query 长度超出限制（最大 500 字符）"}), 400
         retrieval_mode = (request.args.get("mode", "hybrid") or "hybrid").strip().lower()
         media_type = (request.args.get("media_type", "all") or "all").strip().lower()
         if media_type not in {"all", "video", "image"}:

@@ -123,7 +123,7 @@ def _guard_local_api_token():
     if not path.startswith("/api/"):
         return None
     req_token, req_csrf, api_token, csrf_token = _get_security_state()
-    enforce_csrf = bool(req_csrf and req_token)
+    enforce_csrf = bool(req_csrf)
     origin = str(request.headers.get("Origin", "") or "").strip()
     if enforce_csrf and _is_mutating_method(request.method) and not _is_allowed_local_origin(origin):
         _audit_security_event(
@@ -133,7 +133,7 @@ def _guard_local_api_token():
         return jsonify({"error": "非法来源，请在本地应用内发起请求。", "code": "origin_forbidden"}), 403
     if path == "/api/session/bootstrap":
         return None
-    if enforce_csrf and _is_mutating_method(request.method):
+    if enforce_csrf and _is_mutating_method(request.method) and (origin or req_token):
         provided_csrf = str(request.headers.get("X-VideoEditor-CSRF", "") or "").strip()
         if not provided_csrf:
             provided_csrf = str(request.args.get("_csrf", "") or "").strip()

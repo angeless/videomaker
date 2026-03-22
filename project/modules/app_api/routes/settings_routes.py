@@ -61,7 +61,14 @@ def create_settings_blueprint(
     @bp.route("/api/settings/ai", methods=["POST"])
     def api_save_ai_settings():
         from modules.app_api.services.audit_log import audit as _audit
+        from modules.app_api.services.settings_service import _AI_PROVIDER_CATALOG, _AI_PROVIDER_ALIASES
         data = request.json or {}
+        raw_provider = parse_str_param(data.get("provider", "")).lower()
+        if raw_provider:
+            normalized = _AI_PROVIDER_ALIASES.get(raw_provider)
+            if normalized is None or normalized not in _AI_PROVIDER_CATALOG:
+                valid = sorted(_AI_PROVIDER_CATALOG.keys())
+                return jsonify({"error": f"provider 不合法，合法值为：{' / '.join(valid)}"}), 400
         ai = save_ai_settings(data)
         apply_ai_env(ai)
         _audit("config_change", "settings", "ai", actor=f"local:{request.remote_addr}", detail={"keys_changed": sorted(data.keys())})

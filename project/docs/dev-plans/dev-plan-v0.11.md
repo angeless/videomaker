@@ -64,7 +64,7 @@
 | 任务ID | 任务名称 | 所属模块 | 目标版本 | 状态 | 优先级 |
 |--------|---------|---------|---------|------|--------|
 | R1 | 两处 Segfault 修复 | app_api / job_runtime | v0.11.0 | Done | P0 |
-| R2 | 安全修复（CSRF + 枚举校验 + query 长度）| app_api / middleware | v0.11.0 | Planned | P0 |
+| R2 | 安全修复（CSRF + 枚举校验 + query 长度）| app_api / middleware | v0.11.0 | Done | P0 |
 | R3 | 接口补全与编码修复 | app_api / routes | v0.11.0 | Planned | P1 |
 | R4 | UX 引导体验修复（预检守卫 + 向导断点）| vue_ui | v0.11.0 | Planned | P1 |
 | R5 | 项目弹窗优化与项目名生效 | vue_ui / app_api | v0.11.0 | Planned | P2 |
