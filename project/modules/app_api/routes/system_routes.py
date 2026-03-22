@@ -88,6 +88,46 @@ def create_system_blueprint(
             "recent": recent(limit=50),
         })
 
+    @bp.route("/api/system/hardware", methods=["GET"])
+    def api_system_hardware():
+        try:
+            from modules.hardware.detector import get_system_profile
+            from modules.hardware.encoding_strategy import choose_encoder, suggest_max_concurrent
+            profile = get_system_profile()
+            enc = choose_encoder(profile)
+            return jsonify({
+                "ok": True,
+                "cpu": {
+                    "physical_cores": profile.cpu.physical_cores,
+                    "logical_cores": profile.cpu.logical_cores,
+                    "architecture": profile.cpu.architecture,
+                    "model": profile.cpu.model,
+                },
+                "memory": {
+                    "total_gb": profile.memory.total_gb,
+                    "available_gb": profile.memory.available_gb,
+                },
+                "gpu": {
+                    "vendor": profile.gpu.vendor,
+                    "model": profile.gpu.model,
+                    "has_videotoolbox": profile.gpu.has_videotoolbox,
+                    "has_nvenc": profile.gpu.has_nvenc,
+                    "has_vaapi": profile.gpu.has_vaapi,
+                },
+                "ffmpeg": {
+                    "path": profile.ffmpeg_path,
+                    "hwaccels": profile.ffmpeg_hwaccels,
+                },
+                "encoding": {
+                    "encoder": enc.video_encoder,
+                    "hwaccel": enc.hwaccel,
+                    "label": enc.label,
+                },
+                "suggested_max_concurrent": suggest_max_concurrent(profile),
+            })
+        except Exception as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 500
+
     @bp.route("/api/system/audit", methods=["GET"])
     def api_system_audit():
         from modules.app_api.services.audit_log import query as audit_query, count as audit_count

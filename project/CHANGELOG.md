@@ -4,6 +4,20 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/) 规范。
 
+## [0.12.10] - 2026-03-22
+
+### 新增 (Added)
+- R10: 硬件自适应 + 性能优化
+  - `modules/hardware/` 新模块：硬件探测 + 自适应编码策略
+  - CPU/RAM/GPU 自动检测（macOS/Linux）
+  - FFmpeg 硬件加速三级策略：VideoToolbox → NVENC → libx264 CPU
+  - 渲染并发数基于系统资源智能推荐（1-4）
+  - RenderConfig 支持 `video_encoder` / `hwaccel` / `encoder_extra_args`
+  - auto_render.py 全部硬编码 libx264 替换为可配置编码器
+  - Preflight 集成硬件画像检测项
+  - API：`/api/system/hardware` 端点
+  - 22 个新增测试，917 全量通过
+
 ## [0.12.9] - 2026-03-22
 
 ### 新增 (Added)
