@@ -265,5 +265,70 @@ class GlobalMediaLibrary(SchemaMixin, CoreMixin, FingerprintMixin, GDriveMixin, 
         }
 
 
+    def sync_project_materials(self, project_dir: str | Path) -> Dict[str, Any]:
+        """Sync project-level analysis results back to global library.
+
+        Reads materials.json from a project directory and updates
+        global library records with any enriched analysis data.
+
+        Returns dict with counts: updated, skipped, not_found.
+        """
+        project_path = Path(project_dir)
+        materials_file = project_path / "data" / "materials.json"
+        if not materials_file.exists():
+            materials_file = project_path / "materials.json"
+        if not materials_file.exists():
+            return {"updated": 0, "skipped": 0, "not_found": 0, "error": "no materials.json found"}
+
+        try:
+            materials = json.loads(materials_file.read_text(encoding="utf-8"))
+        except Exception as e:
+            return {"updated": 0, "skipped": 0, "not_found": 0, "error": str(e)}
+
+        updated = 0
+        skipped = 0
+        not_found = 0
+
+        with self._connect() as conn:
+            for uid, mat in materials.items():
+                if not isinstance(mat, dict):
+                    skipped += 1
+                    continue
+                row = conn.execute(
+                    "SELECT uid, analysis_json, semantic_json, keywords_json FROM assets WHERE uid = ?",
+                    (uid,),
+                ).fetchone()
+                if not row:
+                    not_found += 1
+                    continue
+
+                analysis = mat.get("analysis", {})
+                semantic = mat.get("semantic", {})
+                keywords = mat.get("semantic_keywords", [])
+                if not analysis and not semantic and not keywords:
+                    skipped += 1
+                    continue
+
+                updates = {}
+                if analysis:
+                    updates["analysis_json"] = json.dumps(analysis, ensure_ascii=False)
+                if semantic:
+                    updates["semantic_json"] = json.dumps(semantic, ensure_ascii=False)
+                if keywords:
+                    updates["keywords_json"] = json.dumps(keywords, ensure_ascii=False)
+
+                if updates:
+                    set_clause = ", ".join(f"{k} = ?" for k in updates)
+                    conn.execute(
+                        f"UPDATE assets SET {set_clause}, updated_at = ? WHERE uid = ?",
+                        (*updates.values(), datetime.now().isoformat(), uid),
+                    )
+                    updated += 1
+                else:
+                    skipped += 1
+
+        _gml_logger.info("sync_project_materials: updated=%d skipped=%d not_found=%d", updated, skipped, not_found)
+        return {"updated": updated, "skipped": skipped, "not_found": not_found}
+
     # Path relink APIs (add_known_root .. get_project_missing_stats) → PathRelinkMixin
     # backfill_fingerprints, get_fingerprint_health → FingerprintMixin

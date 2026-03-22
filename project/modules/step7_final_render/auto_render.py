@@ -55,6 +55,24 @@ class RenderConfig:
     crf: int = 18  # 质量 (0-51, 越小越好)
     preset: str = "slow"  # 编码速度
 
+    @classmethod
+    def from_aesthetic_preset(cls, aesthetic: str = "travel_story", **overrides) -> "RenderConfig":
+        """Create RenderConfig with orientation matching the aesthetic preset.
+
+        Uses PRESET_ORIENTATIONS from refinement.py to set width/height.
+        """
+        try:
+            from modules.capabilities.refinement import PRESET_ORIENTATIONS
+            orientation = PRESET_ORIENTATIONS.get(aesthetic, "vertical")
+        except ImportError:
+            orientation = "vertical"
+        if orientation == "horizontal":
+            defaults = {"width": 1920, "height": 1080}
+        else:
+            defaults = {"width": 1080, "height": 1920}
+        defaults.update(overrides)
+        return cls(**defaults)
+
 
 class FFmpegRenderer:
     """FFmpeg 渲染器"""

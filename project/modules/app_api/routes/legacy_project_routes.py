@@ -56,6 +56,13 @@ def create_legacy_project_blueprint(
                 items.append({"project_id": p, "name": Path(p).name, "project_dir": p, "videos_dir": "", "created_at": "", "updated_at": "", "workflow_count": 0})
         return jsonify({"projects": items, "count": len(items)})
 
+    @bp.route("/api/projects/cleanup", methods=["POST"])
+    def api_projects_cleanup():
+        """Remove projects whose directories no longer exist."""
+        from modules.app_api.services.settings_service import cleanup_missing_projects
+        removed = cleanup_missing_projects()
+        return jsonify({"ok": True, "removed": removed})
+
     @bp.route("/api/workflow/status", methods=["GET"])
     def api_workflow_status():
         ws = workflow_state_getter()

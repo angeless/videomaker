@@ -4,6 +4,17 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/) 规范。
 
+## [0.12.1] - 2026-03-22
+
+### 修复 (Fixed)
+- M3: `/api/projects` 不再返回已删除的残留项目，新增 `/api/projects/cleanup` 清理端点
+- H2: Library Facade 新增 `sync_project_materials()` 方法，支持项目分析结果回写全局库
+- M5: `RenderConfig.from_aesthetic_preset()` 根据美学预设自动适配横竖屏方向
+
+### 新增 (Added)
+- `PRESET_ORIENTATIONS` 常量（refinement.py），定义每个美学预设的推荐方向
+- 9 个新测试覆盖 M3/H2/M5 三项修复
+
 ## [0.11.0] - 2026-03-22
 
 ### 修复 (Fixed)
