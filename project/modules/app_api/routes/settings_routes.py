@@ -112,7 +112,7 @@ def create_settings_blueprint(
                 return jsonify({"ok": False, "error": "API Key 无效（401 认证失败）"})
             if e.code == 403:
                 return jsonify({"ok": False, "error": "API Key 权限不足（403）"})
-            return jsonify({"ok": True})  # Other HTTP errors (404 etc.) mean the server is reachable
+            return jsonify({"ok": False, "error": f"服务端返回 HTTP {e.code}"})
         except (urllib.error.URLError, socket.timeout, OSError) as e:
             return jsonify({"ok": False, "error": f"连接失败：{e}"})
         except Exception as e:
@@ -478,10 +478,14 @@ def create_settings_blueprint(
 
     # ── R9: Subscription feature gate ──
 
+    def _feature_gate():
+        from modules.subscription import FeatureGate
+        from modules.app_api.services.settings_service import _settings_path
+        return FeatureGate(settings_path=_settings_path())
+
     @bp.route("/api/subscription/status", methods=["GET"])
     def api_subscription_status():
-        from modules.subscription import FeatureGate
-        gate = FeatureGate()
+        gate = _feature_gate()
         return jsonify({
             "tier": gate.tier.value,
             "features": gate.all_features(),
@@ -489,21 +493,20 @@ def create_settings_blueprint(
 
     @bp.route("/api/subscription/gate", methods=["GET"])
     def api_subscription_gate():
-        from modules.subscription import FeatureGate
         feature = (request.args.get("feature", "") or "").strip()
         if not feature:
             return jsonify({"error": "feature param required"}), 400
-        gate = FeatureGate()
+        gate = _feature_gate()
         return jsonify(gate.gate(feature))
 
     @bp.route("/api/subscription/upgrade", methods=["POST"])
     def api_subscription_upgrade():
-        from modules.subscription import FeatureGate, Tier
+        from modules.subscription import Tier
         body = request.get_json(silent=True) or {}
         tier_str = str(body.get("tier", "") or "").lower()
         if tier_str not in ("free", "pro"):
             return jsonify({"error": "tier must be 'free' or 'pro'"}), 400
-        gate = FeatureGate()
+        gate = _feature_gate()
         gate.set_tier(Tier(tier_str))
         return jsonify({"ok": True, "tier": tier_str})
 

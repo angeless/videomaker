@@ -1,4 +1,5 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
+import { useAppStore } from '../stores/app.js'
 import { useToastStore } from '../stores/toast.js'
 
 const routes = [
@@ -122,10 +123,8 @@ const router = createRouter({
 router.beforeEach((to, from) => {
   if (to.name === 'startup') return true
   try {
-    const { useAppStore } = require('../stores/app.js')
     const appStore = useAppStore()
     if (appStore.preflightErrorCount > 0 && !appStore.preflightAcknowledged) {
-      // 阻止导航，由 StartupView 的弹窗处理
       return { name: 'startup' }
     }
   } catch {
