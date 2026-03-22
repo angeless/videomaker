@@ -43,6 +43,29 @@ export const useTimelineStore = defineStore('timeline', () => {
     zoom.value = Math.max(0.25, Math.min(4.0, z))
   }
 
+  async function reorderClips(fromIndex, toIndex) {
+    const c = [...clips.value]
+    if (fromIndex < 0 || fromIndex >= c.length || toIndex < 0 || toIndex >= c.length) return
+    const [moved] = c.splice(fromIndex, 1)
+    c.splice(toIndex, 0, moved)
+    const newOrder = c.map(clip => clip.clip_index)
+    // Optimistic: reassign clip_index and recalculate timeline_start/end
+    let cursor = 0
+    const transDur = transition.value?.duration || 0.35
+    c.forEach((clip, i) => {
+      clip.clip_index = i + 1
+      clip.timeline_start = Math.round(cursor * 1000) / 1000
+      clip.timeline_end = Math.round((cursor + clip.duration) * 1000) / 1000
+      if (i < c.length - 1) cursor += Math.max(0, clip.duration - transDur)
+      else cursor += clip.duration
+    })
+    if (timelineData.value) {
+      timelineData.value = { ...timelineData.value, clips: c, total_duration: Math.round(cursor * 1000) / 1000 }
+    }
+    // Persist to backend
+    await api.api('POST', '/api/timeline/reorder', { order: newOrder })
+  }
+
   function toggleVisible() {
     visible.value = !visible.value
     if (visible.value && !timelineData.value) {
@@ -68,5 +91,6 @@ export const useTimelineStore = defineStore('timeline', () => {
     setPlayhead,
     setZoom,
     toggleVisible,
+    reorderClips,
   }
 })

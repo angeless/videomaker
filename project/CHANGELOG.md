@@ -4,6 +4,17 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/) 规范。
 
+## [0.12.7] - 2026-03-22
+
+### 新增 (Added)
+- R7: Step 6 拖拽时间线编辑
+  - `POST /api/timeline/reorder` — 片段重排序，持久化到 script_matched.json
+  - `POST /api/timeline/trim` — 片段裁剪（source_start/source_end 调整）
+  - TimelineClipBlock.vue 支持 HTML5 拖拽重排序（dragstart/drop/dragover）
+  - Pinia store 新增 `reorderClips()` action（乐观更新 + 后端持久化）
+  - 拖拽悬停视觉反馈（黄色虚线边框）
+  - 7 个新增测试覆盖 reorder/trim API
+
 ## [0.12.6] - 2026-03-22
 
 ### 新增 (Added)

@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 
 
 def create_timeline_blueprint(
@@ -139,5 +139,113 @@ def create_timeline_blueprint(
                 "audio": audio,
             },
         })
+
+    @bp.route("/api/timeline/reorder", methods=["POST"])
+    def api_timeline_reorder():
+        """Reorder clips in script_matched.json by new clip_index order."""
+        project_dir = project_dir_getter()
+        if project_dir is None:
+            return jsonify({"error": "no project"}), 400
+
+        body = request.get_json(silent=True) or {}
+        new_order = body.get("order")
+        if not isinstance(new_order, list) or not new_order:
+            return jsonify({"error": "order must be a non-empty list of clip_index values"}), 400
+
+        script_path = project_dir / "data" / "script_matched.json"
+        if not script_path.exists():
+            return jsonify({"error": "script_matched.json not found"}), 404
+
+        try:
+            script = json.loads(script_path.read_text(encoding="utf-8"))
+        except Exception as e:
+            return jsonify({"error": f"failed to read script: {e}"}), 500
+
+        clips = script.get("clips", [])
+        if not clips:
+            return jsonify({"error": "no clips in script"}), 400
+
+        # Build index map: clip_index → clip dict
+        by_index = {}
+        for clip in clips:
+            if isinstance(clip, dict):
+                idx = clip.get("clip_index")
+                if idx is not None:
+                    by_index[idx] = clip
+
+        # Validate all requested indices exist
+        for idx in new_order:
+            if idx not in by_index:
+                return jsonify({"error": f"clip_index {idx} not found"}), 400
+
+        # Reorder clips and reassign clip_index
+        reordered = []
+        for new_idx, old_idx in enumerate(new_order, start=1):
+            clip = dict(by_index[old_idx])
+            clip["clip_index"] = new_idx
+            reordered.append(clip)
+
+        script["clips"] = reordered
+        script_path.write_text(
+            json.dumps(script, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        return jsonify({"ok": True, "reordered_count": len(reordered)})
+
+    @bp.route("/api/timeline/trim", methods=["POST"])
+    def api_timeline_trim():
+        """Trim a clip's source_start/source_end in script_matched.json."""
+        project_dir = project_dir_getter()
+        if project_dir is None:
+            return jsonify({"error": "no project"}), 400
+
+        body = request.get_json(silent=True) or {}
+        clip_index = body.get("clip_index")
+        source_start = body.get("source_start")
+        source_end = body.get("source_end")
+
+        if clip_index is None:
+            return jsonify({"error": "clip_index required"}), 400
+        if source_start is None or source_end is None:
+            return jsonify({"error": "source_start and source_end required"}), 400
+
+        try:
+            source_start = float(source_start)
+            source_end = float(source_end)
+        except (ValueError, TypeError):
+            return jsonify({"error": "source_start/source_end must be numbers"}), 400
+
+        if source_end <= source_start:
+            return jsonify({"error": "source_end must be > source_start"}), 400
+
+        script_path = project_dir / "data" / "script_matched.json"
+        if not script_path.exists():
+            return jsonify({"error": "script_matched.json not found"}), 404
+
+        try:
+            script = json.loads(script_path.read_text(encoding="utf-8"))
+        except Exception as e:
+            return jsonify({"error": f"failed to read script: {e}"}), 500
+
+        clips = script.get("clips", [])
+        updated = False
+        for clip in clips:
+            if isinstance(clip, dict) and clip.get("clip_index") == clip_index:
+                clip["source_start"] = round(source_start, 3)
+                clip["source_end"] = round(source_end, 3)
+                clip["duration"] = round(source_end - source_start, 3)
+                updated = True
+                break
+
+        if not updated:
+            return jsonify({"error": f"clip_index {clip_index} not found"}), 404
+
+        script_path.write_text(
+            json.dumps(script, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        return jsonify({"ok": True})
 
     return bp
