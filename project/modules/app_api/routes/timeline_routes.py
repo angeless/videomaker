@@ -140,6 +140,66 @@ def create_timeline_blueprint(
             },
         })
 
+    @bp.route("/api/timeline/edit-by-prompt", methods=["POST"])
+    def api_timeline_edit_by_prompt():
+        """Apply a natural language editing command to the timeline."""
+        project_dir = project_dir_getter()
+        if project_dir is None:
+            return jsonify({"error": "no project"}), 400
+
+        body = request.get_json(silent=True) or {}
+        prompt = str(body.get("prompt", "") or "").strip()
+        if not prompt:
+            return jsonify({"error": "prompt is required"}), 400
+        if len(prompt) > 500:
+            return jsonify({"error": "prompt too long (max 500 chars)"}), 400
+
+        script_path = project_dir / "data" / "script_matched.json"
+        if not script_path.exists():
+            return jsonify({"error": "script_matched.json not found"}), 404
+
+        try:
+            script = json.loads(script_path.read_text(encoding="utf-8"))
+        except Exception as e:
+            return jsonify({"error": f"failed to read script: {e}"}), 500
+
+        clips = script.get("clips", [])
+        if not clips:
+            return jsonify({"error": "no clips in timeline"}), 400
+
+        from modules.prompt_editing import parse_edit_command, execute_edit_command
+
+        command = parse_edit_command(prompt)
+        if not command.valid:
+            return jsonify({
+                "ok": False,
+                "error": "无法理解该编辑指令",
+                "raw": prompt,
+                "hint": "支持的指令：删除/移动/裁剪/倒序/加速减速 + 片段编号",
+            }), 400
+
+        new_clips, summary = execute_edit_command(clips, command)
+        if "error" in summary:
+            return jsonify({"ok": False, "error": summary["error"]}), 400
+
+        # Persist
+        script["clips"] = new_clips
+        script_path.write_text(
+            json.dumps(script, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        return jsonify({
+            "ok": True,
+            "command": {
+                "action": command.action,
+                "targets": command.targets,
+                "params": command.params,
+            },
+            "summary": summary,
+            "clips_count": len(new_clips),
+        })
+
     @bp.route("/api/timeline/reorder", methods=["POST"])
     def api_timeline_reorder():
         """Reorder clips in script_matched.json by new clip_index order."""

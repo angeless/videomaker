@@ -4,6 +4,16 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/) 规范。
 
+## [0.12.8] - 2026-03-22
+
+### 新增 (Added)
+- R8: Prompt 剪辑引擎 — 自然语言时间线编辑
+  - `modules/prompt_editing/` 新模块：规则引擎解析器 + 执行器
+  - 支持 5 种编辑指令：删除/移动/裁剪/倒序/变速
+  - 中英文双语指令支持（"删除第2个片段" / "remove clip 3"）
+  - `POST /api/timeline/edit-by-prompt` API 端点
+  - 17 个新增测试覆盖解析器 + 执行器
+
 ## [0.12.7] - 2026-03-22
 
 ### 新增 (Added)
