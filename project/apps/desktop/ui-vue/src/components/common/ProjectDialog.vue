@@ -10,6 +10,7 @@
         <template v-if="appStore.initMode === 'new'">
           <FormField
             :label="labels.project.projectName"
+            hint="用于识别项目，实际文件夹名由系统自动生成"
           >
             <input
               v-model="appStore.initProjectName"
@@ -21,9 +22,10 @@
           <FormField
             :label="labels.project.videosDir"
             :error="v.getError('videosDir')"
+            hint="你的视频素材所在的文件夹"
           >
             <div class="form-row">
-              <input v-model="appStore.initVideosDir" class="form-input" readonly />
+              <input v-model="appStore.initVideosDir" class="form-input" />
               <button class="btn btn-ghost btn-sm" @click="appStore.pickFolder('initVideosDir')">
                 {{ labels.project.browse }}
               </button>
@@ -33,9 +35,10 @@
           <FormField
             :label="labels.project.projectDir"
             :error="v.getError('projectDir')"
+            hint="项目文件的保存位置，每个项目独占一个子文件夹"
           >
             <div class="form-row">
-              <input v-model="appStore.initProjectDir" class="form-input" readonly />
+              <input v-model="appStore.initProjectDir" class="form-input" />
               <button class="btn btn-ghost btn-sm" @click="appStore.pickFolder('initProjectDir')">
                 {{ labels.project.browse }}
               </button>

@@ -75,6 +75,7 @@ def create_legacy_project_blueprint(
         data = request.json or {}
         videos_dir = (data.get("videos_dir", "") or "").strip()
         project_dir = (data.get("project_dir", "") or "").strip()
+        project_name = (data.get("project_name", "") or "").strip()
         selected_uids = data.get("selected_video_uids") or []
         if isinstance(selected_uids, str):
             selected_uids = [x.strip() for x in selected_uids.split(",") if x.strip()]
@@ -107,6 +108,8 @@ def create_legacy_project_blueprint(
                 "selected_video_paths": selected_paths,
             })
             ws = WorkflowState.create(project_path, "", config)
+            if project_name:
+                ws.data["project_display_name"] = project_name
 
             materials_path = project_path / "data" / "materials.json"
             write_json_result(materials_path, materials)
@@ -144,6 +147,8 @@ def create_legacy_project_blueprint(
         project_path = Path(project_dir).expanduser().resolve()
         prepare_project_dirs(project_path)
         ws = WorkflowState.create(project_path, str(videos_path), default_project_config())
+        if project_name:
+            ws.data["project_display_name"] = project_name
         ws.save()
         load_state(project_path)
         remember_last_project(project_path)

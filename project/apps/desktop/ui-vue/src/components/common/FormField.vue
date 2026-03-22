@@ -3,6 +3,7 @@
     <label v-if="label" class="form-label" :for="fieldId">{{ label }}</label>
     <slot />
     <p v-if="error" class="form-error">{{ error }}</p>
+    <p v-else-if="hint" class="form-hint">{{ hint }}</p>
   </div>
 </template>
 
@@ -12,6 +13,7 @@ import { computed } from 'vue'
 const props = defineProps({
   label: { type: String, default: '' },
   error: { type: String, default: '' },
+  hint: { type: String, default: '' },
   fieldId: { type: String, default: '' },
 })
 </script>
