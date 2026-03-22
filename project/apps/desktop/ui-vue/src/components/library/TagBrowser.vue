@@ -8,7 +8,7 @@
 
     <div v-if="expanded" class="tag-browser-body">
       <div v-if="loading" class="tag-browser-loading">加载中...</div>
-      <div v-else-if="categories.length === 0" class="tag-browser-empty">暂无标签数据</div>
+      <div v-else-if="categories.length === 0" class="tag-browser-empty">暂无标签数据。导入素材并完成分析后，系统会自动生成标签。</div>
       <div v-else>
         <div v-for="cat in categories" :key="cat.category_id" class="tag-cat">
           <div class="tag-cat-header" @click="toggleCat(cat.category_id)">

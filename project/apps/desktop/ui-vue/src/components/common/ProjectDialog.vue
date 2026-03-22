@@ -84,7 +84,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '../../stores/app.js'
 import { useValidation } from '../../composables/useValidation.js'
@@ -105,6 +105,12 @@ function closeDialog() {
   if (hasContent && !confirm('内容尚未保存，确认关闭？')) return
   appStore.showInit = false
 }
+
+function onEscKey(e) {
+  if (e.key === 'Escape') closeDialog()
+}
+onMounted(() => window.addEventListener('keydown', onEscKey))
+onUnmounted(() => window.removeEventListener('keydown', onEscKey))
 
 const canSubmit = computed(() => {
   if (appStore.initMode === 'new') {

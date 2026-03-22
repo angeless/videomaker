@@ -72,6 +72,9 @@
         >
           🧩 {{ labels.createSidebar.canvas }}
         </div>
+        <div class="sidebar-hint" style="padding: 0 8px; font-size: 11px; color: var(--muted)">
+          自由组合能力节点，适合非线性或复杂工作流
+        </div>
       </div>
 
       <!-- 最近项目（有项目或正在加载时才显示） -->
