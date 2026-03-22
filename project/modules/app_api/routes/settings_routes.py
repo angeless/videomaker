@@ -53,6 +53,14 @@ def create_settings_blueprint(
             }
         )
 
+    @bp.route("/api/settings", methods=["GET"])
+    def api_get_settings_aggregated():
+        from modules.app_api.services.settings_service import _mask_secret
+        ai = load_ai_settings()
+        ai_public = public_ai_settings(ai)
+        ui = load_ui_settings()
+        return jsonify({"ok": True, "ai": ai_public, "ui": ui})
+
     @bp.route("/api/settings/ai", methods=["GET"])
     def api_get_ai_settings():
         ai = load_ai_settings()

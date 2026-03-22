@@ -37,6 +37,39 @@ def create_legacy_project_blueprint(
     def api_project_list():
         return jsonify({"ok": True, "projects": recent_projects_getter()})
 
+    @bp.route("/api/projects", methods=["GET"])
+    def api_projects():
+        projects = recent_projects_getter()
+        items = []
+        for p in projects:
+            if isinstance(p, dict):
+                items.append({
+                    "project_id": p.get("project_id", p.get("name", "")),
+                    "name": p.get("name", ""),
+                    "project_dir": p.get("project_dir", ""),
+                    "videos_dir": p.get("videos_dir", ""),
+                    "created_at": p.get("created_at", ""),
+                    "updated_at": p.get("updated_at", ""),
+                    "workflow_count": p.get("workflow_count", 0),
+                })
+            elif isinstance(p, str):
+                items.append({"project_id": p, "name": Path(p).name, "project_dir": p, "videos_dir": "", "created_at": "", "updated_at": "", "workflow_count": 0})
+        return jsonify({"projects": items, "count": len(items)})
+
+    @bp.route("/api/workflow/status", methods=["GET"])
+    def api_workflow_status():
+        ws = workflow_state_getter()
+        if ws is None:
+            return jsonify({"persisted": False, "current_run_id": None, "status": "idle", "current_step": None, "guidedAvailable": False})
+        data = ws.data if hasattr(ws, "data") else {}
+        return jsonify({
+            "persisted": True,
+            "current_run_id": data.get("run_id"),
+            "status": data.get("status", "idle"),
+            "current_step": data.get("current_step"),
+            "guidedAvailable": True,
+        })
+
     @bp.route("/api/init", methods=["POST"])
     def api_init():
         data = request.json or {}

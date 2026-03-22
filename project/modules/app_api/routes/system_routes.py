@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Callable, Dict
 
 from flask import Blueprint, jsonify, request
@@ -22,6 +23,17 @@ def create_system_blueprint(
     queue_max_running_setter: Callable[[int], None] = lambda v: None,
 ) -> Blueprint:
     bp = Blueprint("system_api", __name__)
+
+    @bp.route("/api/system/health", methods=["GET"])
+    def api_system_health():
+        version = "unknown"
+        try:
+            vp = Path(__file__).resolve().parents[3] / "VERSION"
+            if vp.exists():
+                version = vp.read_text(encoding="utf-8").strip()
+        except Exception:
+            pass
+        return jsonify({"status": "ok", "version": version})
 
     @bp.route("/api/status", methods=["GET"])
     def api_status():
