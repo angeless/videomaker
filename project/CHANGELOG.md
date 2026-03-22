@@ -4,6 +4,21 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/) 规范。
 
+## [0.12.2] - 2026-03-22
+
+### 新增 (Added)
+- R2: `modules/library/semantic/` 子模块 — 独立的向量索引引擎和查询嵌入缓存
+  - `VectorIndex`: FAISS IndexFlatIP 优先，NumPy 暴力搜索降级
+  - `EmbeddingCache`: LRU 查询嵌入缓存（128 条，3600s TTL）
+  - FAISS 索引持久化到磁盘（`cache/faiss/`），支持增量 add/remove
+  - OMP 冲突防护（torch + FAISS 共存）
+  - 29 个新增测试覆盖 VectorIndex + EmbeddingCache
+
+### 重构 (Refactored)
+- `core_mixin.py` 向量搜索逻辑委托给 `VectorIndex`，减少约 80 行内联代码
+- `_get_query_embedding()` 支持 `EmbeddingCache` 新后端，保留 legacy dict fallback
+- `GlobalMediaLibrary.__init__()` 初始化语义基础设施实例
+
 ## [0.12.1] - 2026-03-22
 
 ### 修复 (Fixed)

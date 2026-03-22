@@ -1031,25 +1031,34 @@ class CoreMixin:
         q = str(query or "").strip().lower()
         if not q:
             return []
-        now_ts = time.time()
-        cached = self._query_embedding_cache.get(q)
-        if cached and (now_ts - float(cached.get("ts", 0.0))) < 3600:
-            vec = cached.get("vec")
-            if isinstance(vec, list) and vec:
-                return vec
-
-        vec = self._call_openai_embedding(q)
-        if vec:
-            self._query_embedding_cache[q] = {"ts": now_ts, "vec": vec}
-            if len(self._query_embedding_cache) > 128:
-                # 简单淘汰最旧项
-                oldest = sorted(
-                    self._query_embedding_cache.items(),
-                    key=lambda kv: float(kv[1].get("ts", 0.0))
-                )[:32]
-                for k, _ in oldest:
-                    self._query_embedding_cache.pop(k, None)
-        return vec
+        # Use EmbeddingCache if available, fallback to legacy dict cache
+        if hasattr(self, "_embedding_cache") and self._embedding_cache is not None:
+            cached_vec = self._embedding_cache.get(q)
+            if cached_vec:
+                return cached_vec
+            vec = self._call_openai_embedding(q)
+            if vec:
+                self._embedding_cache.put(q, vec)
+            return vec
+        else:
+            # Legacy fallback (should not reach here after integration)
+            now_ts = time.time()
+            cached = self._query_embedding_cache.get(q)
+            if cached and (now_ts - float(cached.get("ts", 0.0))) < 3600:
+                vec_c = cached.get("vec")
+                if isinstance(vec_c, list) and vec_c:
+                    return vec_c
+            vec = self._call_openai_embedding(q)
+            if vec:
+                self._query_embedding_cache[q] = {"ts": now_ts, "vec": vec}
+                if len(self._query_embedding_cache) > 128:
+                    oldest = sorted(
+                        self._query_embedding_cache.items(),
+                        key=lambda kv: float(kv[1].get("ts", 0.0))
+                    )[:32]
+                    for k, _ in oldest:
+                        self._query_embedding_cache.pop(k, None)
+            return vec
 
     def _invalidate_vector_cache(self):
         self._vector_cache = {
@@ -1058,6 +1067,9 @@ class CoreMixin:
             "uids": [],
             "matrix": None,
         }
+        # Also reset VectorIndex if present
+        if hasattr(self, "_vector_index") and self._vector_index is not None:
+            self._vector_index._reset()
 
     def _refresh_vector_cache(self, conn: sqlite3.Connection, model: str):
         if np is None:
@@ -1077,8 +1089,9 @@ class CoreMixin:
         if (
             cached.get("model") == model
             and cached.get("updated_at") == max_updated
-            and len(cached.get("uids", [])) == cnt
-            and cached.get("matrix") is not None
+            and cached.get("uids_count", 0) == cnt
+            and self._vector_index is not None
+            and self._vector_index.count == cnt
         ):
             return
 
@@ -1113,56 +1126,35 @@ class CoreMixin:
             self._vector_cache = {
                 "model": model,
                 "updated_at": max_updated,
-                "uids": [],
-                "matrix": None,
+                "uids_count": 0,
             }
+            if self._vector_index is not None:
+                self._vector_index._reset()
             return
 
         matrix = np.array(vectors, dtype=np.float32)
-        norms = np.linalg.norm(matrix, axis=1, keepdims=True)
-        matrix = matrix / np.maximum(norms, 1e-8)
+        # Rebuild VectorIndex (handles normalisation internally)
+        if self._vector_index is not None:
+            self._vector_index.rebuild(uids, matrix)
+            self._vector_index.save()
+
         self._vector_cache = {
             "model": model,
             "updated_at": max_updated,
-            "uids": uids,
-            "matrix": matrix,
+            "uids_count": len(uids),
         }
 
     def _vector_search(self, conn: sqlite3.Connection, query: str, top_k: int = 1200) -> Dict[str, float]:
-        if np is None:
+        if np is None or self._vector_index is None:
             return {}
         qvec = self._get_query_embedding(query)
         if not qvec:
             return {}
         model = self._embedding_model()
         self._refresh_vector_cache(conn, model)
-        matrix = self._vector_cache.get("matrix")
-        uids = self._vector_cache.get("uids", [])
-        if matrix is None or not uids:
+        if self._vector_index.count == 0:
             return {}
-
-        q = np.array([float(x) for x in qvec], dtype=np.float32)
-        if matrix.shape[1] != q.shape[0]:
-            return {}
-        q = q / max(float(np.linalg.norm(q)), 1e-8)
-        sims = matrix @ q
-        count = int(sims.shape[0])
-        if count <= 0:
-            return {}
-
-        k = min(max(1, int(top_k)), count)
-        if k >= count:
-            top_idx = np.arange(count)
-        else:
-            top_idx = np.argpartition(-sims, k - 1)[:k]
-        sorted_idx = top_idx[np.argsort(sims[top_idx])[::-1]]
-        out: Dict[str, float] = {}
-        for idx in sorted_idx:
-            score = float(sims[idx])
-            if score < 0.08:
-                continue
-            out[uids[int(idx)]] = score
-        return out
+        return self._vector_index.search(qvec, top_k=top_k, threshold=0.08)
 
     def _upsert_embedding_for_asset(
         self,

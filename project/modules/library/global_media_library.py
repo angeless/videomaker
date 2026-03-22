@@ -31,6 +31,7 @@ from modules.library.tagging.tag_manager import TagManagerMixin
 from modules.library.tagging.auto_tagger import AutoTaggerMixin
 from modules.library.core.core_mixin import CoreMixin
 from modules.library.db.schema import SchemaMixin
+from modules.library.semantic import VectorIndex, EmbeddingCache
 from modules.library._constants import *  # noqa: F403 — shared constants
 from modules.library._constants import (  # noqa: F401 — private constants need explicit import
     _KIND_TO_SLOT, _TOPCATEGORY_TO_CODE, _TAG_CATEGORY_TO_SLOT,
@@ -51,10 +52,15 @@ class GlobalMediaLibrary(SchemaMixin, CoreMixin, FingerprintMixin, GDriveMixin, 
         self._vector_cache: Dict[str, Any] = {
             "model": "",
             "updated_at": "",
-            "uids": [],
-            "matrix": None,
+            "uids_count": 0,
         }
         self._query_embedding_cache: Dict[str, Dict[str, Any]] = {}
+        # Semantic infrastructure (R2)
+        faiss_dir = self.db_path.parent / DEFAULT_FAISS_INDEX_DIR
+        self._vector_index: Optional[VectorIndex] = VectorIndex(
+            dimension=DEFAULT_EMBEDDING_DIM, index_dir=faiss_dir,
+        )
+        self._embedding_cache: Optional[EmbeddingCache] = EmbeddingCache()
         self._init_db()
 
     # ------------------------------------------------------------------

@@ -21,6 +21,10 @@ EMBEDDING_SCHEMA_VERSION = "1.0"
 DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
 VECTOR_RRF_K = 60
 
+# ── FAISS / vector index ──
+DEFAULT_FAISS_INDEX_DIR = "cache/faiss"  # relative to library_dir
+DEFAULT_EMBEDDING_DIM = 1536
+
 # ── 25-category taxonomy ──
 TAG_CATEGORIES = (
     "objects", "actions", "scene", "mood", "concepts", "style", "use_cases",
