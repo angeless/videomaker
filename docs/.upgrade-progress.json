@@ -1,9 +1,9 @@
 {
-  "upgrade_version": "1.5",
+  "upgrade_version": "1.7",
   "project_name": "VideoEditor",
   "snapshot_commit": "8898b86bf9c303ce006d4a8645d95ebb16665cc8",
   "started_at": "2026-03-20T18:00:00+08:00",
-  "last_updated": "2026-03-22T22:00:00+08:00",
+  "last_updated": "2026-03-23T01:00:00+08:00",
   "current_stage": 7,
   "git_available": true,
   "project_scale": "L",
@@ -76,6 +76,17 @@
         "封板流程标记为原子操作",
         "门禁失败后自动重跑不询问",
         "上下文 50% 主动交接规则"
+      ]
+    },
+    {
+      "from": "1.5",
+      "to": "1.7",
+      "date": "2026-03-23",
+      "changes": [
+        "§12.0.5 全局任务连续性原则正式写入 dev-governance.md（7条铁律含Context压力交接）",
+        "§12.0.6 版本号一致性约束写入 dev-governance.md",
+        "plan-template.md 升级为19章强约束版（含写作前检查清单、Gap分析、技术可行性自检）",
+        "升级标记文件机制（docs/.upgrade-in-progress）用于Tier 1 hook绕过"
       ]
     }
   ]
