@@ -2616,6 +2616,26 @@ Phase 7 完成后自动判定是否继续下一个任务：
 → git push origin 当前分支 + git push origin --tags（仅推送到远程分支，**禁止自动创建 PR**）
 → **停止，输出版本发布报告，等待用户确认**
 
+
+
+---
+
+## Part 7: Quality Engineering Methods
+
+> See: docs/tech-specs/dev-governance-part7-quality-methods.md
+
+Six quality rules embedded in Phase 1-8:
+
+| Section | Title | Phase |
+|---------|-------|-------|
+| 7.1 | TDD | Phase 2 |
+| 7.2 | Systematic Debugging | Gate failures |
+| 7.3 | Code Review | After Phase 4 |
+| 7.4 | Git Worktree | /mode-autocode |
+| 7.5 | Parallel Sub-Agents | Phase 2 |
+| 7.6 | Pre-completion Verification | Phase 6 |
+| 7.7 | Report Archival | Phase 6 + 8 |
+
 ---
 
 ## 13. 修订记录
@@ -2624,7 +2644,9 @@ Phase 7 完成后自动判定是否继续下一个任务：
 |------|------|---------|
 | v1.0 | 2026-03-19 | 初版，七阶段开发流程、分支策略、文件管理、多 Agent 协议 |
 | v2.0 | 2026-03-20 | 新增第 12 章自动化基础设施：智能启动、Part A/B/C/D 门禁、门禁追踪、阶段回滚、空闲循环、S 型三层分支、文件保护层级、TODO_NEXT 管理、自动连续判定 |
-| v2.1 | 2026-03-22 | 升级 v1.4：新增 Phase 4.5 子 Agent 独立验收；§12.9 自动连续判定简化（删除条件 #3、分支操作无需确认、功能项/版本边界处理增强）；新增 §3.5 计划质量写作规范；§12.1 智能启动新增步骤 1.3 规范版本检测；product-standards.md 独立 |
+| v2.1 | 2026-03-22 | (v1.4) Phase 4.5, autocode |
+| v2.2 | 2026-03-22 | (v1.5-v1.7) Continuity rules, version consistency, plan template |
+| v2.3 | 2026-03-23 | (v1.8-v1.10) Quality methods Part 7, gate-failures format |
 
 ---
 
