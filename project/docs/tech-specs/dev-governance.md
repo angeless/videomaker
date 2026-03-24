@@ -2280,6 +2280,37 @@ grep -r "pattern" --include="*.py" --include="*.md" modules/ docs/
 
 > 本章定义 AI 自动化开发的扩展基础设施，补充第 4 章的七阶段流程。
 > v2.0 升级新增，覆盖：智能启动、阶段门禁体系、门禁失败追踪、阶段回滚、无任务空闲循环、S 型分支简化、文件保护层级、TODO_NEXT.md 管理。
+> v2.1 升级新增（规范 v1.5→v1.7）：全局任务连续性原则、Context 压力交接机制、版本号一致性约束。
+
+
+### 12.0.5 全局任务连续性原则
+
+> **⚠️ 本原则优先级最高，适用于所有任务执行场景。**
+
+1. **分支操作自动执行**：所有分支上的操作（`git add`、`git commit`、`git push origin {branch}`）无需等待用户确认，直接执行。
+2. **任务间禁止询问**：任务与任务之间、Phase 与 Phase 之间、功能项与功能项之间，**禁止输出"是否继续"、"继续？"、"继续执行？"等询问**。门禁通过后直接进入下一步。
+3. **仅 main 合并需用户确认**：只有当需要合并到 `main` 分支（PR/merge）时，才停止并等待用户评审。
+4. **封板流程为原子操作**：Phase 8 → 空闲循环 → 封板检查 → 版本收尾，全流程连续执行，禁止在步骤之间插入确认。
+5. **门禁失败自动修复**：门禁失败后自动修复并立即重跑，不询问用户"是否重跑"。累计 10 次失败才停止。
+6. **Hook 响应不中断任务流**：如果系统 hook 触发并需要回应，回应完毕后**必须立即继续当前任务**，不得停下等待用户。Hook 是旁路检查，不是停止信号（除非 hook 明确要求停止且满足 §12.4 停止条件）。
+7. **Context 压力交接**：当上下文使用量达到约 50%（如已连续完成 3-4 个任务），**必须在当前任务完成后立即执行交接**：
+   - ① 完成当前任务的 Phase 6 收尾（commit + 文档归档 + TODO_NEXT.md 更新）
+   - ② 执行 git push origin 当前分支
+   - ③ 输出交接摘要（已完成任务列表 + 下一个任务编号 + 分支状态）
+   - ④ 告知用户"上下文已达 50%，建议新开会话继续，下一个任务是 vX.Y.Z"
+   - **禁止在任务中途以 context 为由停止——必须先完成当前任务再交接。**
+
+### 12.0.6 版本号一致性约束
+
+所有文档（开发计划、审计报告、任务报告、测试报告、commit message）**必须携带版本号**，禁止自定义版本命名。以下位置的版本号必须完全一致：
+
+| 位置 | 文件/载体 | 要求 |
+|------|----------|------|
+| VERSION 文件 | `VERSION` | 单行纯文本，当前版本号 |
+| CHANGELOG | `CHANGELOG.md` | 最新条目版本号与 VERSION 一致 |
+| Git Commit | commit message | `feat(vX.Y.Z): 描述` 格式 |
+| 开发计划 | `docs/dev-plans/` | 文件名含版本号 |
+| 任务汇报 | `docs/versions/` | 文件名含完整三位版本号 |
 
 ### 12.1 快速启动命令（Smart Start）
 
@@ -2585,6 +2616,26 @@ Phase 7 完成后自动判定是否继续下一个任务：
 → git push origin 当前分支 + git push origin --tags（仅推送到远程分支，**禁止自动创建 PR**）
 → **停止，输出版本发布报告，等待用户确认**
 
+
+
+---
+
+## Part 7: Quality Engineering Methods
+
+> See: docs/tech-specs/dev-governance-part7-quality-methods.md
+
+Six quality rules embedded in Phase 1-8:
+
+| Section | Title | Phase |
+|---------|-------|-------|
+| 7.1 | TDD | Phase 2 |
+| 7.2 | Systematic Debugging | Gate failures |
+| 7.3 | Code Review | After Phase 4 |
+| 7.4 | Git Worktree | /mode-autocode |
+| 7.5 | Parallel Sub-Agents | Phase 2 |
+| 7.6 | Pre-completion Verification | Phase 6 |
+| 7.7 | Report Archival | Phase 6 + 8 |
+
 ---
 
 ## 13. 修订记录
@@ -2593,7 +2644,9 @@ Phase 7 完成后自动判定是否继续下一个任务：
 |------|------|---------|
 | v1.0 | 2026-03-19 | 初版，七阶段开发流程、分支策略、文件管理、多 Agent 协议 |
 | v2.0 | 2026-03-20 | 新增第 12 章自动化基础设施：智能启动、Part A/B/C/D 门禁、门禁追踪、阶段回滚、空闲循环、S 型三层分支、文件保护层级、TODO_NEXT 管理、自动连续判定 |
-| v2.1 | 2026-03-22 | 升级 v1.4：新增 Phase 4.5 子 Agent 独立验收；§12.9 自动连续判定简化（删除条件 #3、分支操作无需确认、功能项/版本边界处理增强）；新增 §3.5 计划质量写作规范；§12.1 智能启动新增步骤 1.3 规范版本检测；product-standards.md 独立 |
+| v2.1 | 2026-03-22 | (v1.4) Phase 4.5, autocode |
+| v2.2 | 2026-03-22 | (v1.5-v1.7) Continuity rules, version consistency, plan template |
+| v2.3 | 2026-03-23 | (v1.8-v1.10) Quality methods Part 7, gate-failures format |
 
 ---
 
