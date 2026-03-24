@@ -1,6 +1,6 @@
 # 第七部分：质量工程方法论（§7.1–§7.7）
 
-> **导航**: [← 返回索引](dev-governance-index.md) | [← 第六部分：版本交叉审计](dev-governance-part6-audit.md)
+> **导航**: [← 返回索引](dev-governance.md) | [← 第六部分：版本交叉审计](dev-governance-part6-audit.md)
 >
 > 本文件定义开发过程中的质量工程方法论，包括 TDD、系统化调试、代码审查、工作区隔离、并行开发和完成前验证。
 > 这些方法论嵌入到现有的 Phase 1-8 流程中，作为各阶段的执行标准。

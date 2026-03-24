@@ -1,6 +1,6 @@
 # 第六部分：版本交叉审计流程（§6.1–§6.2）
 
-> **导航**: [← 返回索引](dev-governance-index.md) | [子 agent 审计 Prompt →](dev-governance-part6-audit-prompts.md) | [整合 agent 规范 →](dev-governance-part6-audit-integrator.md)
+> **导航**: [← 返回索引](dev-governance.md) | [子 agent 审计 Prompt →](dev-governance-part6-audit-prompts.md) | [整合 agent 规范 →](dev-governance-part6-audit-integrator.md)
 >
 > 本文件定义版本级交叉审计的流程总览和发起器规范。
 > 审计子 agent 的 Prompt 模板和检测标准拆分在 `dev-governance-part6-audit-prompts.md`。

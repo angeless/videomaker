@@ -1,6 +1,6 @@
 # 第六部分：整合 Agent 规范与审计报告归档（§6.4–§6.5）
 
-> **导航**: [← 子 agent 审计 Prompt](dev-governance-part6-audit-prompts.md) | [← 审计流程总览](dev-governance-part6-audit.md) | [返回索引 →](dev-governance-index.md)
+> **导航**: [← 子 agent 审计 Prompt](dev-governance-part6-audit-prompts.md) | [← 审计流程总览](dev-governance-part6-audit.md) | [返回索引 →](dev-governance.md)
 >
 > 本文件定义整合 agent 的职责、输入输出规范，以及审计报告的归档结构。
 >
@@ -228,4 +228,4 @@ docs/
 
 ---
 
-*文件结束 — 返回 [审计流程总览](dev-governance-part6-audit.md) | [返回索引](dev-governance-index.md)*
+*文件结束 — 返回 [审计流程总览](dev-governance-part6-audit.md) | [返回索引](dev-governance.md)*
