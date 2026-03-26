@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { useApiStore } from './api.js'
 import { useToastStore } from './toast.js'
+import { useAppStore } from './app.js'
 import labels from '../i18n/labels.js'
 
 export const useCapabilitiesStore = defineStore('capabilities', () => {
@@ -89,7 +90,33 @@ export const useCapabilitiesStore = defineStore('capabilities', () => {
     statuses.value = map
   }
 
+  function _findItem(tab) {
+    for (const g of [...groups.value, ...systemGroups.value]) {
+      const item = g.items.find(i => i.tab === tab)
+      if (item) return item
+    }
+    return null
+  }
+
+  function isExecutable(tab) {
+    const appStore = useAppStore()
+    const item = _findItem(tab)
+    if (!item) return false
+    if (item.mode === 'project' && !appStore.ready) return false
+    return true
+  }
+
+  function executionHint(tab) {
+    const appStore = useAppStore()
+    const item = _findItem(tab)
+    if (!item) return ''
+    if (item.mode === 'project' && !appStore.ready) return '需先打开项目'
+    return ''
+  }
+
   function statusText(tab) {
+    const hint = executionHint(tab)
+    if (hint) return hint
     const s = statuses.value[tab]
     if (s === 'ready') return '稳定'
     if (s === 'prototype') return '可用'
@@ -98,6 +125,7 @@ export const useCapabilitiesStore = defineStore('capabilities', () => {
   }
 
   function statusClass(tab) {
+    if (executionHint(tab)) return 'badge-warn'
     const s = statuses.value[tab]
     if (s === 'ready') return 'badge-success'
     if (s === 'prototype') return 'badge-info'
@@ -116,6 +144,8 @@ export const useCapabilitiesStore = defineStore('capabilities', () => {
     setMessage,
     clearMessage,
     loadStatuses,
+    isExecutable,
+    executionHint,
     statusText,
     statusClass,
   }
