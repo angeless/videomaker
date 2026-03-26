@@ -1,37 +1,30 @@
 # VideoEditor — 待办进度
 
-> 更新于 2026-03-22（v0.12.12 R12 已完成）
+> 更新于 2026-03-25（v0.13.1 R1 已完成）
 
-## 当前版本：v0.12.12
-## 当前状态：v0.12.0 全部 12 个 R 任务已完成 🎉
+## 当前版本：v0.13.1
+## 当前状态：R1 完成，R2 待开始
 
-## v0.12.0 任务清单（12 个 R 任务）
+## 下一个待执行任务
+- **R2**: 修复前后端项目状态脱节 — P0
+
+## v0.13.1 任务清单（8 个 R 任务）
 
 | 任务 | 描述 | 优先级 | 状态 |
 |------|------|--------|------|
-| R1 | v0.11 遗留问题审计修复 | P0 | ✅ Completed |
-| R2 | 语义分析基础设施（增量增强） | P0 | ✅ Completed |
-| R3 | 视觉分析通道 | P0 | ✅ Completed |
-| R4 | 语音分析通道增强 | P1 | ✅ Completed |
-| R5 | 向量搜索引擎 | P0 | ✅ Completed |
-| R6 | 融合检索 + 搜索UI + AI降级透明化 | P1 | ✅ Completed |
-| R7 | Step 6 拖拽时间线编辑 | P1 | ✅ Completed |
-| R8 | Prompt剪辑引擎 | P1 | ✅ Completed |
-| R9 | 订阅制开关 | P2 | ✅ Completed |
-| R10 | 硬件自适应 + 性能优化 | P1 | ✅ Completed |
-| R11 | 产品体验修复批次 | P1 | ✅ Completed |
-| R12 | 集成测试 + 审计 | P1 | ✅ Completed |
+| R1 | 消除 Step 1「分析素材」静默失败 | P0 | ✅ Completed |
+| R2 | 修复前后端项目状态脱节 | P0 | 🔲 Planned |
+| R3 | 能力工具状态准确标注 | P0 | 🔲 Planned |
+| R4 | Step 1 新增素材选择 UI | P0 | 🔲 Planned |
+| R5 | 素材导入进度反馈 | P1 | 🔲 Planned |
+| R6 | 工作流步骤命名去技术化 | P1 | 🔲 Planned |
+| R7 | 设置页新增「测试连接」按钮 | P1 | 🔲 Planned |
+| R8 | 集成测试 + 回归验证 | P0 | 🔲 Planned |
 
 ## 版本进度
 
-- 已完成：12 / 12 任务
-- VERSION 文件当前值：0.12.12
-
-## 下一步
-
-v0.12.0 迭代完成。下一版本开发计划待制定。
-可参考 WISHLIST.md 中的 W-001 ~ W-010 改进项。
+- 已完成：1 / 8 任务
+- VERSION 文件当前值：0.13.1
 
 ## 参考文档
-- 开发计划：`project/docs/dev-plans/`
-- 最终审计：`project/docs/audit/2026-03-22-r12-final-audit.md`
+- 开发计划：`project/docs/dev-plans/dev-plan-v0.13.1.md`

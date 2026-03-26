@@ -4,6 +4,14 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/) 规范。
 
+## [0.13.1] - 2026-03-25
+
+### 修复 (Fixed)
+- R1: 消除 Step 1「分析素材」静默失败
+  - 无项目状态下点击分析素材，显示 Toast 提示 + 创建项目操作按钮
+  - Toast store 支持 action button（向后兼容）
+  - 分析按钮增加 loading 状态
+
 ## [0.12.12] - 2026-03-22
 
 ### 新增 (Added)

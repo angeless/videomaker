@@ -20,10 +20,10 @@
     <div class="step-actions">
       <button
         class="btn btn-primary"
-        :disabled="workflow.jobRunning"
-        @click="workflow.runStep(1)"
+        :disabled="workflow.jobRunning || analyzing"
+        @click="startAnalysis"
       >
-        {{ workflow.jobRunning ? labels.workflow.running : '分析素材' }}
+        {{ analyzing ? labels.workflow.running : '分析素材' }}
       </button>
       <button
         v-if="appStore.currentStep > 1"
@@ -37,15 +37,37 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '../../stores/app.js'
 import { useWorkflowStore } from '../../stores/workflow.js'
+import { useToastStore } from '../../stores/toast.js'
 import labels from '../../i18n/labels.js'
 
 const router = useRouter()
 const appStore = useAppStore()
 const workflow = useWorkflowStore()
+const toast = useToastStore()
+
+const analyzing = ref(false)
+
+async function startAnalysis() {
+  if (!appStore.ready) {
+    toast.show(
+      '请先创建或打开一个项目，然后再开始分析素材',
+      'warn',
+      6000,
+      { label: '创建项目', handler: () => router.push('/create/project') }
+    )
+    return
+  }
+  analyzing.value = true
+  try {
+    await workflow.runStep(1)
+  } finally {
+    analyzing.value = false
+  }
+}
 
 const stepDone = computed(() => {
   const s = (appStore.steps || []).find(s => s.n === 1)
