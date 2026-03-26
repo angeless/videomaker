@@ -42,6 +42,7 @@ export const useAppStore = defineStore('app', () => {
   const recentProjects = computed(() => projectStore.recentProjects)
   const recentProjectsLoading = computed(() => projectStore.recentProjectsLoading)
   const hasProject = computed(() => projectStore.hasProject)
+  const ready = computed(() => projectStore.hasProject)
 
   // ── 向后兼容 re-export (system) ──
   const systemLoad = computed(() => systemStore.systemLoad)
@@ -151,7 +152,7 @@ export const useAppStore = defineStore('app', () => {
     initLoading, initError,
     recentProjects, recentProjectsLoading,
     // computed
-    hasProject,
+    hasProject, ready,
     // methods
     fetchStatus, applyState,
     runSystemPreflight, refreshTaskQueue,
