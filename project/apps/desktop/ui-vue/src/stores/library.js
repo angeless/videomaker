@@ -44,6 +44,7 @@ export const useLibraryStore = defineStore('library', () => {
   const ingestJobId = ref('')
   const ingestProgress = ref(0)
   const ingestLog = ref([])
+  const ingestMeta = ref({ processed: 0, total: 0, current_file: '', percent: 0 })
 
   // 本地视频入库
   const ingestLocalPath = ref('')
@@ -211,13 +212,17 @@ export const useLibraryStore = defineStore('library', () => {
       if (Array.isArray(data.log)) {
         ingestLog.value = data.log
       }
+      if (data.ingest_meta) {
+        Object.assign(ingestMeta.value, data.ingest_meta)
+      }
     }
 
     const status = `${data.status || ''}`.toLowerCase()
     if (status === 'completed' || status === 'done') {
       ingestLoading.value = false
-      ingestMessage.value = '入库完成'
-      toast.show('素材入库完成', 'success')
+      const count = ingestMeta.value.total || ingestMeta.value.processed || 0
+      ingestMessage.value = `入库完成：${count} 个素材`
+      toast.show(`入库完成：${count} 个素材`, 'success')
       await loadStats()
       await search()
       return
@@ -263,6 +268,7 @@ export const useLibraryStore = defineStore('library', () => {
     ingestMessage,
     ingestJobId,
     ingestProgress,
+    ingestMeta,
     ingestLog,
     ingestLocalPath,
     ingestLocalMaxVideos,
