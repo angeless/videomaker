@@ -1,9 +1,9 @@
 {
-  "upgrade_version": "1.10",
+  "upgrade_version": "1.17",
   "project_name": "VideoEditor",
   "snapshot_commit": "8898b86bf9c303ce006d4a8645d95ebb16665cc8",
   "started_at": "2026-03-20T18:00:00+08:00",
-  "last_updated": "2026-03-23T02:00:00+08:00",
+  "last_updated": "2026-03-25T22:30:00+08:00",
   "current_stage": 7,
   "git_available": true,
   "project_scale": "L",
