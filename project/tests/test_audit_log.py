@@ -283,6 +283,87 @@ class TestAuditE2ESettingsRoute:
             audit_log.close()
 
 
+class TestDegradationAudit:
+    """R2: Verify _log_degradation writes structured degradation events."""
+
+    def _fresh_module(self):
+        from modules.app_api.services import audit_log
+        audit_log.close()
+        return audit_log
+
+    def test_degradation_event_written(self, tmp_path):
+        al = self._fresh_module()
+        al.init_audit_log(tmp_path / "degrad.db")
+        try:
+            from modules.workflow_engine.workflow import _log_degradation
+            _log_degradation("step2_topic", "未配置 AI API Key", "素材驱动选题")
+
+            entries = al.query(operation="degradation")
+            assert len(entries) == 1
+            e = entries[0]
+            assert e["resource_type"] == "step2_topic"
+            assert e["status"] == "degraded"
+            assert e["actor"] == "workflow_engine"
+            assert e["detail"]["reason"] == "未配置 AI API Key"
+            assert e["detail"]["fallback_path"] == "素材驱动选题"
+            assert e["detail"]["severity"] == "warning"
+        finally:
+            al.close()
+
+    def test_degradation_multiple_events(self, tmp_path):
+        al = self._fresh_module()
+        al.init_audit_log(tmp_path / "degrad2.db")
+        try:
+            from modules.workflow_engine.workflow import _log_degradation
+            _log_degradation("step1_clip", "CLIP 不可用", "跳过语义索引")
+            _log_degradation("step2_topic", "AI 解析失败", "素材驱动选题")
+            _log_degradation("step3_script", "AI 返回解析失败", "模板脚本生成")
+
+            entries = al.query(operation="degradation")
+            assert len(entries) == 3
+            modules = {e["resource_type"] for e in entries}
+            assert modules == {"step1_clip", "step2_topic", "step3_script"}
+        finally:
+            al.close()
+
+    def test_degradation_api_filter(self, tmp_path):
+        """Verify GET /api/system/audit?operation=degradation returns degradation events."""
+        al = self._fresh_module()
+        al.init_audit_log(tmp_path / "degrad_api.db")
+
+        old_lib = server._library
+        old_ss = server._secret_store
+        try:
+            lib = _FakeGML()
+            lib.db_path = tmp_path / "fake_d.db"
+            server._library = lib
+            server._secret_store = _FakeSecretStore()
+            client = server.app.test_client()
+
+            al.audit("degradation", "step2_topic", None,
+                     actor="workflow_engine", status="degraded",
+                     detail={"reason": "test", "fallback_path": "fallback", "severity": "warning"})
+
+            resp = client.get("/api/system/audit?operation=degradation")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["count"] == 1
+            assert data["entries"][0]["resource_type"] == "step2_topic"
+            assert data["entries"][0]["status"] == "degraded"
+        finally:
+            server._library = old_lib
+            server._secret_store = old_ss
+            al.close()
+
+    def test_degradation_no_crash_without_init(self):
+        """_log_degradation must never raise, even if audit_log is not initialized."""
+        al = self._fresh_module()
+        # Do NOT call init — audit should silently do nothing
+        from modules.workflow_engine.workflow import _log_degradation
+        _log_degradation("test_module", "test reason", "test fallback")
+        # No assertion — just verifying no exception raised
+
+
 class TestAuditE2ECustomTagDelete:
     """Trigger DELETE /api/library/custom-tags/<id> and verify audit entry."""
 

@@ -4,6 +4,17 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/) 规范。
 
+## [0.13.2] - 2026-03-27
+
+### 新增 (Added)
+- R2: 退化行为显式通知（W-002）
+  - `_log_degradation()` 辅助函数：结构化记录降级事件到审计日志
+  - workflow.py 3 处退化点（Step 1 CLIP / Step 2 选题 / Step 3 脚本）写入 `audit("degradation", ...)`
+  - 前端 `_fetchDegradationAudit()`：轮询审计 API，60s 内新事件自动 Toast
+  - Toast 格式：`[模块] 已降级：原因 → 降级路径`
+  - 新增 4 个降级审计测试（含 API 端点过滤测试）
+  - 全量测试 928 passed / 0 failed
+
 ## [0.13.1] - 2026-03-27
 
 ### 新增 (Added)
