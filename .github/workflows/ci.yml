@@ -24,7 +24,9 @@ jobs:
           cache-dependency-path: project/requirements.txt
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio
 
       - name: Python syntax check
         run: |
