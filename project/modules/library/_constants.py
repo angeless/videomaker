@@ -238,10 +238,17 @@ _FIELD_TO_SLOT = {
     "perspective": "shot_type",
 }
 
-# Path to ChatGPT seed data (used once during first init)
-_SEED_DATA_DIR = Path(os.path.expanduser(
+# Path to seed data — bundled inside the project so it works in any environment.
+# Falls back to the legacy ~/Downloads path for backward compatibility.
+_SEED_DATA_DIR_BUNDLED = Path(__file__).resolve().parents[2] / "data" / "seeds"
+_SEED_DATA_DIR_LEGACY = Path(os.path.expanduser(
     "~/Downloads/语义数据库-chatgpt-20260306"
 ))
+_SEED_DATA_DIR = (
+    _SEED_DATA_DIR_BUNDLED
+    if (_SEED_DATA_DIR_BUNDLED / "semantic_keyword_library_flat.jsonl").exists()
+    else _SEED_DATA_DIR_LEGACY
+)
 
 # ── 62 semantic dimension fields ──
 SEMANTIC_DIMENSIONS = [

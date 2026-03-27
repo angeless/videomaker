@@ -82,6 +82,7 @@ class GlobalMediaLibrary(SchemaMixin, CoreMixin, VisionMixin, FingerprintMixin, 
         conn = sqlite3.connect(str(self.db_path), timeout=30.0)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA busy_timeout = 30000")
+        conn.execute("PRAGMA foreign_keys = ON")
         # WAL 提升并发读写能力，降低搜索与入库互相阻塞概率。
         try:
             conn.execute("PRAGMA journal_mode = WAL")

@@ -96,11 +96,17 @@ def lib():
             ).fetchone()[0]
             tag_id_map[tag_name] = tid
 
-        # Insert alias: 海滩 → 海边
+        # Insert alias: 海滩 → 海边  (also use a unique test alias to avoid seed data collision)
         conn.execute(
             """INSERT OR IGNORE INTO tag_alias
                (tag_id, alias_name, normalized_alias, source_type)
                VALUES (?, '海滩', '海滩', 'test_seed')""",
+            (tag_id_map["海边"],),
+        )
+        conn.execute(
+            """INSERT OR IGNORE INTO tag_alias
+               (tag_id, alias_name, normalized_alias, source_type)
+               VALUES (?, '测试海岸线别名', '测试海岸线别名', 'test_seed')""",
             (tag_id_map["海边"],),
         )
 
@@ -229,13 +235,14 @@ class TestAliasSearch:
         assert "uid_beach" in uids
 
     def test_alias_query_type(self, lib):
+        # Use a unique alias that won't collide with seed keywords
         with lib._connect() as conn:
             alias_exists = conn.execute(
-                "SELECT tag_id FROM tag_alias WHERE normalized_alias = '海滩'"
+                "SELECT tag_id FROM tag_alias WHERE normalized_alias = '测试海岸线别名'"
             ).fetchone()
         if not alias_exists:
-            pytest.skip("'海滩' alias not in seed data")
-        results = lib.search_assets(query="海滩", limit=50, retrieval_mode="hybrid")
+            pytest.skip("test alias not in seed data")
+        results = lib.search_assets(query="测试海岸线别名", limit=50, retrieval_mode="hybrid")
         if results:
             beach = [r for r in results if r["uid"] == "uid_beach"]
             if beach:

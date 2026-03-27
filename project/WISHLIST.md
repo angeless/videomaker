@@ -76,3 +76,21 @@
 - **描述**: 当前 `index_asset_visual()` 需要显式调用。应在 `ingest_local_images` 流程中自动触发 CLIP 索引（如果可用）。
 - **优先级**: 中
 - **状态**: 待评估
+
+### W-011: MCP Server 模块
+- **来源**: 竞品研究 davinci-resolve-mcp (2026-03-24)
+- **描述**: 新增 `modules/mcp_server/` 模块，用 FastMCP 封装现有 Agent API（agent_capability_routes、agent_skill_routes、agent_task_run_routes、workflow_routes 等），将 VideoEditor 暴露为标准 MCP Server。上线前需对写/输出类工具加路径白名单保护，禁止 MCP 工具触发任何删除操作。
+- **优先级**: 高
+- **状态**: 待评估
+
+### W-012: 剪映草稿导出适配器
+- **来源**: 竞品研究 davinci-resolve-mcp (2026-03-24)
+- **描述**: Step 6（粗剪）完成后，可选输出剪映草稿格式（draft_content.json + 草稿文件夹），用户拖入剪映专业版直接打开，时间线、字幕、分段全部就位，只需做最后精调。草稿格式基于社区逆向工程的 JSON 结构，需关注剪映版本兼容性。
+- **优先级**: 中
+- **状态**: 待评估
+
+### W-013: Final Cut Pro FCPXML 导出适配器
+- **来源**: 竞品研究 davinci-resolve-mcp (2026-03-24)
+- **描述**: Step 6（粗剪）完成后，可选输出 FCPXML 格式，用户在 Final Cut Pro 中直接打开，时间线完整呈现。FCPXML 为 Apple 官方文档化的项目交换格式，稳定性优于剪映草稿，且 Premiere Pro 等工具也可导入，具备一定通用性。
+- **优先级**: 低
+- **状态**: 待评估
