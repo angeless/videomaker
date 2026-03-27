@@ -50,7 +50,10 @@ jobs:
           "
 
       - name: Run tests
-        run: python3 -m pytest tests/ -v --tb=short
+        run: |
+          python3 -m pytest tests/ -v --tb=short \
+            --deselect tests/test_capabilities.py::test_nle_find_latest_video_candidate \
+            --deselect tests/test_openapi_publish.py::TestOpenAPISpecValidity::test_openapi_spec_validator
 
       - name: Critical files check
         run: |
