@@ -106,6 +106,11 @@ function selectTab(tab) {
     capStore.setMessage('该模块正在开发中，敬请期待', 'info')
     return
   }
+  const hint = capStore.executionHint(tab)
+  if (hint) {
+    capStore.setMessage(hint, 'warn')
+    return
+  }
   capStore.activeTab = tab
   router.push(`/tools/${tab}`)
 }
@@ -196,6 +201,11 @@ function selectTab(tab) {
 .cap-status-badge.badge-muted {
   background: var(--surface2, rgba(128, 128, 128, 0.1));
   color: var(--muted, #888);
+}
+
+.cap-status-badge.badge-warn {
+  background: rgba(255, 159, 10, 0.15);
+  color: #ff9f0a;
 }
 
 .capability-content {
