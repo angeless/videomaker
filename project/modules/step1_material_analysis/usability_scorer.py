@@ -270,7 +270,7 @@ def _compute_tech_score(
         resolution_score = 0.30
 
     # --- 码率评分（复用原有 quality_score 作为近似） ---
-    bitrate_score = asset_row.get("quality_score", 0.5) or 0.5
+    bitrate_score = float(asset_row.get("quality_score", 0.5) or 0.5)
 
     # --- 稳定性评分 ---
     motion = visual_stats.get("motion_score", 0)
@@ -603,7 +603,7 @@ def _compute_edit_fitness(
         sub["cut_clean"] = 0.30
 
     # --- 速度适应性 ---
-    fps = asset_row.get("fps", 30) or 30
+    fps = float(asset_row.get("fps", 30) or 30)
     if fps >= 60:
         sub["speed_adapt"] = 0.95
     elif fps >= 30:
