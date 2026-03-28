@@ -44,6 +44,9 @@ def _post(endpoint: str, payload: Dict[str, Any], base_url: str = DEFAULT_BACKEN
 
 def library_search(query: str, top_k: int = 10, mode: str = "hybrid") -> Dict[str, Any]:
     """Search the video library by semantic query."""
+    top_k = max(1, min(top_k, 1000))
+    if mode not in ("hybrid", "semantic", "keyword"):
+        mode = "hybrid"
     return _get(f"/api/library/search?q={urllib.request.quote(query)}&top_k={top_k}&mode={mode}")
 
 

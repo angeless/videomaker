@@ -876,12 +876,14 @@ def create_editing_capability_blueprint(
         frame_b64 = payload.get("frame_base64")
         if not frame_b64:
             return jsonify({"error": "frame_base64 is required"}), 400
+        if len(frame_b64) > 10 * 1024 * 1024:  # 10MB limit
+            return jsonify({"error": "Image too large (max 10MB)"}), 413
 
         beauty_params = payload.get("beauty_params", {})
         lut_name = beauty_params.get("lut")
         smooth_level = float(beauty_params.get("smooth_level", 0.8))
         smooth_level = max(0.0, min(1.0, smooth_level))
-        region_graded = beauty_params.get("region_graded", True)
+        region_graded = bool(beauty_params.get("region_graded", True))
 
         try:
             import numpy as np
