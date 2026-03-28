@@ -3651,6 +3651,61 @@
                 <span style="font-size:13px">启用美颜滤镜</span>
               </div>
             </div>
+            <!-- R10: Beauty v2 Panel -->
+            <template x-if="renderOpts.enable_skin_smooth">
+              <div class="form-field full" style="margin-top:4px;">
+                <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+                  <div>
+                    <div class="input-label" style="margin-bottom:2px">LUT 预设</div>
+                    <select class="input" x-model="renderOpts.beauty_lut" style="width:160px">
+                      <option value="">无 LUT</option>
+                      <option value="outdoor_natural">户外自然</option>
+                      <option value="indoor_warm">室内暖调</option>
+                      <option value="food">美食</option>
+                      <option value="night">夜景</option>
+                      <option value="travel">旅行</option>
+                    </select>
+                  </div>
+                  <div>
+                    <div class="input-label" style="margin-bottom:2px">磨皮强度</div>
+                    <input class="input" type="range" min="0" max="1" step="0.05"
+                           x-model.number="renderOpts.skin_smooth_strength"
+                           style="width:120px;vertical-align:middle" />
+                    <span x-text="renderOpts.skin_smooth_strength" style="font-size:12px;color:var(--text-muted)"></span>
+                  </div>
+                  <div class="toggle-wrap">
+                    <label class="toggle">
+                      <input type="checkbox" x-model="renderOpts.beauty_region_graded" />
+                      <span class="toggle-slider"></span>
+                    </label>
+                    <span style="font-size:12px">分级磨皮</span>
+                  </div>
+                  <button class="btn btn-outline btn-sm" @click="beautyPreviewAB()"
+                          :disabled="!currentProject?.materials"
+                          style="font-size:12px;padding:2px 10px">
+                    A/B 对比预览
+                  </button>
+                </div>
+                <!-- A/B Preview Container -->
+                <template x-if="beautyPreview.show">
+                  <div style="margin-top:8px;position:relative;border:1px solid var(--border);border-radius:8px;overflow:hidden;max-width:640px;">
+                    <div style="display:flex;">
+                      <div style="flex:1;text-align:center;padding:4px;border-right:1px solid var(--border)">
+                        <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px">原图</div>
+                        <img :src="'data:image/jpeg;base64,'+beautyPreview.original" style="max-width:100%;max-height:200px" x-show="beautyPreview.original" />
+                      </div>
+                      <div style="flex:1;text-align:center;padding:4px">
+                        <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px">效果</div>
+                        <img :src="'data:image/jpeg;base64,'+beautyPreview.result" style="max-width:100%;max-height:200px" x-show="beautyPreview.result" />
+                      </div>
+                    </div>
+                    <div x-show="beautyPreview.processing_ms" style="font-size:11px;color:var(--text-muted);text-align:center;padding:2px">
+                      处理耗时: <span x-text="beautyPreview.processing_ms"></span>ms
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </template>
             <div class="form-field full">
               <div class="toggle-wrap">
                 <label class="toggle">

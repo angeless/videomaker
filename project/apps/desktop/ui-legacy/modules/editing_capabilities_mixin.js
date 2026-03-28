@@ -400,7 +400,53 @@
           source_video: this.handoffInput.master_source || "",
           output_name: this.handoffInput.output_name || "final.mp4",
           copy_mode: this.handoffInput.copy_mode || "copy",
-        };
+    
+      // R10: Beauty v2 A/B preview
+      async beautyPreviewAB() {
+        if (!this.currentProject?.materials) return;
+        this.beautyPreview = { show: true, original: null, result: null, processing_ms: 0 };
+
+        // Get first material frame as base64
+        const materials = this.currentProject.materials;
+        const firstKey = Object.keys(materials)[0];
+        if (!firstKey) return;
+        const m = materials[firstKey];
+        const videoPath = m.path || (m.file_info && m.file_info.path);
+        if (!videoPath) return;
+
+        // Request a frame extraction from backend
+        try {
+          const frameResp = await this.api("POST", "/api/capabilities/frame_extract", {
+            video_path: videoPath, frame_index: 0,
+          });
+          const frameB64 = frameResp?.data?.frame_base64 || frameResp?.frame_base64;
+          if (!frameB64) {
+            this.capabilityMessage = "无法提取预览帧";
+            return;
+          }
+          this.beautyPreview.original = frameB64;
+
+          // Call beauty preview API
+          const result = await this.api("POST", "/api/capabilities/beauty/preview", {
+            frame_base64: frameB64,
+            beauty_params: {
+              lut: this.renderOpts.beauty_lut || null,
+              smooth_level: this.renderOpts.skin_smooth_strength || 0.8,
+              region_graded: this.renderOpts.beauty_region_graded !== false,
+            },
+          });
+          if (result?.success) {
+            this.beautyPreview.result = result.data.result_base64;
+            this.beautyPreview.processing_ms = result.data.processing_ms;
+          } else {
+            this.capabilityMessage = "美颜预览失败: " + (result?.error || "unknown");
+          }
+        } catch (e) {
+          this.capabilityMessage = "美颜预览异常: " + e.message;
+        }
+      },
+
+    };
         const data = await this.api("POST", "/api/capabilities/refinement/collect_master", payload);
         if (data.error) {
           this.capabilityMessage = `导回成片失败：${data.error}`;

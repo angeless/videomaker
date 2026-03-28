@@ -858,4 +858,68 @@ def create_editing_capability_blueprint(
             "timestamp": datetime.now().isoformat(),
         })
 
+
+    # ── R10: Beauty v2 API endpoints ──────────────────────────────
+
+    @bp.route("/api/capabilities/beauty/lut-presets", methods=["GET"])
+    def api_beauty_lut_presets():
+        from modules.step7_final_render.beauty import LUT_PRESETS
+        return jsonify(LUT_PRESETS)
+
+    @bp.route("/api/capabilities/beauty/preview", methods=["POST"])
+    def api_beauty_preview():
+        import time
+        import base64
+        start_ms = time.time()
+
+        payload = request_json_any_method()
+        frame_b64 = payload.get("frame_base64")
+        if not frame_b64:
+            return jsonify({"error": "frame_base64 is required"}), 400
+
+        beauty_params = payload.get("beauty_params", {})
+        lut_name = beauty_params.get("lut")
+        smooth_level = float(beauty_params.get("smooth_level", 0.8))
+        smooth_level = max(0.0, min(1.0, smooth_level))
+        region_graded = beauty_params.get("region_graded", True)
+
+        try:
+            import numpy as np
+            import cv2
+            img_bytes = base64.b64decode(frame_b64)
+            nparr = np.frombuffer(img_bytes, np.uint8)
+            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            if img is None:
+                return jsonify({"error": "Invalid image data"}), 400
+        except Exception as e:
+            return jsonify({"error": f"Image decode failed: {e}"}), 400
+
+        from modules.step7_final_render.beauty import apply_beauty_v2, LUT_PRESETS
+        if lut_name and lut_name not in LUT_PRESETS:
+            return jsonify({"error": f"Unknown LUT: {lut_name}. Available: {LUT_PRESETS}"}), 400
+
+        degradations = []
+        result_img = apply_beauty_v2(
+            img,
+            smooth_level=smooth_level,
+            region_graded=region_graded,
+            lut_name=lut_name,
+            degradations=degradations,
+        )
+
+        _, buf = cv2.imencode(".jpg", result_img, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        result_b64 = base64.b64encode(buf).decode("utf-8")
+
+        elapsed_ms = int((time.time() - start_ms) * 1000)
+        return jsonify({
+            "success": True,
+            "data": {
+                "result_base64": result_b64,
+                "processing_ms": elapsed_ms,
+                "degradations": degradations,
+            },
+            "timestamp": datetime.now().isoformat(),
+        })
+
+
     return bp
