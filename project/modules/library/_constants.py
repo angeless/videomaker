@@ -26,6 +26,10 @@ DEFAULT_FAISS_INDEX_DIR = "cache/faiss"  # relative to library_dir
 DEFAULT_FAISS_CLIP_INDEX_DIR = "cache/faiss_clip"  # CLIP visual embeddings
 DEFAULT_EMBEDDING_DIM = 1536
 DEFAULT_CLIP_DIM = 512
+FAISS_IVF_THRESHOLD = 10000   # R6a: switch to IndexIVFFlat above this count
+FAISS_IVF_NLIST = 100          # R6a: number of Voronoi cells for IVF
+VECTOR_WAL_FILENAME = "vector_wal.jsonl"  # R6b: WAL file name
+DEFAULT_CLIP_MODEL = "openai/clip-vit-base-patch32"  # R6c: default CLIP model
 
 # ── 25-category taxonomy ──
 TAG_CATEGORIES = (

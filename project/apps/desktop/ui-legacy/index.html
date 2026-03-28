@@ -1983,6 +1983,22 @@
             <div class="card-title">发布执行结果</div>
             <textarea class="json-editor" style="min-height:180px" :value="jsonPretty(contentPublishRun)" readonly></textarea>
           </div>
+          <!-- R5: 发布失败详情 Modal -->
+          <div x-show="showPublishFailureModal" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center" x-cloak>
+            <div style="background:var(--bg);border-radius:12px;padding:24px 28px;max-width:440px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.25)">
+              <div style="font-size:16px;font-weight:600;margin-bottom:12px">发布失败详情</div>
+              <div style="font-size:13px;color:var(--muted);margin-bottom:8px" x-show="publishRecoveryHint">
+                <span x-text="(publishRecoveryHint && publishRecoveryHint.rerun_scope) || ''"></span>
+                <template x-if="publishRecoveryHint && publishRecoveryHint.error_classes && publishRecoveryHint.error_classes.length">
+                  <span x-text="'（错误类型：' + publishRecoveryHint.error_classes.join(', ') + '）'"></span>
+                </template>
+              </div>
+              <div style="display:flex;gap:8px;margin-top:16px">
+                <button class="btn btn-primary" x-show="publishRecoveryActionLabel()" @click="handlePublishRecoveryAction()" x-text="publishRecoveryActionLabel()"></button>
+                <button class="btn btn-ghost" @click="dismissPublishFailureModal()">关闭</button>
+              </div>
+            </div>
+          </div>
           <div class="card" style="margin-top:10px">
             <div class="card-title">支持平台</div>
             <textarea class="json-editor" style="min-height:120px" :value="jsonPretty(contentPublishPlatforms)" readonly></textarea>
@@ -3484,6 +3500,60 @@
           </div>
           <div x-show="!roughUrl" style="text-align:center;color:var(--muted);padding:24px">
             粗剪文件未生成，请先运行 Step 6
+          </div>
+        </div>
+
+        <!-- R7: 三轨时间线 -->
+        <div class="card">
+          <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+            <span>三轨时间线</span>
+            <div style="display:flex;gap:6px;align-items:center">
+              <select class="input" style="font-size:11px;width:auto;padding:2px 6px" x-model="timelineSubtitleLink"><option value="contained">字幕联动：完全包含</option><option value="overlap">字幕联动：部分重叠</option><option value="none">字幕联动：关闭</option></select>
+              <button class="btn btn-ghost" style="font-size:12px" @click="loadTimelineTracks()">刷新</button>
+              <button class="btn btn-primary" style="font-size:12px" @click="saveTimelineTracks()">保存</button>
+            </div>
+          </div>
+          <!-- Video track -->
+          <div class="tl-track tl-track-video">
+            <div class="tl-track-label">Video</div>
+            <div class="tl-track-area" style="height:80px">
+              <template x-for="(clip, i) in timelineTracks.video" :key="i">
+                <div class="tl-clip tl-clip-video"
+                     :style="`left:${clip.start_ms / timelineTrackTotalMs() * 100}%;width:${(clip.end_ms - clip.start_ms) / timelineTrackTotalMs() * 100}%`"
+                     :title="clip.label"
+                     draggable="true"
+                     @dragstart="timelineDragIdx=i; timelineDragTrack='video'"
+                     @dragend="timelineDragIdx=-1">
+                  <span class="tl-clip-text" x-text="clip.label || clip.uid"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+          <!-- Subtitle track -->
+          <div class="tl-track tl-track-subtitle">
+            <div class="tl-track-label">Subtitle</div>
+            <div class="tl-track-area" style="height:40px">
+              <template x-for="(sub, i) in timelineTracks.subtitle" :key="i">
+                <div class="tl-clip tl-clip-subtitle"
+                     :style="`left:${sub.start_ms / timelineTrackTotalMs() * 100}%;width:${(sub.end_ms - sub.start_ms) / timelineTrackTotalMs() * 100}%`"
+                     :title="sub.text">
+                  <span class="tl-clip-text" x-text="sub.text"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+          <!-- Audio track -->
+          <div class="tl-track tl-track-audio">
+            <div class="tl-track-label">Audio</div>
+            <div class="tl-track-area" style="height:60px">
+              <template x-for="(aud, i) in timelineTracks.audio" :key="i">
+                <div class="tl-clip tl-clip-audio"
+                     :style="`left:${aud.start_ms / timelineTrackTotalMs() * 100}%;width:${(aud.end_ms - aud.start_ms) / timelineTrackTotalMs() * 100}%`"
+                     :title="aud.label">
+                  <span class="tl-clip-text" x-text="aud.label"></span>
+                </div>
+              </template>
+            </div>
           </div>
         </div>
 

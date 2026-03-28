@@ -4,6 +4,77 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/) 规范。
 
+## [0.13.11] - 2026-03-27
+
+### 新增 (Added)
+- R9: FCPXML 导出适配器（W-013）
+  - `modules/exporters/fcpxml/` 新模块：`FCPXMLBuilder` + `schema.py`
+  - FCPXML 1.9 格式：`<asset-clip>` 视频 + `<title>` 字幕
+  - `POST /api/capabilities/fcpxml_export/run` API 端点
+  - CMTime 时间格式（ms/1000s）
+  - 新增 7 个测试
+
+## [0.13.10] - 2026-03-27
+
+### 新增 (Added)
+- R8: 剪映草稿导出适配器（W-012）
+  - `modules/exporters/jianying/` 新模块：`JianyingExportBuilder` + `schema.py`
+  - `POST /api/capabilities/jianying_export/run` API 端点
+  - 生成 `draft_content.json` + `draft_meta_info.json`（剪映专业版 v5.x 格式）
+  - 输出目录无写权限时返回 400 + 明确错误
+  - 新增 7 个测试
+
+## [0.13.9] - 2026-03-27
+
+### 新增 (Added)
+- R7: 可视化时间线编辑器 v1（W-001）
+  - `GET/PUT /api/timeline/tracks` — 三轨（video/subtitle/audio）读写 API
+  - 前端三轨视图：Video 80px / Subtitle 40px / Audio 60px，颜色区分
+  - `timelineSnap()` 吸附算法（8px 阈值）
+  - `timelineMoveVideoClip()` 视频拖拽 + 字幕联动
+  - `timelineTrimAudio()` 音频独立裁剪
+  - 新增 9 个 API 测试
+
+## [0.13.8] - 2026-03-27
+
+### 新增 (Added)
+- R6: 向量索引基础设施升级（W-007+W-008+W-009）
+  - R6a: `_build_faiss_index()` 自动选择 IndexIVFFlat（N >= 10k）或 IndexFlatIP
+  - R6b: WAL 持久化 — `add()` 追加 JSONL WAL；`load()` replay；`save()` 清空
+  - R6b: `add_batch()` + `checkpoint()` 接口
+  - R6c: CLIPEncoder `dim` / `model_id` 动态暴露；CLIP 设置 API
+  - 新增 12 个测试
+
+## [0.13.5] - 2026-03-27
+
+### 新增 (Added)
+- R5: recovery_hint 前端完整消费（W-003）
+  - `runContentPublish()` 检测 `recovery_hint.can_rerun`，自动弹出失败详情 Modal
+  - Modal 按 `rerun_scope` 映射按钮文字（重新发布 / 前往设置 / 无按钮）
+  - `fix_config_then_rerun` 点击跳转发布连接器设置页
+  - `recovery_hint` 缺失时安全降级为通用提示，无 JS 错误
+  - 新增 Alpine 状态变量 `publishRecoveryHint` / `showPublishFailureModal`
+
+## [0.13.4] - 2026-03-27
+
+### 新增 (Added)
+- R4: VectorIndex compact 自动触发（W-006）
+  - `compact_if_needed()` 方法：`_deleted` 比例 > 20% 时自动 rebuild 清理
+  - `_extract_vector(pos)` 辅助方法：从 FAISS / NumPy 后端提取原始向量
+  - `save()` 前自动检查并触发 compact，防止索引膨胀
+  - 新增 6 个测试（覆盖触发/不触发/搜索一致性/日志/save 联动/NumPy 后端）
+
+## [0.13.3] - 2026-03-27
+
+### 新增 (Added)
+- R3: 素材入库自动触发视觉索引（W-010）
+  - `_auto_visual_index(assets)` 私有方法：入库后异步后台线程 CLIP 索引
+  - `ingest_local_path()` / `ingest_local_images()` 末尾自动调用
+  - CLIP 不可用时：静默跳过 + R2 降级通知（`_log_degradation`）
+  - API 响应含 `visual_index_triggered: true/false` 字段
+  - 异步 daemon 线程，不阻塞入库进度条
+  - 新增 9 个测试（覆盖触发/降级/非阻塞 3 类场景）
+
 ## [0.13.2] - 2026-03-27
 
 ### 新增 (Added)

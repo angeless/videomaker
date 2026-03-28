@@ -1359,6 +1359,18 @@ input[type=number].input::-webkit-outer-spin-button {
   to   { opacity: 1; transform: translateX(0); }
 }
 
+/* ── R7: 三轨时间线 ────────────────────────────────────────────────── */
+.tl-track { display:flex; align-items:stretch; border-bottom:1px solid var(--border); }
+.tl-track:last-child { border-bottom:none; }
+.tl-track-label { width:64px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; color:var(--muted); background:var(--surface2); border-right:1px solid var(--border); }
+.tl-track-area { flex:1; position:relative; overflow:hidden; background:var(--bg); }
+.tl-clip { position:absolute; top:2px; bottom:2px; border-radius:4px; display:flex; align-items:center; padding:0 6px; cursor:grab; overflow:hidden; min-width:2px; }
+.tl-clip:hover { opacity:0.85; }
+.tl-clip-text { font-size:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#fff; }
+.tl-clip-video { background:#4a7fff; }
+.tl-clip-subtitle { background:#ff9f43; }
+.tl-clip-audio { background:#2ecc71; }
+
 /* ── 文本颜色工具类 ───────────────────────────────────────────────── */
 .text-success { color: var(--success); }
 .text-warn    { color: var(--warn); }

@@ -13,6 +13,21 @@ from flask import Blueprint, jsonify, request
 from modules.app_api.param_utils import parse_float_param, parse_int_param, parse_str_param, write_json_result
 
 
+def _is_safe_export_path(resolved_path: str) -> bool:
+    """Reject export paths outside allowed directories (Desktop, Downloads, /tmp, project)."""
+    import os
+    home = Path.home()
+    allowed_prefixes = [
+        str(home / "Desktop"),
+        str(home / "Downloads"),
+        str(home / "Documents"),
+        str(Path("/tmp").resolve()),
+        str(Path(os.environ.get("VE_PROJECT_DIR", "")).expanduser().resolve()) if os.environ.get("VE_PROJECT_DIR") else "",
+    ]
+    allowed_prefixes = [p for p in allowed_prefixes if p]
+    return any(resolved_path == prefix or resolved_path.startswith(prefix + os.sep) for prefix in allowed_prefixes)
+
+
 def _extract_text_rough_subtitle_spans(script: Dict) -> List[Dict]:
     out: List[Dict] = []
     subtitles = script.get("subtitles", []) if isinstance(script, dict) else []
@@ -746,5 +761,101 @@ def create_editing_capability_blueprint(
                 "output": str(out_path) if out_path else None,
             }
         )
+
+    # ── R8: Jianying draft export ──────────────────────────────────
+
+    @bp.route("/api/capabilities/jianying_export/run", methods=["POST"])
+    def api_jianying_export_run():
+        import json as _json
+        project_dir = project_dir_getter()
+        if project_dir is None:
+            return jsonify({"error": "no project"}), 400
+
+        body = request.get_json(silent=True) or {}
+        output_dir = parse_str_param(body.get("output_dir", "~/Desktop/VideoEditor-Drafts/"))
+        output_dir = str(Path(output_dir).expanduser().resolve())
+
+        if not _is_safe_export_path(output_dir):
+            return jsonify({"error": f"输出路径不在允许范围内: {output_dir}"}), 400
+
+        try:
+            Path(output_dir).mkdir(parents=True, exist_ok=True)
+            test_file = Path(output_dir) / ".write_test"
+            test_file.write_text("ok")
+            test_file.unlink()
+        except Exception:
+            return jsonify({"error": f"输出目录无写权限: {output_dir}"}), 400
+
+        script_path = Path(project_dir) / "data" / "script_matched.json"
+        if not script_path.exists():
+            return jsonify({"error": "script_matched.json not found"}), 404
+
+        script = _json.loads(script_path.read_text(encoding="utf-8"))
+        ws = workflow_state_getter()
+        config = ws.config if ws and hasattr(ws, "config") else {}
+
+        from modules.exporters.track_builder import build_tracks_from_script
+        tracks = build_tracks_from_script(script, config)
+        project_name = Path(project_dir).name or "VideoEditor_Draft"
+
+        from modules.exporters.jianying.draft_builder import JianyingExportBuilder
+        width = max(1, min(int(config.get("width", 1080) or 1080), 7680))
+        height = max(1, min(int(config.get("height", 1920) or 1920), 7680))
+        builder = JianyingExportBuilder(project_name, tracks, width=width, height=height)
+        result = builder.build(output_dir)
+
+        return jsonify({
+            "success": True,
+            "data": result,
+            "timestamp": datetime.now().isoformat(),
+        })
+
+    # ── R9: FCPXML export ─────────────────────────────────────────
+
+    @bp.route("/api/capabilities/fcpxml_export/run", methods=["POST"])
+    def api_fcpxml_export_run():
+        import json as _json
+        project_dir = project_dir_getter()
+        if project_dir is None:
+            return jsonify({"error": "no project"}), 400
+
+        body = request.get_json(silent=True) or {}
+        output_path = parse_str_param(body.get("output_path", ""))
+        if not output_path:
+            project_name = Path(project_dir).name or "export"
+            output_path = f"~/Desktop/{project_name}.fcpxml"
+        output_path = str(Path(output_path).expanduser().resolve())
+
+        if not _is_safe_export_path(str(Path(output_path).parent)):
+            return jsonify({"error": f"输出路径不在允许范围内: {output_path}"}), 400
+
+        try:
+            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            return jsonify({"error": f"输出路径无写权限: {output_path}"}), 400
+
+        script_path = Path(project_dir) / "data" / "script_matched.json"
+        if not script_path.exists():
+            return jsonify({"error": "script_matched.json not found"}), 404
+
+        script = _json.loads(script_path.read_text(encoding="utf-8"))
+        ws = workflow_state_getter()
+        config = ws.config if ws and hasattr(ws, "config") else {}
+
+        from modules.exporters.track_builder import build_tracks_from_script
+        tracks = build_tracks_from_script(script, config)
+
+        from modules.exporters.fcpxml.builder import FCPXMLBuilder
+        fps = max(1, min(int(config.get("fps", 30) or 30), 120))
+        width = max(1, min(int(config.get("width", 1080) or 1080), 7680))
+        height = max(1, min(int(config.get("height", 1920) or 1920), 7680))
+        builder = FCPXMLBuilder(Path(project_dir).name or "export", tracks, fps=fps, width=width, height=height)
+        result = builder.build(output_path)
+
+        return jsonify({
+            "success": True,
+            "data": result,
+            "timestamp": datetime.now().isoformat(),
+        })
 
     return bp

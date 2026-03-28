@@ -216,3 +216,114 @@ class TestEdgeCases:
         for i in range(3):
             idx.remove(f"a{i}")
         assert idx.needs_compact  # 3/10 = 30% > 20%
+
+
+# ------------------------------------------------------------------
+# compact_if_needed (R4 W-006)
+# ------------------------------------------------------------------
+
+
+class TestCompact:
+    def test_compact_clears_deleted_above_threshold(self):
+        """Add 10, delete 3 (30%) → compact → _deleted empty."""
+        idx = VectorIndex(dimension=DIM)
+        vecs = {}
+        for i in range(10):
+            v = _random_vec()
+            idx.add(f"a{i}", v)
+            vecs[f"a{i}"] = v
+        for i in range(3):
+            idx.remove(f"a{i}")
+
+        assert idx.needs_compact
+        result = idx.compact_if_needed()
+        assert result is True
+        assert len(idx._deleted) == 0
+        assert idx.count == 7
+
+    def test_compact_not_triggered_below_threshold(self):
+        """Add 10, delete 1 (10%) → no compact → _deleted still has 1."""
+        idx = VectorIndex(dimension=DIM)
+        for i in range(10):
+            idx.add(f"a{i}", _random_vec())
+        idx.remove("a0")
+
+        assert not idx.needs_compact
+        result = idx.compact_if_needed()
+        assert result is False
+        assert len(idx._deleted) == 1
+
+    def test_search_consistent_after_compact(self):
+        """Search results for surviving vectors identical before/after compact."""
+        idx = VectorIndex(dimension=DIM)
+        vecs = {}
+        for i in range(10):
+            v = _random_vec()
+            idx.add(f"a{i}", v)
+            vecs[f"a{i}"] = v
+
+        # Delete first 3
+        for i in range(3):
+            idx.remove(f"a{i}")
+
+        # Search before compact (only surviving vecs)
+        q = vecs["a5"]
+        before = idx.search(q, top_k=10, threshold=0.0)
+
+        idx.compact_if_needed()
+
+        after = idx.search(q, top_k=10, threshold=0.0)
+
+        assert set(before.keys()) == set(after.keys())
+        for uid in before:
+            assert abs(before[uid] - after[uid]) < 1e-5
+
+    def test_compact_logs_message(self, caplog):
+        """Verify 'compact triggered' appears in logs."""
+        import logging
+        with caplog.at_level(logging.INFO):
+            idx = VectorIndex(dimension=DIM)
+            for i in range(10):
+                idx.add(f"a{i}", _random_vec())
+            for i in range(3):
+                idx.remove(f"a{i}")
+            idx.compact_if_needed()
+
+        assert any("compact triggered" in r.message.lower() for r in caplog.records)
+
+    def test_compact_via_save(self, tmp_dir):
+        """save() triggers compact automatically when threshold met."""
+        idx = VectorIndex(dimension=DIM, index_dir=tmp_dir)
+        for i in range(10):
+            idx.add(f"a{i}", _random_vec())
+        for i in range(3):
+            idx.remove(f"a{i}")
+
+        assert idx.needs_compact
+        idx.save()
+        assert len(idx._deleted) == 0
+        assert idx.count == 7
+
+    def test_compact_numpy_fallback(self):
+        """compact works with NumPy backend too."""
+        idx = VectorIndex(dimension=DIM)
+        idx._use_faiss = False
+        idx._faiss_index = None
+
+        vecs = {}
+        for i in range(10):
+            v = _random_vec()
+            idx.add(f"a{i}", v)
+            vecs[f"a{i}"] = v
+        for i in range(3):
+            idx.remove(f"a{i}")
+
+        q = vecs["a7"]
+        before = idx.search(q, top_k=10, threshold=0.0)
+
+        idx.compact_if_needed()
+        assert len(idx._deleted) == 0
+        assert idx.count == 7
+
+        after = idx.search(q, top_k=10, threshold=0.0)
+        assert set(before.keys()) == set(after.keys())

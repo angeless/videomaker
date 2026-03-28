@@ -418,6 +418,72 @@
         }
         this.capabilityMessage = `已导回外部精剪成片：${outVideo || "output/final.mp4"}`;
       },
+
+      async loadTimelineTracks() {
+        const data = await this.api("GET", "/api/timeline/tracks");
+        if (data.error) { this.capabilityMessage = `时间线加载失败：${data.error}`; return; }
+        this.timelineTracks = data.tracks || { video: [], subtitle: [], audio: [] };
+      },
+
+      async saveTimelineTracks() {
+        const data = await this.api("PUT", "/api/timeline/tracks", { tracks: this.timelineTracks });
+        if (data.error) { this.capabilityMessage = `时间线保存失败：${data.error}`; return; }
+        this.capabilityMessage = "时间线已保存";
+      },
+
+      timelineTrackTotalMs() {
+        let max = 0;
+        for (const track of ["video", "subtitle", "audio"]) {
+          for (const item of (this.timelineTracks[track] || [])) {
+            if ((item.end_ms || 0) > max) max = item.end_ms;
+          }
+        }
+        return Math.max(1, max);
+      },
+
+      timelineSnap(track, idx, newStartMs, newEndMs) {
+        const SNAP_MS = Math.max(1, Math.round(8 * this.timelineTrackTotalMs() / 800));
+        const items = this.timelineTracks[track] || [];
+        let sS = newStartMs, sE = newEndMs;
+        for (let i = 0; i < items.length; i++) {
+          if (i === idx) continue;
+          if (Math.abs(newStartMs - items[i].end_ms) <= SNAP_MS) { sS = items[i].end_ms; sE = sS + (newEndMs - newStartMs); }
+          if (Math.abs(newEndMs - items[i].start_ms) <= SNAP_MS) { sE = items[i].start_ms; sS = sE - (newEndMs - newStartMs); }
+        }
+        if (sS < 0) { sE -= sS; sS = 0; }
+        return { start_ms: sS, end_ms: sE };
+      },
+
+      timelineMoveVideoClip(idx, deltaMs) {
+        const clip = this.timelineTracks.video[idx];
+        if (!clip) return;
+        const oldStart = clip.start_ms;
+        const dur = clip.end_ms - clip.start_ms;
+        const oldEnd = oldStart + dur;
+        const snapped = this.timelineSnap("video", idx, Math.max(0, clip.start_ms + deltaMs), Math.max(0, clip.start_ms + deltaMs) + dur);
+        const actualDelta = snapped.start_ms - oldStart;
+        clip.start_ms = snapped.start_ms;
+        clip.end_ms = snapped.end_ms;
+        const mode = this.timelineSubtitleLink || "contained";
+        if (actualDelta !== 0 && mode !== "none") {
+          for (const sub of (this.timelineTracks.subtitle || [])) {
+            const match = mode === "overlap"
+              ? (sub.start_ms < oldEnd && sub.end_ms > oldStart)
+              : (sub.start_ms >= oldStart && sub.end_ms <= oldEnd);
+            if (match) {
+              sub.start_ms += actualDelta;
+              sub.end_ms += actualDelta;
+            }
+          }
+        }
+      },
+
+      timelineTrimAudio(idx, newStartMs, newEndMs) {
+        const item = this.timelineTracks.audio[idx];
+        if (!item) return;
+        item.start_ms = Math.max(0, newStartMs);
+        item.end_ms = Math.max(item.start_ms + 100, newEndMs);
+      },
     };
   };
 }(window));

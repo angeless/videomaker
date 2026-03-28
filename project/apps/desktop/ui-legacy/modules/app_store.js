@@ -207,6 +207,13 @@
     // ── 帧预览（Step 5）────────────────────────────────────────
     frames: [],
 
+    // ── 三轨时间线（R7）────────────────────────────────────────
+    timelineTracks: { video: [], subtitle: [], audio: [] },
+    timelineView: "multi",  // "multi" | "legacy"
+    timelineDragIdx: -1,
+    timelineDragTrack: "",
+    timelineSubtitleLink: "contained",  // "contained" | "overlap" | "none"
+
     // ── 粗剪视频（Step 6）──────────────────────────────────────
     roughUrl:   "",
     renderOpts: {
@@ -445,6 +452,8 @@
     contentPublishSession: null,
     contentPublishPlan: null,
     contentPublishRun: null,
+    publishRecoveryHint: null,
+    showPublishFailureModal: false,
     workflowCatalog: [],
     workflowList: [],
     workflowRuns: [],
