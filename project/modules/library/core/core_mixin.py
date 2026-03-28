@@ -2612,7 +2612,16 @@ class CoreMixin:
 
         if creation_time and "T" in creation_time:
             try:
-                hour = int(str(creation_time).split("T", 1)[1][:2])
+                s = str(creation_time)
+                # Only use hour-based classification when the timestamp has NO timezone info,
+                # meaning it was already stored as local time (e.g. exiftool output, image mtime).
+                # UTC timestamps (ending with Z or +00:00) cannot be reliably converted to
+                # shooting-location local time, so return "unknown" to avoid misclassification
+                # (e.g. iPhone video shot at 10am China time stored as 02:00Z → "night" is wrong).
+                has_tz = s.endswith("Z") or "+" in s[10:] or s.endswith("+00:00")
+                if has_tz:
+                    return "unknown"
+                hour = int(s.split("T", 1)[1][:2])
                 if 5 <= hour < 11:
                     return "morning"
                 if 11 <= hour < 16:
