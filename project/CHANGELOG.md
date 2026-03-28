@@ -4,6 +4,27 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/) 规范。
 
+## [0.13.0] - 2026-03-28
+
+### 新增 (Added)
+- R10: 美颜与审美增强 v2（W-005）
+  - 分级磨皮：额头 0.8× / 脸颊 1.0× / 下巴 0.6×，feathered zone blending
+  - 肤色保护：HSV-S 通道变化 < 5%
+  - 5 个 LUT 预设：outdoor_natural / indoor_warm / food / night / travel
+  - `POST /api/capabilities/beauty/preview` + `GET /api/capabilities/beauty/lut-presets`
+  - 前端 A/B 对比预览面板
+- R11: MCP Server 模块（W-011）
+  - FastMCP 封装 12 工具（7 工作流 + 5 能力）
+  - 安全：路径白名单、穿越拒绝、无删除接口、lazy connection
+- R12: 集成测试 + 最终审计
+  - 全量回归 1039 passed / 0 failures
+
+### 修复 (Fixed)
+- Phase 8 安全审计：top_k 上界 / mode 白名单 / base64 大小限制
+
+### 变更 (Changed)
+- 开发治理规范 v1.5→v1.18
+
 ## [0.13.11] - 2026-03-27
 
 ### 新增 (Added)
