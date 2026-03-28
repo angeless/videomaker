@@ -64,6 +64,7 @@ logger = logging.getLogger(__name__)
 class CoreMixin:
     """Core library methods: analysis, search, ingestion, thumbnails."""
 
+    @staticmethod
     def _is_video_file(path: Path) -> bool:
         return path.suffix.lower() in VIDEO_EXTENSIONS
 
