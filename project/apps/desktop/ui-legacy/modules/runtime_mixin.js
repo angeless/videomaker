@@ -144,7 +144,14 @@
 
     async fetchStatus() {
       const data = await this.api("GET", "/api/status");
-      if (data.ready) this._applyState(data);
+      if (data.ready) {
+        this._applyState(data);
+      } else if (!data.error && this.projectDir) {
+        // BF-001: backend lost project state (e.g. server restart) but frontend still shows project
+        this.projectDir = "";
+        this.steps = [];
+        this.showToast("后端服务已重启，项目状态已重置，请重新打开项目", "warn", 8000);
+      }
     },
 
     preflightBadgeClass(status) {
