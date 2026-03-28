@@ -2288,7 +2288,8 @@ grep -r "pattern" --include="*.py" --include="*.md" modules/ docs/
 收到此命令后，执行以下自动检测流程：
 
 ```
-步骤 1:   读取 VERSION 文件，获取当前版本号
+步骤 0:   零代码前置检查（§16）——DB migration / 环境变量 / 依赖 / 连通性 / 缓存
+步骤 1:   读取 VERSION 文件，获取当前版本号（§18：以 VERSION + 开发计划为准，禁止仅靠 git log）
 步骤 1.3: 规范版本检测——读取 docs/.upgrade-progress.json 中的 upgrade_version，
           与最新 SKILL-CHANGELOG 版本比对。过时则提示用户可执行增量升级
 步骤 2:   读取 TODO_NEXT.md，扫描任务完成状态
@@ -2332,7 +2333,7 @@ bash scripts/ci_verify.sh               # 整合脚本（阶段 5 构建后可�
 | ci_verify.sh | 退出码 0 | 脚本不存在时跳过 |
 
 Part A 全部通过 → 自动进入 Phase 4。
-Part A 失败 → 记录到 `docs/.gate-failures.json`（§12.3）→ 修复 → 重跑。
+Part A 失败 → 记录到 `docs/.gate-failures.json`（§12.3）→ **§13.2 系统化调试（D1-D4，禁止简单重试）** → 比对 `bug-catalog.md` 已知模式 → 修复 → 重跑。
 
 #### 12.2.2 Phase 4 ③ — Part B/C/D 门禁
 
@@ -2355,11 +2356,12 @@ Part A 失败 → 记录到 `docs/.gate-failures.json`（§12.3）→ 修复 →
 > **对抗性审计原则**：审计时从"找到至少 1 个违规点"的视角出发。如果结果为"0 违规"，额外输出最可能违规的 3 个点及其合规原因。
 > **自审标注**：如果 Phase 2 和 Phase 4 在同一 session 完成，标注为 `审计模式: 自审（同 session）`。
 
-**Part C：验收标准逐条核对**
+**Part C：验收标准逐条核对**（§14 铁律 #22：禁止模糊"基本完成"）
 
 1. 重新读取开发计划中的验收标准
-2. 逐条检查，标注：✅ 已满足 / ❌ 未满足 / ⚠️ 部分满足
+2. 逐条检查，标注：✅ 已满足（附证据）/ ❌ 未满足（附原因）/ ⚠️ 部分满足
 3. 存在 ❌ 必须先修复
+4. 技术方案降级检测（§14 铁律 #21）：逐条对比计划指定的算法/策略与实际实现
 
 **Part D：实施一致性检查**
 
@@ -2371,6 +2373,8 @@ Part A 失败 → 记录到 `docs/.gate-failures.json`（§12.3）→ 修复 →
 - ✅ 通过 — Part B/C/D 全部通过
 - ⚠️ 有条件通过 — 存在合理偏差
 - ❌ 未通过 — 任何一个 Part 存在未解决的 ❌
+
+**审计通过后 → §17 Phase 4→4.5 强制过渡输出**（禁止直接跳到 Phase 5）
 
 ### 12.3 门禁失败追踪（Gate Failure Tracking）
 
@@ -2578,8 +2582,10 @@ Phase 7 完成后自动判定是否继续下一个任务：
 → **自动进入下一功能项，不等待确认，不询问用户**
 
 **版本边界处理——大版本封板流程（当前版本所有任务完成时）：**
+→ **§15 版本边界强制检测**（必须读开发计划逐条确认，禁止凭记忆判断）
 → 先执行 §12.5 空闲循环（PRD Gap 扫描 → 全量测试 → 问题分类 → Bug 修复）
-→ 空闲循环完成后，执行大版本封板检查
+→ 空闲循环完成后，执行 Phase 8 版本交叉审计（禁止跳过）
+→ 审计通过后，执行大版本封板检查
 → 版本收尾（VERSION 更新、RELEASE_NOTES、CHANGELOG、TODO_NEXT.md）
 → git commit + git tag `vX.Y.0`
 → git push origin 当前分支 + git push origin --tags（仅推送到远程分支，**禁止自动创建 PR**）
