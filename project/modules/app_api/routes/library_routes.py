@@ -347,7 +347,14 @@ def create_library_blueprint(
                     _set_progress(job_id, 0)
                     return
                 name = Path(current_path).name if current_path else ""
-                _set_progress(job_id, int(done * 100 / max(total, 1)), f"已处理 {done}/{total} {name}")
+                pct = int(done * 100 / max(total, 1))
+                _set_progress(job_id, pct, f"已处理 {done}/{total} {name}")
+                jobs = _jobs()
+                if job_id in jobs and isinstance(jobs[job_id], dict):
+                    jobs[job_id]["ingest_meta"] = {
+                        "processed": done, "total": total,
+                        "current_file": name, "percent": round(pct, 1),
+                    }
 
             result = _library().ingest_local_path(
                 source_path,

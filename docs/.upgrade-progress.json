@@ -1,9 +1,9 @@
 {
-  "upgrade_version": "1.18",
+  "upgrade_version": "1.17",
   "project_name": "VideoEditor",
   "snapshot_commit": "8898b86bf9c303ce006d4a8645d95ebb16665cc8",
   "started_at": "2026-03-20T18:00:00+08:00",
-  "last_updated": "2026-03-28T10:30:00+08:00",
+  "last_updated": "2026-03-25T22:30:00+08:00",
   "current_stage": 7,
   "git_available": true,
   "project_scale": "L",
@@ -80,16 +80,24 @@
     },
     {
       "from": "1.5",
-      "to": "1.18",
-      "date": "2026-03-28",
+      "to": "1.7",
+      "date": "2026-03-23",
       "changes": [
-        "§13 质量工程方法论（TDD/系统化调试/代码审查/并行Agent/完成前验证/编辑历史）",
-        "§14 铁律#21禁止静默降级 + #22 Phase 4逐条验收",
-        "§15 版本边界强制检测（禁止凭记忆判断）",
-        "§16 零代码前置检查",
-        "§17 Phase 4→4.5 强制过渡输出",
-        "§18 版本号以VERSION文件为准",
-        "§19 CI Workflow自动生成 + Pre-commit Hook + BP-012安全中间件隔离"
+        "§12.0.5 全局任务连续性原则正式写入 dev-governance.md（7条铁律含Context压力交接）",
+        "§12.0.6 版本号一致性约束写入 dev-governance.md",
+        "plan-template.md 升级为19章强约束版（含写作前检查清单、Gap分析、技术可行性自检）",
+        "升级标记文件机制（docs/.upgrade-in-progress）用于Tier 1 hook绕过"
+      ]
+    },
+    {
+      "from": "1.7",
+      "to": "1.10",
+      "date": "2026-03-23",
+      "changes": [
+        "Part 7 quality methods (TDD/debugging/review/worktree/parallel/verification/archival)",
+        "gate-failures.json migrated to v1.10 schema {failures,history}",
+        "plan-audit + ui-spec skill references noted (v1.9)",
+        "bug-catalog known-patterns.md awareness (v1.10)"
       ]
     }
   ]

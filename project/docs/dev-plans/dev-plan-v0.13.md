@@ -1,9 +1,8 @@
 # VideoEditor v0.13.0 — 版本开发计划
 
-> **文档版本**: V2.5（规范合规修正：补入基线 Commit 字段；任务总览补"所属模块"列；完成追踪补"迭代次数"列；R12 涉及文件补 test_e2e_r8/r9/r10.py）
-> **日期**: 2026-03-27
+> **文档版本**: V2.4（用户工作流研究整合：R11 已知约束补入 timeline_create / marker_add 两个高价值缺口工具的 Phase 1 评估项，引用 davinci-mcp 案例研究文档）
+> **日期**: 2026-03-25
 > **基线版本**: v0.12.12
-> **基线 Commit**: aa46c69（feat(v0.12.12): R12 集成测试 + 最终审计 — v0.12.0 完成）
 > **核心主题**: MCP AI 原生层 · 时间线多轨编辑 · 向量基础设施升级 · 导出适配器 · 美颜 v2 · 语义词库正式入库
 
 ---
@@ -18,22 +17,22 @@
 
 ## 二、任务总览
 
-| 任务 | 名称 | 所属模块 | 对应版本 | 优先级 | 状态 |
-|------|------|---------|---------|--------|------|
-| R1 | 种子词库验证 + 入库确认 | library | v0.13.1 | P0 | 🟡 待验证 |
-| R2 | 退化行为显式通知（W-002） | workflow_engine / app_api | v0.13.2 | P0 | ⬜ Planned |
-| R3 | 素材入库自动触发视觉索引（W-010） | library / step1 | v0.13.3 | P1 | ⬜ Planned |
-| R4 | VectorIndex compact 自动触发（W-006） | library | v0.13.4 | P1 | ⬜ Planned |
-| R5 | recovery_hint 前端完整消费（W-003） | app_api / desktop UI | v0.13.5 | P1 | ⬜ Planned |
-| R6a | FAISS IndexIVFFlat 升级路径（W-007） | library | v0.13.6 | P1 | ⬜ Planned |
-| R6b | 向量索引增量 WAL 持久化（W-008） | library | v0.13.7 | P1 | ⬜ Planned |
-| R6c | CLIP 模型热插拔（W-009） | library | v0.13.8 | P1 | ⬜ Planned |
-| R7 | 可视化时间线编辑器 v1（W-001） | step6 / app_api / desktop UI | v0.13.9 | P1 | ⬜ Planned |
-| R8 | 剪映草稿导出适配器（W-012） | capabilities / app_api | v0.13.10 | P2 | ⬜ Planned |
-| R9 | FCPXML 导出适配器（W-013） | capabilities / app_api | v0.13.11 | P2 | ⬜ Planned |
-| R10 | 美颜与审美增强 v2（W-005） | step7 / app_api / desktop UI | v0.13.12 | P2 | ⬜ Planned |
-| R11 | MCP Server 模块（W-011） | mcp_server（新建） | v0.13.13 | P1 | ⬜ Planned |
-| R12 | 集成测试 + 最终审计 | tests / docs | v0.13.14 | P0 | ⬜ Planned |
+| 任务 | 名称 | 对应版本 | 优先级 | 状态 |
+|------|------|---------|--------|------|
+| R1 | 种子词库验证 + 入库确认 | v0.13.1 | P0 | 🟡 待验证 |
+| R2 | 退化行为显式通知（W-002） | v0.13.2 | P0 | ⬜ Planned |
+| R3 | 素材入库自动触发视觉索引（W-010） | v0.13.3 | P1 | ⬜ Planned |
+| R4 | VectorIndex compact 自动触发（W-006） | v0.13.4 | P1 | ⬜ Planned |
+| R5 | recovery_hint 前端完整消费（W-003） | v0.13.5 | P1 | ⬜ Planned |
+| R6a | FAISS IndexIVFFlat 升级路径（W-007） | v0.13.6 | P1 | ⬜ Planned |
+| R6b | 向量索引增量 WAL 持久化（W-008） | v0.13.7 | P1 | ⬜ Planned |
+| R6c | CLIP 模型热插拔（W-009） | v0.13.8 | P1 | ⬜ Planned |
+| R7 | 可视化时间线编辑器 v1（W-001） | v0.13.9 | P1 | ⬜ Planned |
+| R8 | 剪映草稿导出适配器（W-012） | v0.13.10 | P2 | ⬜ Planned |
+| R9 | FCPXML 导出适配器（W-013） | v0.13.11 | P2 | ⬜ Planned |
+| R10 | 美颜与审美增强 v2（W-005） | v0.13.12 | P2 | ⬜ Planned |
+| R11 | MCP Server 模块（W-011） | v0.13.13 | P1 | ⬜ Planned |
+| R12 | 集成测试 + 最终审计 | v0.13.14 | P0 | ⬜ Planned |
 
 ---
 
@@ -533,9 +532,6 @@
 | `tests/e2e/test_e2e_r5_recovery.py` | Create |
 | `tests/e2e/test_e2e_r6_vector.py` | Create |
 | `tests/e2e/test_e2e_r7_timeline.py` | Create |
-| `tests/e2e/test_e2e_r8_jianying.py` | Create |
-| `tests/e2e/test_e2e_r9_fcpxml.py` | Create |
-| `tests/e2e/test_e2e_r10_beauty.py` | Create |
 | `tests/e2e/test_e2e_r11_mcp.py` | Create |
 | `project/docs/test-reports/2026-xx-xx-v0.13-test-report.md` | Create |
 | `project/docs/audit/2026-xx-xx-v0.13-final-audit.md` | Create |
@@ -575,23 +571,23 @@
 
 ## 四、完成状态追踪
 
-| 任务 | 计划周期 | 实际完成 | 迭代次数 | 备注 |
-|------|---------|---------|---------|------|
-| R1 | 0.5 天 | — | — | 种子已预生成 |
-| R2 | 3 天 | — | — | |
-| R3 | 2 天 | — | — | |
-| R4 | 1 天 | — | — | |
-| R5 | 2 天 | — | — | |
-| R6a | 2 天 | — | — | |
-| R6b | 2 天 | — | — | |
-| R6c | 2 天 | — | — | |
-| R7 | 5 天 | — | — | 最复杂前端任务 |
-| R8 | 3 天 | — | — | |
-| R9 | 2 天 | — | — | |
-| R10 | 3 天 | — | — | 含制作 5 个 LUT |
-| R11 | 5 天 | — | — | 新建模块 |
-| R12 | 2 天 | — | — | |
-| **合计** | **~35 天** | — | — | |
+| 任务 | 计划周期 | 实际完成 | 备注 |
+|------|---------|---------|------|
+| R1 | 0.5 天 | — | 种子已预生成 |
+| R2 | 3 天 | — | |
+| R3 | 2 天 | — | |
+| R4 | 1 天 | — | |
+| R5 | 2 天 | — | |
+| R6a | 2 天 | — | |
+| R6b | 2 天 | — | |
+| R6c | 2 天 | — | |
+| R7 | 5 天 | — | 最复杂前端任务 |
+| R8 | 3 天 | — | |
+| R9 | 2 天 | — | |
+| R10 | 3 天 | — | 含制作 5 个 LUT |
+| R11 | 5 天 | — | 新建模块 |
+| R12 | 2 天 | — | |
+| **合计** | **~35 天** | — | |
 
 ---
 
@@ -619,4 +615,3 @@
 
 | V2.3 | 2026-03-25 | 二次审查修正：R7 已知约束从强制改为风险提示（去除与涉及文件/验收标准的自相矛盾）；R8/R9/R10 响应格式补 data 包装 + timestamp（对齐 §4.3）；R12 验收矩阵 R2 行"4类"改"3类+明确类型"；R2 已知约束补充覆盖范围边界说明 |
 | V2.4 | 2026-03-25 | 用户工作流研究整合：R11 已知约束补入 timeline_create / marker_add 两个高频缺口工具的 Phase 1 评估要求（来源：docs/research/user-workflow-case-study-davinci-mcp.md），标注对应后端端点尚不存在，须在扩充前新建 |
-| V2.5 | 2026-03-27 | 规范合规修正（对照 dev-governance.md §3.2）：C1 文件头补入基线 Commit 字段（aa46c69）；C2 任务总览表补所属模块列；C3 完成状态追踪表补迭代次数列；C4 R12 涉及文件补入 test_e2e_r8/r9/r10（修复验收矩阵与文件列表不一致） |

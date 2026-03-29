@@ -8,12 +8,18 @@
       ></div>
     </div>
 
+    <!-- 结构化进度信息 -->
+    <div v-if="lib.ingestLoading && meta.current_file" class="ingest-file-info">
+      <span class="current-file">正在处理：{{ meta.current_file }}</span>
+      <span class="file-count">（{{ meta.processed }}/{{ meta.total }}，{{ Math.round(meta.percent) }}%）</span>
+    </div>
+
     <!-- 状态文字 -->
     <div class="ingest-status">
-      <span v-if="lib.ingestLoading" class="ai-spinner">
+      <span v-if="lib.ingestLoading && !meta.current_file" class="ai-spinner">
         {{ labels.library.analyzing }}（{{ Math.round(lib.ingestProgress) }}%）
       </span>
-      <span v-else-if="lib.ingestMessage" :class="lib.ingestMessage.includes('失败') ? 'text-danger' : 'text-success'">
+      <span v-else-if="!lib.ingestLoading && lib.ingestMessage" :class="lib.ingestMessage.includes('失败') ? 'text-danger' : 'text-success'">
         {{ lib.ingestMessage }}
       </span>
     </div>
@@ -35,6 +41,8 @@ import LogViewer from '../common/LogViewer.vue'
 
 const lib = useLibraryStore()
 
+const meta = computed(() => lib.ingestMeta)
+
 const formattedLog = computed(() => {
   return lib.ingestLog.map(entry => {
     if (typeof entry === 'string') return entry
@@ -47,5 +55,15 @@ const formattedLog = computed(() => {
 <style scoped>
 .ingest-status {
   font-size: 13px;
+}
+.ingest-file-info {
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.current-file {
+  font-weight: 500;
+}
+.file-count {
+  color: var(--muted);
 }
 </style>

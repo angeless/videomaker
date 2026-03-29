@@ -39,10 +39,15 @@ export const useProjectStore = defineStore('project', () => {
 
   async function fetchStatus() {
     const data = await api.api('GET', '/api/status')
+    if (data.error) {
+      // Network or server failure — clear state, show fallback
+      _clearProjectState()
+      return
+    }
     if (data.ready) {
       applyState(data)
       loadProjectMeta()
-    } else if (_savedProjectDir && !projectDir.value) {
+    } else if (_savedProjectDir) {
       // 后端未返回项目但本地有缓存 → 尝试重新打开
       const reopen = await api.api('POST', '/api/open_project', { project_dir: _savedProjectDir })
       if (!reopen.error) {
@@ -50,9 +55,25 @@ export const useProjectStore = defineStore('project', () => {
         if (data2.ready) {
           applyState(data2)
           loadProjectMeta()
+          return
         }
       }
+      // Reopen failed — clear stale local cache
+      _clearProjectState()
+    } else {
+      _clearProjectState()
     }
+  }
+
+  function _clearProjectState() {
+    projectDir.value = ''
+    videosDir.value = ''
+    currentStep.value = 0
+    steps.value = []
+    config.value = {}
+    projectDisplayName.value = ''
+    projectMeta.value = {}
+    try { localStorage.removeItem('videoeditor_projectDir') } catch {}
   }
 
   function applyState(data) {
