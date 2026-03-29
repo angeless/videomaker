@@ -1,0 +1,172 @@
+{
+  "version": "v1",
+  "description": "语义系统接口示例，可直接给后端/客户端参考",
+  "examples": {
+    "create_custom_tag": {
+      "method": "POST",
+      "path": "/api/semantic/custom-tags",
+      "request": {
+        "user_id": 10001,
+        "custom_tag_name": "老家院子",
+        "normalized_name": "农村庭院",
+        "parent_system_tag": "庭院",
+        "category": "地点",
+        "aliases": [
+          "老院子",
+          "家里院子"
+        ],
+        "related_objects": [
+          "树",
+          "土墙",
+          "狗",
+          "玉米",
+          "拖拉机"
+        ],
+        "related_scenes": [
+          "农村生活",
+          "家庭活动"
+        ],
+        "trigger_texts": [
+          "老家",
+          "院子",
+          "回村"
+        ],
+        "negative_terms": [
+          "室内",
+          "城市公寓"
+        ],
+        "threshold": 0.72,
+        "auto_expand": true,
+        "review_mode": "manual"
+      },
+      "response": {
+        "custom_tag_id": 8801,
+        "status": "gray",
+        "message": "自定义标签已创建，当前为灰度启用状态"
+      }
+    },
+    "ingest_asset": {
+      "method": "POST",
+      "path": "/api/semantic/assets/analyze",
+      "request": {
+        "asset_uuid": "550e8400-e29b-41d4-a716-446655440000",
+        "asset_type": "video",
+        "file_name": "family_trip.mp4",
+        "duration_ms": 123450,
+        "shot_time": "2026-03-06 14:30:00",
+        "gps_lat": 30.2741,
+        "gps_lng": 120.1551,
+        "analysis_options": {
+          "enable_ocr": true,
+          "enable_asr": true,
+          "enable_scene_detection": true,
+          "enable_action_detection": true,
+          "enable_custom_tags": true
+        }
+      },
+      "response": {
+        "asset_id": 50123,
+        "status": "queued"
+      }
+    },
+    "upsert_evidence": {
+      "method": "POST",
+      "path": "/api/semantic/evidence/batch",
+      "request": {
+        "asset_id": 50123,
+        "segment_id": 90001,
+        "items": [
+          {
+            "source_kind": "vision_object",
+            "source_model": "detector_x",
+            "raw_value": "锅",
+            "base_score": 0.88
+          },
+          {
+            "source_kind": "vision_object",
+            "source_model": "detector_x",
+            "raw_value": "灶台",
+            "base_score": 0.83
+          },
+          {
+            "source_kind": "vision_action",
+            "source_model": "action_net",
+            "raw_value": "切菜",
+            "base_score": 0.76
+          },
+          {
+            "source_kind": "ocr",
+            "source_model": "ocr_v2",
+            "raw_text": "今日晚餐",
+            "base_score": 0.66
+          }
+        ]
+      }
+    },
+    "segment_result_example": {
+      "asset_id": 50123,
+      "segment_id": 90001,
+      "final_tags": [
+        {
+          "tag_name": "锅",
+          "final_score": 0.88,
+          "decision_reason": [
+            "vision_object"
+          ]
+        },
+        {
+          "tag_name": "灶台",
+          "final_score": 0.83,
+          "decision_reason": [
+            "vision_object"
+          ]
+        },
+        {
+          "tag_name": "切菜",
+          "final_score": 0.72,
+          "decision_reason": [
+            "vision_action"
+          ]
+        },
+        {
+          "tag_name": "厨房",
+          "final_score": 0.81,
+          "decision_reason": [
+            "cooccurrence: 锅+灶台+切菜"
+          ]
+        },
+        {
+          "tag_name": "做饭",
+          "final_score": 0.79,
+          "decision_reason": [
+            "composite_rule",
+            "ocr_hit: 今日晚餐"
+          ]
+        }
+      ]
+    },
+    "feedback_confirm": {
+      "method": "POST",
+      "path": "/api/semantic/feedback",
+      "request": {
+        "user_id": 10001,
+        "asset_id": 50123,
+        "segment_id": 90001,
+        "tag_name": "厨房",
+        "feedback_type": "confirm_correct",
+        "note": "这个片段就是在厨房做饭"
+      }
+    },
+    "learning_candidate_review": {
+      "method": "POST",
+      "path": "/api/semantic/learning-candidates/review",
+      "request": {
+        "candidate_text": "露营车尾箱咖啡角",
+        "suggested_action": "upgrade_to_new_tag",
+        "category": "场景",
+        "parent_tag": "露营",
+        "review_status": "approved"
+      }
+    }
+  }
+}

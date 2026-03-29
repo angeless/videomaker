@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "desktop-app",
-      "runtimeExecutable": "python3",
-      "runtimeArgs": ["apps/desktop/launcher.py"],
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [".claude/run-flask.sh"],
       "port": 9527
     },
     {
