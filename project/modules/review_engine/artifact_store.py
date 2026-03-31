@@ -33,10 +33,22 @@ class ArtifactStore:
         self._review_store = review_store
         self._artifacts_root = os.path.join(project_dir, "artifacts")
 
+    @staticmethod
+    def _validate_path_component(value: str, name: str) -> None:
+        """Reject path components containing traversal sequences."""
+        if os.sep in value or "/" in value or "\\" in value or ".." in value:
+            raise ValueError(f"Invalid {name}: path traversal detected")
+
     def _version_dir(self, session_id: str, version_number: int, node_name: str) -> str:
-        return os.path.join(
+        self._validate_path_component(session_id, "session_id")
+        self._validate_path_component(node_name, "node_name")
+        result = os.path.join(
             self._artifacts_root, session_id, f"v{version_number}", node_name,
         )
+        # Belt-and-suspenders: ensure result is under artifacts root
+        if not os.path.normpath(result).startswith(os.path.normpath(self._artifacts_root)):
+            raise ValueError("Artifact path escaped artifacts root")
+        return result
 
     @staticmethod
     def _file_checksum(file_path: str) -> str:
@@ -102,21 +114,17 @@ class ArtifactStore:
         checksum = self._file_checksum(source_path)
         artifact_id = str(uuid.uuid4())
 
-        # Record in DB — acquire ReviewStore's lock for thread safety
-        with self._review_store._lock:
-            conn = self._review_store._connect()
-            try:
-                conn.execute(
-                    """INSERT OR REPLACE INTO review_artifacts
-                       (artifact_id, session_id, version_number, node_name,
-                        artifact_type, file_path, file_size_bytes, checksum)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (artifact_id, session_id, version_number, node_name,
-                     artifact_type, dest_path, file_size, checksum),
-                )
-                conn.commit()
-            finally:
-                conn.close()
+        # Record in DB via ReviewStore's public locked API
+        def _insert(conn):
+            conn.execute(
+                """INSERT OR REPLACE INTO review_artifacts
+                   (artifact_id, session_id, version_number, node_name,
+                    artifact_type, file_path, file_size_bytes, checksum)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (artifact_id, session_id, version_number, node_name,
+                 artifact_type, dest_path, file_size, checksum),
+            )
+        self._review_store.execute_locked(_insert)
 
         logger.info(
             "Saved artifact %s: %s v%d/%s (%.1f KB)",
@@ -138,16 +146,13 @@ class ArtifactStore:
         Raises:
             ArtifactNotFoundError: If no artifact found for the given params.
         """
-        with self._review_store._lock:
-            conn = self._review_store._connect()
-            try:
-                row = conn.execute(
-                    """SELECT file_path FROM review_artifacts
-                       WHERE session_id = ? AND version_number = ? AND node_name = ?""",
-                    (session_id, version_number, node_name),
-                ).fetchone()
-            finally:
-                conn.close()
+        def _query(conn):
+            return conn.execute(
+                """SELECT file_path FROM review_artifacts
+                   WHERE session_id = ? AND version_number = ? AND node_name = ?""",
+                (session_id, version_number, node_name),
+            ).fetchone()
+        row = self._review_store.execute_locked(_query)
 
         if not row:
             raise ArtifactNotFoundError(
@@ -166,25 +171,22 @@ class ArtifactStore:
         version_number: Optional[int] = None,
     ) -> List[Dict]:
         """List artifacts for a session, optionally filtered by version."""
-        with self._review_store._lock:
-            conn = self._review_store._connect()
-            try:
-                if version_number is not None:
-                    rows = conn.execute(
-                        """SELECT * FROM review_artifacts
-                           WHERE session_id = ? AND version_number = ?
-                           ORDER BY node_name""",
-                        (session_id, version_number),
-                    ).fetchall()
-                else:
-                    rows = conn.execute(
-                        """SELECT * FROM review_artifacts
-                           WHERE session_id = ? ORDER BY version_number, node_name""",
-                        (session_id,),
-                    ).fetchall()
-                return [dict(r) for r in rows]
-            finally:
-                conn.close()
+        def _query(conn):
+            if version_number is not None:
+                rows = conn.execute(
+                    """SELECT * FROM review_artifacts
+                       WHERE session_id = ? AND version_number = ?
+                       ORDER BY node_name""",
+                    (session_id, version_number),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """SELECT * FROM review_artifacts
+                       WHERE session_id = ? ORDER BY version_number, node_name""",
+                    (session_id,),
+                ).fetchall()
+            return [dict(r) for r in rows]
+        return self._review_store.execute_locked(_query)
 
     def rollback_artifacts(
         self,
