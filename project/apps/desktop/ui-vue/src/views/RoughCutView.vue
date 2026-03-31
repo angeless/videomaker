@@ -56,29 +56,24 @@
 
     <!-- Main workspace -->
     <div v-else class="rc-workspace">
-      <!-- Left: Transcript editor (speech/mixed) -->
-      <div
-        v-if="store.videoType !== 'scenic'"
-        class="rc-panel rc-transcript-panel"
-      >
+      <!-- Mixed: both panels side by side -->
+      <template v-if="store.videoType === 'mixed'">
+        <div class="rc-panel rc-transcript-panel">
+          <TranscriptEditor />
+        </div>
+        <div class="rc-panel rc-scene-panel">
+          <SceneSelector />
+        </div>
+      </template>
+
+      <!-- Speech only: transcript full width -->
+      <div v-else-if="store.videoType === 'speech'" class="rc-panel-full">
         <TranscriptEditor />
       </div>
 
-      <!-- Right: Scene selector (scenic/mixed) -->
-      <div
-        v-if="store.videoType !== 'speech'"
-        class="rc-panel rc-scene-panel"
-      >
+      <!-- Scenic only: scenes full width -->
+      <div v-else-if="store.videoType === 'scenic'" class="rc-panel-full">
         <SceneSelector />
-      </div>
-
-      <!-- Full width for pure speech or pure scenic -->
-      <div
-        v-if="store.videoType === 'speech' || store.videoType === 'scenic'"
-        class="rc-panel-full"
-      >
-        <TranscriptEditor v-if="store.videoType === 'speech'" />
-        <SceneSelector v-if="store.videoType === 'scenic'" />
       </div>
     </div>
 

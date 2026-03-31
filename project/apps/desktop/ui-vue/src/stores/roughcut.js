@@ -186,6 +186,7 @@ export const useRoughcutStore = defineStore('roughcut', () => {
         method: 'POST',
         body: JSON.stringify({}),
       })
+      status.value = 'ready'
       return data
     } catch (e) {
       status.value = 'error'
