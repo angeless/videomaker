@@ -136,3 +136,15 @@
 - **描述**: Step 7 渲染完成后无"前往发布"跳转按钮，用户需要手动找到发布模块。建议在渲染完成后展示"立即发布"快捷入口
 - **优先级**: 中
 - **状态**: 待评估
+
+### W-021: review_engine _find_ffmpeg 去重
+- **来源**: v0.14.0 审计 (2026-03-31)
+- **描述**: `_find_ffmpeg()` 在 video_detector.py / render_pipeline.py / scene_segmenter.py 三处重复。提取为 `review_engine/_ffmpeg_utils.py` 内部工具函数
+- **优先级**: 低
+- **状态**: 待评估
+
+### W-022: roughcut_routes 异常捕获细化
+- **来源**: v0.14.0 审计 (2026-03-31)
+- **描述**: roughcut_routes.py L77 `except Exception` 过于宽泛，可能遮蔽非预期错误。细化为 `except (VideoDetectionError, FileNotFoundError, OSError)`
+- **优先级**: 低
+- **状态**: 待评估

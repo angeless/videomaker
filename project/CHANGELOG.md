@@ -4,6 +4,41 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/) 规范。
 
+## [0.14.0] - 2026-03-31
+
+### 新增 (Added)
+- 智能粗剪引擎 (review_engine 模块)
+  - R2: 视频类型检测 (VAD) — speech/scenic/mixed 三路分类
+  - R3: Whisper 词级转录 — faster-whisper/openai-whisper 双引擎
+  - R4: 说话人分离 — pyannote.audio 可选 + 单说话人 fallback
+  - R5: 语气词 + 静音检测 — 中英文语气词集 + dead air 标记
+  - R6-R8: 废话句/重复片段/false start 检测
+  - R14: FFmpeg 场景分割
+  - R17: 混合路径 (speech+B-roll) 分离合并
+  - R18: FFmpeg 粗剪渲染 — concat + loudnorm + retry
+- 评审数据层
+  - R23: ReviewStore — SQLite 持久化 (sessions/comments/versions)
+  - R24: 版本 CRUD + diff + 非破坏性 rollback
+  - R25: ArtifactStore — 原子写入 + 大文件 symlink (>50MB)
+- 粗剪 API (10 endpoints)
+  - R20: POST /api/roughcut/init + GET /detect-type + GET /stats
+  - R21: GET /transcript + GET /fillers + POST /fillers/batch + POST /transcript/edit
+  - R22: GET /scenes + POST /scenes/select + POST /generate
+- 评审 API (12 endpoints)
+  - R26: POST /api/review/init + GET /state + comments CRUD
+  - R27: versions list + diff + rollback
+  - R28: thumbnails + waveform stubs (202)
+- 前端粗剪 UI
+  - R9-R13: TranscriptEditor — 段落展示/标记高亮/点击跳转/编辑操作/Hook+统计
+  - R16: SceneSelector — 网格布局/选择/全选
+  - R19: roughcut.js Pinia store + RoughCutView 主视图
+  - /roughcut 路由注册
+- 125 个新测试 (75 unit + 23 API + 5 integration + 16 smoke)
+
+### 变更 (Changed)
+- server.py: 注册 review + roughcut blueprints
+- legacy_project_routes.py: 新增 choose_files_multiple 参数 + 多选文件对话框
+
 ## [0.13.1] - 2026-03-26
 
 ### 修复 (Fixed)
