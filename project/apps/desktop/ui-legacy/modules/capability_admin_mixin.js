@@ -248,9 +248,9 @@
 
       capabilityModeText(mode) {
         const m = `${mode || "hybrid"}`.trim().toLowerCase();
-        if (m === "inline") return "inline";
-        if (m === "project") return "project";
-        return "hybrid";
+        if (m === "inline") return "独立工具";
+        if (m === "project") return "需要项目";
+        return "通用";
       },
 
       capabilityModeClass(mode) {
@@ -286,8 +286,7 @@
         }
         const mode = this.capabilityModeText(entry && entry.mode ? entry.mode : "hybrid");
         if (!this.projectDir && mode === "project") {
-          this.capabilityMessage = `模块「${entry && entry.label ? entry.label : key}」需要先打开项目后使用`;
-          this.capabilityMessageType = "warn";
+          this.showToast(`「${entry && entry.label ? entry.label : key}」需要先打开项目才能使用`, "warn");
           return;
         }
         if (key === "text_rough") await this.loadTextRoughSource();

@@ -58,21 +58,26 @@
 ```
 11. docs/experience/common-errors.md               ← 已知错误模式（Phase 2 门禁自查）
 12. project/WISHLIST.md                            ← 衍生建议清单（Phase 7 写入）
+13. docs/experience/bug-catalog.md                 ← Bug 模式知识库（门禁失败时自动匹配）
 ```
 
 **按需读取（模式 C）：**
 
 | 当前阶段/涉及领域 | 必须读取 |
 |------------------|---------|
+| Phase 0 零代码前置检查 | §16 零代码前置检查（DB migration/环境变量/依赖/连通性） |
 | Phase 1 理解与计划 | 开发计划文档、约束文件（文件保护清单等） |
-| Phase 2 编码实现 | 仅本次任务涉及的规范章节 |
+| Phase 2 编码实现 | 仅本次任务涉及的规范章节 + §13.1 TDD 红绿重构 |
 | ↳ 涉及前端时 | `docs/VideoEditor-Design-System-v1.0.html` |
+| ↳ 门禁失败时 | §13.2 系统化调试（D1-D4）+ `bug-catalog.md` |
 | Phase 3 测试 | 实施计划中的测试策略 + 验收标准 |
-| Phase 4 审计 | Phase 2 中阅读的各技术规范章节 + 实施计划 + 验收标准 |
+| Phase 4 审计 | Phase 2 中阅读的各技术规范章节 + §14 铁律#21/#22 |
+| Phase 4 → 4.5 过渡 | §17 强制格式化确认输出（禁止跳过） |
 | Phase 4.5 子 Agent 验收 | 验收标准 + 变更文件列表 |
 | Phase 5 测试报告 | Phase 3 测试结果 + Phase 4 审计报告 |
-| Phase 6 收尾 | TODO_NEXT.md 格式规范 |
+| Phase 6 收尾 | TODO_NEXT.md + §13.5 完成前验证（5步） |
 | Phase 7 衍生建议 | 衍生建议与 Wishlist 管理规则 |
+| Phase 7 后 | §15 版本边界强制检测（禁止凭记忆判断） |
 
 > 路径迁移已完成（2026-03-20）。以上路径相对于项目根目录，开发代码在 `project/` 子目录中。
 

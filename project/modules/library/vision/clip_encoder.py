@@ -31,14 +31,21 @@ except ImportError:
 _log = logging.getLogger(__name__)
 
 
+    # R6c: known models and their dimensions
+_CLIP_MODEL_DIMS = {
+    "openai/clip-vit-base-patch32": 512,
+    "openai/clip-vit-large-patch14": 768,
+}
+
+
 class CLIPEncoder:
-    """Lazy-loading CLIP encoder for image and text embedding (512 dim).
+    """Lazy-loading CLIP encoder for image and text embedding.
 
     All methods return ``None`` when CLIP dependencies are unavailable,
     enabling graceful degradation to text-only search.
     """
 
-    DIMENSION = 512
+    DIMENSION = 512  # default; overridden by model_name
     DEFAULT_MODEL = "openai/clip-vit-base-patch32"
 
     def __init__(self, model_name: str | None = None):
@@ -46,6 +53,8 @@ class CLIPEncoder:
         self._model: Any = None
         self._processor: Any = None
         self._device: str = ""
+        self.dim = _CLIP_MODEL_DIMS.get(self._model_name, 512)
+        self.model_id = self._model_name
 
     # ------------------------------------------------------------------
     # public API

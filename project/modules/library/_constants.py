@@ -26,6 +26,10 @@ DEFAULT_FAISS_INDEX_DIR = "cache/faiss"  # relative to library_dir
 DEFAULT_FAISS_CLIP_INDEX_DIR = "cache/faiss_clip"  # CLIP visual embeddings
 DEFAULT_EMBEDDING_DIM = 1536
 DEFAULT_CLIP_DIM = 512
+FAISS_IVF_THRESHOLD = 10000   # R6a: switch to IndexIVFFlat above this count
+FAISS_IVF_NLIST = 100          # R6a: number of Voronoi cells for IVF
+VECTOR_WAL_FILENAME = "vector_wal.jsonl"  # R6b: WAL file name
+DEFAULT_CLIP_MODEL = "openai/clip-vit-base-patch32"  # R6c: default CLIP model
 
 # ── 25-category taxonomy ──
 TAG_CATEGORIES = (
@@ -238,10 +242,17 @@ _FIELD_TO_SLOT = {
     "perspective": "shot_type",
 }
 
-# Path to ChatGPT seed data (used once during first init)
-_SEED_DATA_DIR = Path(os.path.expanduser(
+# Path to seed data — bundled inside the project so it works in any environment.
+# Falls back to the legacy ~/Downloads path for backward compatibility.
+_SEED_DATA_DIR_BUNDLED = Path(__file__).resolve().parents[2] / "data" / "seeds"
+_SEED_DATA_DIR_LEGACY = Path(os.path.expanduser(
     "~/Downloads/语义数据库-chatgpt-20260306"
 ))
+_SEED_DATA_DIR = (
+    _SEED_DATA_DIR_BUNDLED
+    if (_SEED_DATA_DIR_BUNDLED / "semantic_keyword_library_flat.jsonl").exists()
+    else _SEED_DATA_DIR_LEGACY
+)
 
 # ── 62 semantic dimension fields ──
 SEMANTIC_DIMENSIONS = [

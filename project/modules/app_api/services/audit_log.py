@@ -46,6 +46,7 @@ def init_audit_log(db_path: Path | str) -> None:
         try:
             _conn = sqlite3.connect(str(db_path), check_same_thread=False)
             _conn.row_factory = sqlite3.Row
+            _conn.execute("PRAGMA foreign_keys = ON")
             _conn.executescript(_DDL)
         except Exception:
             logger.debug("[audit_log] init failed for %s", db_path, exc_info=True)

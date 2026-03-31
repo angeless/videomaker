@@ -492,7 +492,44 @@
         }
         this.contentPublishRun = data.run || null;
         const status = `${data.state || ""}`.trim();
-        this.capabilityMessage = `内容发布执行完成，状态：${status || "unknown"}`;
+
+        // R5: recovery_hint 消费
+        const hint = (data.run && data.run.recovery_hint) || null;
+        if (hint && hint.can_rerun) {
+          this.publishRecoveryHint = hint;
+          this.showPublishFailureModal = true;
+          this.capabilityMessage = `发布部分失败：${hint.rerun_scope || "unknown"}`;
+        } else {
+          this.publishRecoveryHint = null;
+          this.showPublishFailureModal = false;
+          this.capabilityMessage = `内容发布执行完成，状态：${status || "unknown"}`;
+        }
+      },
+
+      publishRecoveryActionLabel() {
+        const scope = (this.publishRecoveryHint && this.publishRecoveryHint.rerun_scope) || "none";
+        const labels = {
+          failed_only: "重新发布失败平台",
+          failed_and_blocked: "重新发布所有失败项",
+          fix_config_then_rerun: "前往设置修复配置",
+        };
+        return labels[scope] || "";
+      },
+
+      async handlePublishRecoveryAction() {
+        const scope = (this.publishRecoveryHint && this.publishRecoveryHint.rerun_scope) || "none";
+        this.showPublishFailureModal = false;
+        if (scope === "fix_config_then_rerun") {
+          this.capSubTab = "publish_settings";
+          return;
+        }
+        if (scope === "failed_only" || scope === "failed_and_blocked") {
+          await this.rerunContentPublishFailed();
+        }
+      },
+
+      dismissPublishFailureModal() {
+        this.showPublishFailureModal = false;
       },
 
       async rerunContentPublishFailed() {

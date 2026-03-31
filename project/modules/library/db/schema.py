@@ -521,8 +521,8 @@ class SchemaMixin:
 
     def _seed_tag_library_if_empty(self, conn: sqlite3.Connection):
         """Import ChatGPT seed data into tag tables on first run."""
-        count = conn.execute("SELECT count(*) FROM tag").fetchone()[0]
-        if count > 0:
+        seed_count = conn.execute("SELECT count(*) FROM tag WHERE source_type='seed'").fetchone()[0]
+        if seed_count > 0:
             return  # already seeded
 
         jsonl_path = _SEED_DATA_DIR / "semantic_keyword_library_flat.jsonl"
@@ -570,7 +570,7 @@ class SchemaMixin:
         ]
         for cat_name, cat_code, sort_order in all_categories:
             conn.execute(
-                "INSERT INTO tag_category (category_name, category_code, sort_order) VALUES (?, ?, ?)",
+                "INSERT OR IGNORE INTO tag_category (category_name, category_code, sort_order) VALUES (?, ?, ?)",
                 (cat_name, cat_code, sort_order),
             )
             cid = conn.execute(

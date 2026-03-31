@@ -450,7 +450,7 @@
         }
       },
 
-      /** S1: 渲染退化 Toast 通知 / S4: AI 退化通知 */
+      /** S1: 渲染退化 Toast 通知 / S4: AI 退化通知 / S5: 审计降级通知 */
       _showDegradationToasts() {
         // S1: render degradations (step 7)
         const step7 = this.stepInfo(7);
@@ -460,12 +460,39 @@
           const toastType = typeMap[d.severity] || "warn";
           this.showToast(`渲染退化: ${d.reason || d.feature || "未知"}`, toastType, 8000);
         }
-        // S4: AI degradation (steps 2, 3)
+        // S4: AI degradation (steps 2, 3) — structured format
         for (const n of [2, 3]) {
           const step = this.stepInfo(n);
           if (step && step.ai_degraded) {
-            this.showToast(step.ai_degraded_reason || "AI 生成已降级为模板模式", "warn", 8000);
+            const reason = step.ai_degraded_reason || "AI 生成已降级";
+            this.showToast(`[Step ${n}] 已降级：${reason}`, "warn", 8000);
           }
+        }
+        // S5: fetch recent degradation events from audit log
+        this._fetchDegradationAudit();
+      },
+
+      async _fetchDegradationAudit() {
+        try {
+          const data = await this.api("GET", "/api/system/audit?operation=degradation&limit=10");
+          if (!Array.isArray(data.entries)) return;
+          // Only show events from the last 60 seconds to avoid repeating old toasts
+          const cutoff = Date.now() - 60_000;
+          const shown = this._degradationShownIds || new Set();
+          for (const entry of data.entries) {
+            if (shown.has(entry.id)) continue;
+            const ts = entry.created_at ? new Date(entry.created_at + "Z").getTime() : 0;
+            if (ts < cutoff) continue;
+            shown.add(entry.id);
+            const d = entry.detail || {};
+            const module = entry.resource_type || "unknown";
+            const reason = d.reason || "降级";
+            const fallback = d.fallback_path ? ` → ${d.fallback_path}` : "";
+            this.showToast(`[${module}] 已降级：${reason}${fallback}`, "warn", 8000);
+          }
+          this._degradationShownIds = shown;
+        } catch {
+          // audit query failure is non-critical
         }
       },
 

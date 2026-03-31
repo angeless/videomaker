@@ -24,6 +24,29 @@ logger = logging.getLogger(__name__)
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# 退化事件审计 — 结构化记录所有降级行为（R2 W-002）
+# ═══════════════════════════════════════════════════════════════════════
+
+def _log_degradation(module: str, reason: str, fallback_path: str,
+                     severity: str = "warning") -> None:
+    """Write a structured degradation event to audit log. Best-effort, never raises."""
+    try:
+        from modules.app_api.services.audit_log import audit as _audit
+        _audit(
+            "degradation", module, None,
+            actor="workflow_engine",
+            status="degraded",
+            detail={
+                "reason": reason,
+                "fallback_path": fallback_path,
+                "severity": severity,
+            },
+        )
+    except Exception:
+        pass  # 审计不可用时不影响主流程
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # 原子写入工具 — write-to-temp + os.replace，防止崩溃导致文件损坏
 # ═══════════════════════════════════════════════════════════════════════
 
@@ -343,6 +366,7 @@ class WorkflowRunner:
             logger.info("语义索引完成: %d 个视频", count)
         except ImportError:
             logger.warning("CLIP 不可用（需 pip install torch transformers），跳过语义索引")
+            _log_degradation("step1_clip", "CLIP 不可用（需 torch + transformers）", "跳过语义索引")
 
     def _write_review_01(self, results: Dict):
         lines = [
@@ -428,6 +452,7 @@ class WorkflowRunner:
             extra["ai_degraded"] = True
             extra["ai_degraded_reason"] = ai_degraded_reason
             logger.warning("Step 2 AI 退化: %s", ai_degraded_reason)
+            _log_degradation("step2_topic", ai_degraded_reason, "素材驱动选题")
         self.state.set_step_status(
             2, "waiting_review",
             output=json.dumps({"topics": topics}, ensure_ascii=False),
@@ -766,6 +791,7 @@ target_duration: 60
             extra["ai_degraded"] = True
             extra["ai_degraded_reason"] = ai_degraded_reason
             logger.warning("Step 3 AI 退化: %s", ai_degraded_reason)
+            _log_degradation("step3_script", ai_degraded_reason, "模板脚本生成")
         self.state.set_step_status(
             3, "waiting_review",
             output="data/script_draft.json",

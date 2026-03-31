@@ -494,6 +494,128 @@ def create_library_blueprint(
             }
         )
 
+    @bp.route("/api/library/ingest/local/preview", methods=["POST"])
+    def api_library_ingest_local_preview():
+        """Vue 前端素材导入面板：预览本地视频目录（不启动入库任务）"""
+        data = request.json or {}
+        source_path = (data.get("path", "") or "").strip()
+        max_videos = parse_int_param(data.get("max_videos", 30), default=30, min_val=1, max_val=200)
+        if not source_path:
+            return jsonify({"error": "path 不能为空"}), 400
+        running = running_heavy_jobs_getter()
+        if running:
+            return jsonify({"error": "已有重任务运行中，请等待完成后再预览", "running_jobs": running}), 409
+        root = Path(source_path).expanduser().resolve()
+        if not root.exists():
+            return jsonify({"error": f"路径不存在: {root}"}), 400
+        videos = _library().discover_videos(root)
+        sample = []
+        for p in videos[:max_videos]:
+            try:
+                rel = str(p.relative_to(root))
+            except Exception:
+                rel = str(p)
+            sample.append(rel)
+        return jsonify({"ok": True, "sample_videos": sample, "total": len(videos), "path": str(root)})
+
+    @bp.route("/api/library/ingest/local/start", methods=["POST"])
+    def api_library_ingest_local_start():
+        """Vue 前端素材导入面板：启动本地视频入库任务"""
+        data = request.json or {}
+        source_path = (data.get("path", "") or "").strip()
+        max_videos = parse_int_param(data.get("max_videos", 600), default=600, min_val=1, max_val=5000)
+        if not source_path:
+            return jsonify({"error": "path 不能为空"}), 400
+        root = Path(source_path).expanduser().resolve()
+        if not root.exists():
+            return jsonify({"error": f"路径不存在: {root}"}), 400
+        job_id = str(uuid.uuid4())[:8]
+
+        def _do():
+            def _should_cancel():
+                return _cancel_requested(job_id)
+
+            def _progress(done, total, current_path):
+                if _should_cancel():
+                    raise _cancel_exc(_cancel_token())
+                if total > 0:
+                    name = Path(current_path).name if current_path else ""
+                    _set_progress(job_id, int(done * 100 / max(total, 1)), f"已处理 {done}/{total} {name}")
+
+            result = _library().ingest_local_path(
+                source_path, max_videos=max_videos,
+                progress_callback=_progress, should_cancel=_should_cancel,
+            )
+            if result.get("cancelled"):
+                raise _cancel_exc(_cancel_token(), {"ok": False, "cancelled": True, "result": result})
+            return {"ok": True, "result": result, "stats": _library().stats()}
+
+        run_in_bg(job_id, _do, kind="library_ingest_local")
+        from modules.app_api.services.audit_log import audit as _audit
+        _audit("ingest", "library", job_id, actor=f"local:{request.remote_addr}", detail={"source": source_path, "type": "video", "max_videos": max_videos})
+        return jsonify({"ok": True, "job_id": job_id, "mode": "async"})
+
+    @bp.route("/api/library/ingest/image/preview", methods=["POST"])
+    def api_library_ingest_image_preview():
+        """Vue 前端素材导入面板：预览本地图片目录（不启动入库任务）"""
+        data = request.json or {}
+        source_path = (data.get("path", "") or "").strip()
+        max_items = parse_int_param(data.get("max_items", 30), default=30, min_val=1, max_val=300)
+        if not source_path:
+            return jsonify({"error": "path 不能为空"}), 400
+        running = running_heavy_jobs_getter()
+        if running:
+            return jsonify({"error": "已有重任务运行中，请等待完成后再预览", "running_jobs": running}), 409
+        root = Path(source_path).expanduser().resolve()
+        if not root.exists():
+            return jsonify({"error": f"路径不存在: {root}"}), 400
+        images = _library().discover_images(root)
+        sample = []
+        for p in images[:max_items]:
+            try:
+                rel = str(p.relative_to(root))
+            except Exception:
+                rel = str(p)
+            sample.append(rel)
+        return jsonify({"ok": True, "sample_images": sample, "total": len(images), "path": str(root)})
+
+    @bp.route("/api/library/ingest/image/start", methods=["POST"])
+    def api_library_ingest_image_start():
+        """Vue 前端素材导入面板：启动本地图片入库任务"""
+        data = request.json or {}
+        source_path = (data.get("path", "") or "").strip()
+        max_images = parse_int_param(data.get("max_images", 1200), default=1200, min_val=1, max_val=8000)
+        if not source_path:
+            return jsonify({"error": "path 不能为空"}), 400
+        root = Path(source_path).expanduser().resolve()
+        if not root.exists():
+            return jsonify({"error": f"路径不存在: {root}"}), 400
+        job_id = str(uuid.uuid4())[:8]
+
+        def _do():
+            def _should_cancel():
+                return _cancel_requested(job_id)
+
+            def _progress(done, total, current_path):
+                if _should_cancel():
+                    raise _cancel_exc(_cancel_token())
+                if total > 0:
+                    name = Path(current_path).name if current_path else ""
+                    _set_progress(job_id, int(done * 100 / max(total, 1)), f"已处理 {done}/{total} {name}")
+
+            result = _library().ingest_local_images(
+                source_path, max_images=max_images,
+                progress_callback=_progress, should_cancel=_should_cancel,
+            )
+            if result.get("cancelled"):
+                raise _cancel_exc(_cancel_token(), {"ok": False, "cancelled": True, "result": result})
+            return {"ok": True, "result": result, "stats": _library().stats()}
+
+        run_in_bg(job_id, _do, kind="library_ingest_local_images")
+        from modules.app_api.services.audit_log import audit as _audit
+        _audit("ingest", "library", job_id, actor=f"local:{request.remote_addr}", detail={"source": source_path, "type": "image", "max_images": max_images})
+        return jsonify({"ok": True, "job_id": job_id, "mode": "async"})
+
     @bp.route("/api/library/ingest/gdrive", methods=["POST"])
     def api_library_ingest_gdrive():
         data = request.json or {}

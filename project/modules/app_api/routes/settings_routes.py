@@ -510,7 +510,70 @@ def create_settings_blueprint(
         gate.set_tier(Tier(tier_str))
         return jsonify({"ok": True, "tier": tier_str})
 
+    # ── R6c: CLIP model settings ──────────────────────────────────
+
+    @bp.route("/api/settings/clip-model", methods=["GET"])
+    def api_get_clip_model():
+        from modules.library._constants import DEFAULT_CLIP_MODEL, DEFAULT_CLIP_DIM
+        from modules.library.vision.clip_encoder import _CLIP_MODEL_DIMS
+        settings = _load_json_setting("clip_model")
+        model_id = settings.get("model_id", DEFAULT_CLIP_MODEL) if settings else DEFAULT_CLIP_MODEL
+        dim = _CLIP_MODEL_DIMS.get(model_id, DEFAULT_CLIP_DIM)
+        return jsonify({"model_id": model_id, "dim": dim, "available_models": list(_CLIP_MODEL_DIMS.keys())})
+
+    @bp.route("/api/settings/clip-model", methods=["POST"])
+    def api_set_clip_model():
+        from modules.library.vision.clip_encoder import _CLIP_MODEL_DIMS
+        data = request.json or {}
+        model_id = (data.get("model_id") or "").strip()
+        if model_id not in _CLIP_MODEL_DIMS:
+            return jsonify({"error": f"不支持的模型: {model_id}。可选: {list(_CLIP_MODEL_DIMS.keys())}"}), 400
+        _save_json_setting("clip_model", {"model_id": model_id})
+        return jsonify({"ok": True, "model_id": model_id, "dim": _CLIP_MODEL_DIMS[model_id],
+                        "warning": "切换模型后需重建视觉索引"})
+
     return bp
+
+
+import re as _re
+_SETTING_KEY_RE = _re.compile(r'[^a-zA-Z0-9_]')
+
+
+def _sanitize_setting_key(key: str) -> str:
+    return _SETTING_KEY_RE.sub('', key)
+
+
+def _load_json_setting(key: str):
+    """Load a JSON setting from the settings directory."""
+    import os
+    key = _sanitize_setting_key(key)
+    if not key:
+        return None
+    settings_dir = os.environ.get("VE_SETTINGS_DIR", "")
+    if not settings_dir:
+        return None
+    p = Path(settings_dir) / f"{key}.json"
+    if not p.exists():
+        return None
+    try:
+        import json as _json
+        return _json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _save_json_setting(key: str, value: dict):
+    """Save a JSON setting to the settings directory."""
+    import os, json as _json
+    key = _sanitize_setting_key(key)
+    if not key:
+        return
+    settings_dir = os.environ.get("VE_SETTINGS_DIR", "")
+    if not settings_dir:
+        return
+    d = Path(settings_dir)
+    d.mkdir(parents=True, exist_ok=True)
+    (d / f"{key}.json").write_text(_json.dumps(value, ensure_ascii=False), encoding="utf-8")
 
 
 def _resolve_google_client_id() -> str:

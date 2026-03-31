@@ -308,4 +308,146 @@ def create_timeline_blueprint(
 
         return jsonify({"ok": True})
 
+    # ── R7: Three-track timeline (video/subtitle/audio) ─────────
+
+    def _build_tracks(project_dir: Path) -> dict:
+        """Build three-track structure from script + config (delegates to shared builder)."""
+        from modules.exporters.track_builder import build_tracks_from_script
+        script = _read_script(project_dir) or {}
+        ws = workflow_state_getter()
+        config = ws.config if ws and hasattr(ws, "config") else {}
+        return build_tracks_from_script(script, config)
+
+    @bp.route("/api/timeline/tracks", methods=["GET"])
+    def api_timeline_tracks_get():
+        """Return three-track timeline (video/subtitle/audio)."""
+        project_dir = project_dir_getter()
+        if project_dir is None:
+            return jsonify({"error": "no project"}), 400
+        tracks = _build_tracks(project_dir)
+        return jsonify({"ok": True, "tracks": tracks})
+
+    @bp.route("/api/timeline/tracks", methods=["PUT"])
+    def api_timeline_tracks_put():
+        """Save three-track timeline back to script file."""
+        project_dir = project_dir_getter()
+        if project_dir is None:
+            return jsonify({"error": "no project"}), 400
+
+        body = request.get_json(silent=True) or {}
+        tracks = body.get("tracks")
+        if not isinstance(tracks, dict):
+            return jsonify({"error": "tracks must be an object with video/subtitle/audio"}), 400
+
+        script_path = project_dir / "data" / "script_matched.json"
+        if not script_path.exists():
+            return jsonify({"error": "script_matched.json not found"}), 404
+
+        try:
+            script = json.loads(script_path.read_text(encoding="utf-8"))
+        except Exception as e:
+            return jsonify({"error": f"failed to read script: {e}"}), 500
+
+        MAX_MS = 86400000  # 24 hours
+
+        def _clamp_ms(val: Any) -> int:
+            try:
+                v = int(val or 0)
+            except (ValueError, TypeError):
+                v = 0
+            return max(0, min(v, MAX_MS))
+
+        # Update clips from video track (duration + order by start_ms)
+        video_items = tracks.get("video", [])
+        if isinstance(video_items, list):
+            clips = script.get("clips", [])
+            clip_by_vid = {}
+            for c in clips:
+                if isinstance(c, dict):
+                    clip_by_vid[str(c.get("video_id", ""))] = c
+            for item in video_items:
+                if not isinstance(item, dict):
+                    continue
+                uid = str(item.get("uid", ""))
+                if uid in clip_by_vid:
+                    start_ms = _clamp_ms(item.get("start_ms"))
+                    end_ms = _clamp_ms(item.get("end_ms"))
+                    if end_ms <= start_ms:
+                        continue
+                    dur_s = (end_ms - start_ms) / 1000.0
+                    clip_by_vid[uid]["duration"] = round(dur_s, 3)
+            # Persist clip order: sort by start_ms from frontend, reassign clip_index
+            sorted_uids = [str(it.get("uid", "")) for it in sorted(
+                [v for v in video_items if isinstance(v, dict)],
+                key=lambda v: _clamp_ms(v.get("start_ms"))
+            )]
+            reordered = []
+            for new_idx, uid in enumerate(sorted_uids, start=1):
+                if uid in clip_by_vid:
+                    clip = clip_by_vid[uid]
+                    clip["clip_index"] = new_idx
+                    reordered.append(clip)
+            # Append any clips not in the video track (shouldn't happen, but defensive)
+            seen = {str(c.get("video_id", "")) for c in reordered}
+            for c in clips:
+                if isinstance(c, dict) and str(c.get("video_id", "")) not in seen:
+                    reordered.append(c)
+            script["clips"] = reordered
+
+        # Update subtitles
+        sub_items = tracks.get("subtitle", [])
+        if isinstance(sub_items, list):
+            new_subs = []
+            for item in sub_items:
+                if not isinstance(item, dict):
+                    continue
+                start_ms = _clamp_ms(item.get("start_ms"))
+                end_ms = _clamp_ms(item.get("end_ms"))
+                if end_ms <= start_ms:
+                    continue
+                new_subs.append({
+                    "cn_text": str(item.get("text", "")),
+                    "en_text": "",
+                    "start_time": round(start_ms / 1000.0, 3),
+                    "end_time": round(end_ms / 1000.0, 3),
+                })
+            script["subtitles"] = new_subs
+
+        # Persist audio track edits to workflow config
+        audio_save_warning = ""
+        audio_items = tracks.get("audio", [])
+        if isinstance(audio_items, list):
+            ws = workflow_state_getter()
+            if ws and hasattr(ws, "data") and isinstance(ws.data.get("config"), dict):
+                for item in audio_items:
+                    if not isinstance(item, dict):
+                        continue
+                    label = str(item.get("label", "")).strip().lower()
+                    s = _clamp_ms(item.get("start_ms"))
+                    e = _clamp_ms(item.get("end_ms"))
+                    if e <= s:
+                        continue
+                    if label == "bgm":
+                        ws.data["config"]["bgm_trim_start_ms"] = s
+                        ws.data["config"]["bgm_trim_end_ms"] = e
+                        if "volume" in item:
+                            try:
+                                vol = float(item["volume"])
+                                ws.data["config"]["bgm_volume"] = round(max(0.0, min(vol, 2.0)), 2)
+                            except (ValueError, TypeError):
+                                pass
+                    elif label == "narration":
+                        ws.data["config"]["narration_trim_start_ms"] = s
+                        ws.data["config"]["narration_trim_end_ms"] = e
+                try:
+                    ws.save()
+                except Exception:
+                    audio_save_warning = "音频配置保存失败，其他轨道已保存"
+
+        script_path.write_text(json.dumps(script, ensure_ascii=False, indent=2), encoding="utf-8")
+        resp = {"ok": True}
+        if audio_save_warning:
+            resp["audio_save_warning"] = audio_save_warning
+        return jsonify(resp)
+
     return bp

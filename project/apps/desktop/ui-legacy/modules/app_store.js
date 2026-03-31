@@ -207,7 +207,15 @@
     // ── 帧预览（Step 5）────────────────────────────────────────
     frames: [],
 
+    // ── 三轨时间线（R7）────────────────────────────────────────
+    timelineTracks: { video: [], subtitle: [], audio: [] },
+    timelineView: "multi",  // "multi" | "legacy"
+    timelineDragIdx: -1,
+    timelineDragTrack: "",
+    timelineSubtitleLink: "contained",  // "contained" | "overlap" | "none"
+
     // ── 粗剪视频（Step 6）──────────────────────────────────────
+    beautyPreview: { show: false, original: null, result: null, processing_ms: 0 },
     roughUrl:   "",
     renderOpts: {
       width: 1080, height: 1920, fps: 30, crf: 18, preset: "medium",
@@ -221,6 +229,8 @@
       rough_merge_gap_s: 0.15,
       rough_remove_phrases: "嗯,啊,然后,就是,那个",
       skin_smooth_strength: 0.4,
+      beauty_lut: '',
+      beauty_region_graded: true,
       bgm_path: "", bgm_volume: 0.35, narration_path: "",
       subtitle_font: "PingFangSC-Regular", subtitle_size: 56,
     },
@@ -445,6 +455,8 @@
     contentPublishSession: null,
     contentPublishPlan: null,
     contentPublishRun: null,
+    publishRecoveryHint: null,
+    showPublishFailureModal: false,
     workflowCatalog: [],
     workflowList: [],
     workflowRuns: [],

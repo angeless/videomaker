@@ -64,6 +64,7 @@ logger = logging.getLogger(__name__)
 class CoreMixin:
     """Core library methods: analysis, search, ingestion, thumbnails."""
 
+    @staticmethod
     def _is_video_file(path: Path) -> bool:
         return path.suffix.lower() in VIDEO_EXTENSIONS
 
@@ -2611,7 +2612,16 @@ class CoreMixin:
 
         if creation_time and "T" in creation_time:
             try:
-                hour = int(str(creation_time).split("T", 1)[1][:2])
+                s = str(creation_time)
+                # Only use hour-based classification when the timestamp has NO timezone info,
+                # meaning it was already stored as local time (e.g. exiftool output, image mtime).
+                # UTC timestamps (ending with Z or +00:00) cannot be reliably converted to
+                # shooting-location local time, so return "unknown" to avoid misclassification
+                # (e.g. iPhone video shot at 10am China time stored as 02:00Z → "night" is wrong).
+                has_tz = s.endswith("Z") or "+" in s[10:] or s.endswith("+00:00")
+                if has_tz:
+                    return "unknown"
+                hour = int(s.split("T", 1)[1][:2])
                 if 5 <= hour < 11:
                     return "morning"
                 if 11 <= hour < 16:
@@ -4982,6 +4992,61 @@ class CoreMixin:
         return result
 
     # ------------------------------------------------------------------
+    # Auto visual index after ingest (R3 W-010)
+
+    def _auto_visual_index(self, assets: list) -> bool:
+        """Trigger CLIP visual indexing for newly ingested assets in a background thread.
+
+        Returns True if indexing was triggered, False if CLIP unavailable or no assets.
+        Call ``_cancel_visual_index()`` to stop a running background indexing job.
+        """
+        if not assets:
+            return False
+        if not hasattr(self, "_clip_encoder") or self._clip_encoder is None:
+            try:
+                from modules.workflow_engine.workflow import _log_degradation
+                _log_degradation("auto_visual_index", "CLIP 不可用（需 torch + transformers）", "跳过自动视觉索引")
+            except Exception:
+                pass
+            return False
+
+        uid_path_pairs = []
+        for a in assets:
+            uid = a.get("uid", "")
+            path = a.get("path") or a.get("primary_path", "")
+            if uid and path and Path(path).exists():
+                uid_path_pairs.append((uid, path))
+        if not uid_path_pairs:
+            return False
+
+        import threading
+
+        # Cancel any previous running index job
+        self._cancel_visual_index()
+        stop_event = threading.Event()
+        self._visual_index_stop = stop_event
+
+        def _index_worker():
+            for uid, path in uid_path_pairs:
+                if stop_event.is_set():
+                    _gml_logger.info("auto visual index cancelled (%d remaining)", len(uid_path_pairs))
+                    break
+                try:
+                    self.index_asset_visual(uid, path)
+                except Exception:
+                    _gml_logger.warning("auto visual index failed for %s", uid, exc_info=True)
+
+        t = threading.Thread(target=_index_worker, daemon=True, name="auto_visual_index")
+        t.start()
+        return True
+
+    def _cancel_visual_index(self) -> None:
+        """Signal the background visual index thread to stop."""
+        stop = getattr(self, "_visual_index_stop", None)
+        if stop is not None:
+            stop.set()
+
+    # ------------------------------------------------------------------
     # Public ingest APIs
 
     def ingest_local_path(self, source_path: str, max_videos: int = 600, progress_callback=None, should_cancel=None) -> Dict:
@@ -5011,6 +5076,7 @@ class CoreMixin:
         result["total_candidates"] = total_candidates
         result["max_videos"] = max_videos
         result["truncated"] = total_candidates > len(selected)
+        result["visual_index_triggered"] = self._auto_visual_index(result.get("assets", []))
         return result
 
     def ingest_local_images(self, source_path: str, max_images: int = 1200, progress_callback=None, should_cancel=None) -> Dict:
@@ -5040,6 +5106,7 @@ class CoreMixin:
         result["total_candidates"] = total_candidates
         result["max_images"] = max_images
         result["truncated"] = total_candidates > len(selected)
+        result["visual_index_triggered"] = self._auto_visual_index(result.get("assets", []))
         return result
 
     # GDrive methods → GDriveMixin (integrations/gdrive.py)    # ------------------------------------------------------------------

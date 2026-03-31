@@ -384,12 +384,32 @@ def create_legacy_project_blueprint(
     def api_open_in_finder():
         data = request.json or {}
         path = data.get("path", "")
-        if path and Path(path).exists():
-            p = Path(path)
-            if p.is_file():
-                subprocess.run(["open", "-R", str(p)], timeout=5, check=False)
-            else:
-                subprocess.run(["open", str(p)], timeout=5, check=False)
+        if not path:
+            return jsonify({"ok": False, "error": "path 不能为空"})
+        p = Path(path).resolve()
+        # ── 安全校验：只允许打开项目目录或素材库目录下的路径 ──
+        proj_dir = project_dir_getter()
+        allowed_roots = []
+        if proj_dir:
+            allowed_roots.append(Path(str(proj_dir)).resolve())
+        lib = library_getter()
+        if lib and hasattr(lib, "db_path") and lib.db_path:
+            allowed_roots.append(Path(lib.db_path).resolve().parent)
+        # 也允许打开 videos_dir（用户素材目录）
+        state = state_dict()
+        videos_dir = state.get("videos_dir") or state.get("project_dir")
+        if videos_dir:
+            allowed_roots.append(Path(str(videos_dir)).resolve())
+        if not allowed_roots or not any(
+            str(p).startswith(str(root)) for root in allowed_roots
+        ):
+            return jsonify({"ok": False, "error": "路径不在允许范围内"}), 403
+        if not p.exists():
+            return jsonify({"ok": False, "error": "路径不存在"}), 404
+        if p.is_file():
+            subprocess.run(["open", "-R", str(p)], timeout=5, check=False)
+        else:
+            subprocess.run(["open", str(p)], timeout=5, check=False)
         return jsonify({"ok": True})
 
     @bp.route("/api/dialog/folder", methods=["POST"])

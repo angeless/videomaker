@@ -245,6 +245,183 @@ class AdvancedBeautyFilter:
         return output_path
 
 
+
+# ---------------------------------------------------------------------------
+# R10 v2 additions: regional smoothing, skin color protection, LUT presets
+# ---------------------------------------------------------------------------
+
+LUT_PRESETS = ["outdoor_natural", "indoor_warm", "food", "night", "travel"]
+_LUT_DIR = Path(__file__).parent / "luts"
+
+
+def load_cube_lut(name: str) -> Optional["np.ndarray"]:
+    """Load a .cube LUT file and return a (size, size, size, 3) float64 array."""
+    if not HAS_CV2:
+        return None
+    cube_path = _LUT_DIR / f"{name}.cube"
+    if not cube_path.exists():
+        logger.warning("LUT file not found: %s", cube_path)
+        return None
+
+    entries = []
+    lut_size = 0
+    with open(cube_path) as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith("LUT_3D_SIZE"):
+                lut_size = int(line.split()[-1])
+            elif line and not line.startswith(("#", "TITLE", "DOMAIN")):
+                parts = line.split()
+                if len(parts) == 3:
+                    entries.append([float(x) for x in parts])
+
+    if lut_size == 0 or len(entries) != lut_size ** 3:
+        logger.warning("Invalid LUT: %s (size=%d, entries=%d)", name, lut_size, len(entries))
+        return None
+
+    return np.array(entries, dtype=np.float64).reshape(lut_size, lut_size, lut_size, 3)
+
+
+def apply_scene_lut(image: "np.ndarray", lut_name: str) -> "np.ndarray":
+    """Apply a 3D LUT to an image using trilinear interpolation."""
+    if not HAS_CV2:
+        return image
+    lut = load_cube_lut(lut_name)
+    if lut is None:
+        return image
+
+    size = lut.shape[0]
+    img_f = image.astype(np.float64) / 255.0
+    coords = img_f * (size - 1)
+    lo = np.floor(coords).astype(np.int32)
+    lo = np.clip(lo, 0, size - 2)
+    hi = lo + 1
+    frac = coords - lo
+
+    r, g, b = lo[..., 2], lo[..., 1], lo[..., 0]
+    r1, g1, b1 = hi[..., 2], hi[..., 1], hi[..., 0]
+    fr, fg, fb = frac[..., 2], frac[..., 1], frac[..., 0]
+
+    c000 = lut[b, g, r]
+    c001 = lut[b, g, r1]
+    c010 = lut[b, g1, r]
+    c011 = lut[b, g1, r1]
+    c100 = lut[b1, g, r]
+    c101 = lut[b1, g, r1]
+    c110 = lut[b1, g1, r]
+    c111 = lut[b1, g1, r1]
+
+    fr3 = fr[..., np.newaxis]
+    fg3 = fg[..., np.newaxis]
+    fb3 = fb[..., np.newaxis]
+
+    c00 = c000 * (1 - fr3) + c001 * fr3
+    c01 = c010 * (1 - fr3) + c011 * fr3
+    c10 = c100 * (1 - fr3) + c101 * fr3
+    c11 = c110 * (1 - fr3) + c111 * fr3
+
+    c0 = c00 * (1 - fg3) + c01 * fg3
+    c1 = c10 * (1 - fg3) + c11 * fg3
+
+    result = c0 * (1 - fb3) + c1 * fb3
+    return np.clip(result * 255, 0, 255).astype(np.uint8)
+
+
+def skin_color_protect(original: "np.ndarray", processed: "np.ndarray", threshold: float = 0.05) -> "np.ndarray":
+    """Protect skin color: blend back original where HSV-S shift exceeds threshold."""
+    if not HAS_CV2:
+        return processed
+    orig_hsv = cv2.cvtColor(original, cv2.COLOR_BGR2HSV).astype(np.float32)
+    proc_hsv = cv2.cvtColor(processed, cv2.COLOR_BGR2HSV).astype(np.float32)
+
+    s_diff = np.abs(proc_hsv[..., 1] - orig_hsv[..., 1]) / 255.0
+    over_mask = (s_diff > threshold).astype(np.float32)
+    over_mask = cv2.GaussianBlur(over_mask, (15, 15), 5)
+
+    result = processed.astype(np.float32)
+    orig_f = original.astype(np.float32)
+    for ch in range(3):
+        result[..., ch] = result[..., ch] * (1 - over_mask) + orig_f[..., ch] * over_mask
+    return np.clip(result, 0, 255).astype(np.uint8)
+
+
+def apply_regional_smooth(
+    image: "np.ndarray",
+    face_regions: List[Tuple[int, int, int, int]],
+    smooth_level: float = 0.8,
+    region_graded: bool = True,
+) -> "np.ndarray":
+    """Graded smoothing: forehead 0.8x, cheeks 1.0x, chin 0.6x."""
+    if not HAS_CV2:
+        return image
+
+    result = image.copy()
+    for (x, y, w, h) in face_regions:
+        if w <= 0 or h <= 0:
+            continue
+
+        if region_graded:
+            third = h // 3
+            zones = [
+                ((x, y, w, third), 0.8),
+                ((x, y + third, w, third), 1.0),
+                ((x, y + 2 * third, w, h - 2 * third), 0.6),
+            ]
+        else:
+            zones = [((x, y, w, h), 1.0)]
+
+        for (zx, zy, zw, zh), factor in zones:
+            if zw <= 0 or zh <= 0:
+                continue
+            roi = image[zy:zy + zh, zx:zx + zw]
+            strength = smooth_level * factor
+            bf_zone = AdvancedBeautyFilter(smooth_strength=strength, pore_reduction=strength * 0.7)
+            low, high = bf_zone.frequency_separation(roi)
+            smooth_low = bf_zone.smooth_low_frequency(low, strength)
+            reduced_high = bf_zone.reduce_pores(high, strength * 0.7)
+            processed = cv2.addWeighted(smooth_low, 1.0, reduced_high, 1.0, -128)
+            processed = np.clip(processed, 0, 255).astype(np.uint8)
+            # Feathered blending for zone boundaries
+            mask = np.ones((zh, zw), dtype=np.float32)
+            border = min(8, zh // 4, zw // 4)
+            if border > 0:
+                mask[:border, :] *= np.linspace(0, 1, border)[:, np.newaxis]
+                mask[-border:, :] *= np.linspace(1, 0, border)[:, np.newaxis]
+            for ch in range(3):
+                result[zy:zy + zh, zx:zx + zw, ch] = (
+                    processed[..., ch] * mask + result[zy:zy + zh, zx:zx + zw, ch] * (1 - mask)
+                ).astype(np.uint8)
+    return result
+
+
+def apply_beauty_v2(
+    image: "np.ndarray",
+    smooth_level: float = 0.8,
+    region_graded: bool = True,
+    lut_name: Optional[str] = None,
+    degradations: Optional[List] = None,
+) -> "np.ndarray":
+    """Full v2 beauty pipeline: regional smooth -> skin protect -> LUT -> acne heal."""
+    if not HAS_CV2:
+        return image
+
+    bf = AdvancedBeautyFilter(smooth_strength=smooth_level)
+    face_regions = bf.detect_face_regions(image, degradations=degradations)
+
+    smoothed = apply_regional_smooth(image, face_regions, smooth_level, region_graded)
+    protected = skin_color_protect(image, smoothed, threshold=0.05)
+
+    if lut_name and lut_name in LUT_PRESETS:
+        protected = apply_scene_lut(protected, lut_name)
+
+    if face_regions:
+        region = max(face_regions, key=lambda r: r[2] * r[3])
+        acne_mask = bf.detect_acne_areas(protected, region)
+        protected = bf.heal_acne_areas(protected, acne_mask)
+
+    return protected
+
+
 def apply_beauty_filter_simple(image: "np.ndarray", strength: float = 0.7) -> "np.ndarray":
     """
     简易磨皮（不需要 mediapipe，直接对全图做频率分解）
