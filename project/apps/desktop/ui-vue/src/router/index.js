@@ -68,6 +68,12 @@ const routes = [
       },
     ],
   },
+  // ── 智能粗剪 (v0.14.0) ──
+  {
+    path: '/roughcut',
+    name: 'roughcut',
+    component: () => import('../views/RoughCutView.vue'),
+  },
   // ── 工作流管理 ──
   {
     path: '/workflows',

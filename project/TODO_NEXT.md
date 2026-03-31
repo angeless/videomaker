@@ -3,7 +3,7 @@
 > 更新于 2026-03-31
 
 ## 当前版本：v0.13.1
-## 当前状态：v0.14.0 开发中
+## 当前状态：v0.14.0 开发完成，待审计
 
 ## 三版本规划
 
@@ -27,17 +27,17 @@
 | R6 | 废话句检测 (LLM) | P1 | ✅ Done |
 | R7 | Bad take — 重复片段 | P0 | ✅ Done |
 | R8 | Bad take — false starts | P1 | ✅ Done |
-| R9 | TranscriptEditor — 段落展示 | P0 | Planned |
-| R10 | TranscriptEditor — 标记展示 | P0 | Planned |
-| R11 | TranscriptEditor — 点击跳转 | P0 | Planned |
-| R12 | TranscriptEditor — 编辑操作 | P0 | Planned |
-| R13 | TranscriptEditor — Hook+统计 | P0 | Planned |
+| R9 | TranscriptEditor — 段落展示 | P0 | ✅ Done |
+| R10 | TranscriptEditor — 标记展示 | P0 | ✅ Done |
+| R11 | TranscriptEditor — 点击跳转 | P0 | ✅ Done |
+| R12 | TranscriptEditor — 编辑操作 | P0 | ✅ Done |
+| R13 | TranscriptEditor — Hook+统计 | P0 | ✅ Done |
 | R14 | 场景分割 (FFmpeg) | P1 | ✅ Done |
 | R15 | VLM 镜头分析 | P2 | Deferred |
-| R16 | SceneSelector UI | P1 | Planned |
+| R16 | SceneSelector UI | P1 | ✅ Done |
 | R17 | 混合路径逻辑 | P1 | ✅ Done |
 | R18 | 粗剪渲染引擎 | P0 | ✅ Done |
-| R19 | roughcut.js Store + View | P0 | Planned |
+| R19 | roughcut.js Store + View | P0 | ✅ Done |
 | R20 | 粗剪 API — init/detect/stats | P0 | ✅ Done |
 | R21 | 粗剪 API — transcript/fillers | P0 | ✅ Done |
 | R22 | 粗剪 API — scenes/generate | P1 | ✅ Done |
@@ -47,20 +47,19 @@
 | R26 | 评审 API — init/state/comments | P0 | ✅ Done |
 | R27 | 评审 API — versions/diff/rollback | P0 | ✅ Done |
 | R28 | 评审 API — thumbnails/waveform stub | P1 | ✅ Done |
-| R29 | 集成测试 + 冒烟测试 | P0 | Planned |
+| R29 | 集成测试 + 冒烟测试 | P0 | ✅ Done |
 
 ## 测试状态
 
-- 104 tests passing (75 unit + 13 review API + 10 roughcut API + 6 artifact)
-- 测试覆盖: video_detector, transcript_editor, speaker_diarizer, filler_detector, bad_take_detector, scene_segmenter, mixed_editor, render_pipeline, review_store, artifact_store, review_routes, roughcut_routes
+- **125 tests passing** (75 unit + 10 roughcut API + 13 review API + 6 artifact + 5 integration + 16 smoke)
+- 测试覆盖: video_detector, transcript_editor, speaker_diarizer, filler_detector, bad_take_detector, scene_segmenter, mixed_editor, render_pipeline, review_store, artifact_store, review_routes, roughcut_routes, integration flow, smoke imports
 
 ## 下一步
 
-1. R9-R13: TranscriptEditor Vue UI 组件
-2. R16: SceneSelector Vue UI
-3. R19: roughcut.js Store + RoughCutView.vue
-4. R29: 集成测试 + 冒烟测试
-5. 版本收尾: Phase 4 审计 + Phase 5 测试报告
+1. Phase 4 审计 — 对照 coding-standards / architecture / testing-strategy
+2. Phase 5 测试报告
+3. Phase 6 收尾 — 版本号更新 + CHANGELOG
+4. 进入 v0.15.0 开发
 
 ## 已完成的文件清单
 
@@ -83,9 +82,25 @@
 - `review_routes.py` — R26-R28: 评审 API
 - `roughcut_routes.py` — R20-R22: 粗剪 API
 
+### 前端 (apps/desktop/ui-vue/src/)
+- `stores/roughcut.js` — R19: Pinia store
+- `views/RoughCutView.vue` — R19: 主视图
+- `components/roughcut/TranscriptEditor.vue` — R9-R13: 转录编辑器
+- `components/roughcut/TranscriptParagraph.vue` — R9-R10: 段落组件
+- `components/roughcut/SceneSelector.vue` — R16: 场景选择器
+- `router/index.js` — 路由注册 /roughcut
+
 ### 适配器 (modules/adapters/)
 - `pexels_adapter.py` — stub, deferred to v0.16.0
 - `tts_adapter.py` — stub, deferred to v0.16.0
+
+### 测试
+- `tests/unit/review_engine/` — 75 unit tests (10 files)
+- `tests/api/test_review_api.py` — 13 API tests
+- `tests/api/test_roughcut_api.py` — 10 API tests
+- `tests/unit/review_engine/test_artifact_store.py` — 6 tests
+- `tests/integration/test_roughcut_flow.py` — 5 integration tests
+- `tests/smoke/test_smoke_review.py` — 16 smoke tests
 
 ## 注意事项
 
@@ -95,3 +110,4 @@
 - 外部 API (Pexels/TTS) 走 adapters/ 层
 - loudnorm 必须加 `-ar 44100`
 - 大文件 (>50MB) artifact 使用 symlink
+- _error_response 格式: {success, error, message, code, timestamp, trace_id}
