@@ -55,6 +55,8 @@ from modules.app_api.routes.system_routes import create_system_blueprint
 from modules.app_api.routes.timeline_routes import create_timeline_blueprint
 from modules.app_api.routes.ui_routes import create_ui_blueprint
 from modules.app_api.routes.workflow_routes import create_workflow_blueprint
+from modules.app_api.routes.review_routes import create_review_blueprint
+from modules.app_api.routes.roughcut_routes import create_roughcut_blueprint
 from modules.workflow_engine.workflow import WorkflowState, WorkflowRunner
 from modules.library.global_media_library import GlobalMediaLibrary
 from modules.step2_topic_planning.ai_client import AIClient
@@ -209,6 +211,7 @@ app.register_blueprint(
             job_id, fn, *args, kind=kind, job_meta=job_meta, **kwargs
         ),
         choose_path=lambda mode: _choose_path(mode),
+        choose_files_multiple=lambda file_types=(): _choose_files_multiple(file_types),
     )
 )
 app.register_blueprint(
@@ -466,6 +469,29 @@ app.register_blueprint(
         normalize_agent_template_id=lambda value: _normalize_agent_template_id(value),
     )
 )
+# ── Review & Roughcut API (v0.14.0) ──
+_review_store = None
+
+def _get_review_store():
+    global _review_store
+    if _review_store is None:
+        from modules.review_engine.review_store import ReviewStore
+        db_path = str((_project_dir or Path("/tmp")) / "data" / "review.db")
+        _review_store = ReviewStore(db_path)
+    return _review_store
+
+app.register_blueprint(
+    create_review_blueprint(
+        review_store_getter=_get_review_store,
+        artifact_store_getter=lambda: None,
+    )
+)
+app.register_blueprint(
+    create_roughcut_blueprint(
+        review_store_getter=_get_review_store,
+    )
+)
+
 app.register_blueprint(
     create_ui_blueprint(
         app_ui_dir_getter=lambda: APP_UI_DIR,
@@ -1603,6 +1629,61 @@ def _choose_path_via_osascript(mode: str) -> Dict:
     if not out:
         return {"path": None, "cancelled": True, "error": ""}
     return {"path": out, "cancelled": False, "error": ""}
+
+def _choose_files_multiple(file_types: tuple = ()) -> Dict:
+    """多选文件对话框。返回 {"paths": [...], "cancelled": bool, "error": str}"""
+    # 方法 1：pywebview
+    if _window is not None:
+        try:
+            import webview
+            dialog_type = getattr(webview, "OPEN_DIALOG", None) or getattr(webview.FileDialog, "OPEN", None)
+            result = _window.create_file_dialog(
+                dialog_type=dialog_type,
+                allow_multiple=True,
+                file_types=file_types if file_types else (),
+            )
+            if result:
+                return {"paths": list(result), "cancelled": False, "error": ""}
+            return {"paths": [], "cancelled": True, "error": ""}
+        except Exception:
+            pass
+
+    # 方法 2：osascript 多选
+    if sys.platform == "darwin":
+        # AppleScript 多选文件，支持类型过滤
+        ext_filter = ""
+        if file_types:
+            # file_types 格式如 ("Video Files (*.mp4;*.mov)",) — 提取扩展名
+            import re
+            all_exts = re.findall(r'\*\.(\w+)', ';'.join(file_types))
+            if all_exts:
+                quoted = ', '.join(f'"{e}"' for e in all_exts)
+                ext_filter = f' of type {{{quoted}}}'
+
+        script = f'set f to (choose file with prompt "选择视频文件（可多选）" with multiple selections allowed{ext_filter})\n'
+        script += 'set output to ""\n'
+        script += 'repeat with p in f\n'
+        script += '  set output to output & POSIX path of p & linefeed\n'
+        script += 'end repeat\n'
+        script += 'return output'
+
+        try:
+            proc = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True, text=True, timeout=120,
+            )
+            if proc.returncode != 0:
+                err = (proc.stderr or "").strip()
+                if "-128" in err or "User canceled" in err:
+                    return {"paths": [], "cancelled": True, "error": ""}
+                return {"paths": [], "cancelled": False, "error": err}
+            lines = [l.strip() for l in (proc.stdout or "").strip().split("\n") if l.strip()]
+            return {"paths": lines, "cancelled": len(lines) == 0, "error": ""}
+        except Exception as exc:
+            return {"paths": [], "cancelled": False, "error": str(exc)}
+
+    return {"paths": [], "cancelled": False, "error": "当前系统不支持多选文件对话框"}
+
 
 def _choose_path(mode: str) -> Dict:
     if mode not in {"folder", "file"}:
