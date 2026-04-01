@@ -74,6 +74,12 @@ const routes = [
     name: 'roughcut',
     component: () => import('../views/RoughCutView.vue'),
   },
+  // ── 评审模式 (v0.15.0) ──
+  {
+    path: '/review',
+    name: 'review',
+    component: () => import('../views/ReviewView.vue'),
+  },
   // ── 工作流管理 ──
   {
     path: '/workflows',

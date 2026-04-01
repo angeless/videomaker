@@ -145,18 +145,22 @@ class TestReviewVersions:
         assert resp.status_code == 404
 
 
-# ── R28: thumbnails + waveform stubs ──
+# ── R28: thumbnails + waveform (v0.15.0 upgraded from stubs) ──
 
-class TestReviewStubs:
-    def test_review_api_thumbnails_stub(self, client, session_id):
-        resp = client.post(f"/api/review/{session_id}/thumbnails")
-        assert resp.status_code == 202
-        data = resp.get_json()
-        assert data["status"] == "done"
-        assert "job_id" in data
+class TestReviewThumbnails:
+    def test_review_api_thumbnails_session_not_found(self, client):
+        resp = client.post("/api/review/nonexistent/thumbnails")
+        assert resp.status_code == 404
+        assert resp.get_json()["error"] == "SESSION_NOT_FOUND"
 
-    def test_review_api_waveform_stub(self, client, session_id):
-        resp = client.post(f"/api/review/{session_id}/waveform")
-        assert resp.status_code == 202
-        data = resp.get_json()
-        assert data["status"] == "done"
+    @pytest.mark.parametrize("endpoint", ["/thumbnails", "/waveform"])
+    def test_review_api_media_endpoints_require_session(self, client, endpoint):
+        resp = client.post(f"/api/review/nonexistent{endpoint}")
+        assert resp.status_code == 404
+
+
+class TestReviewWaveform:
+    def test_review_api_waveform_session_not_found(self, client):
+        resp = client.post("/api/review/nonexistent/waveform")
+        assert resp.status_code == 404
+        assert resp.get_json()["error"] == "SESSION_NOT_FOUND"

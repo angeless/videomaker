@@ -4,6 +4,42 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/) 规范。
 
+## [0.15.0] - 2026-04-01
+
+### 新增 (Added)
+- 核心评审 UI (14 Vue 组件)
+  - R1: ReviewPlayer — HTML5 视频播放器 + 缩放/平移/全屏
+  - R2-R4: PlayerControls — 进度条、SMPTE 时间码、速度/音量/IO 控制
+  - R5: CommentInput — 评审类型选择器 (7 类) + 文本输入 + 时间范围
+  - R6: CommentCard — 单条评审显示 (类型徽章/时间码/状态)
+  - R7: CommentPanel — 评审侧边栏 (筛选/排序/计数)
+  - R8: TrackComments — 时间轴评审标记 + tooltip
+  - R9: ReviewTimeline — 时间尺/轨道容器/缩放控制
+  - R12-R15: DrawingOverlay — Canvas 标注 (画笔/箭头/矩形/椭圆)
+  - R13: AnnotationToolbar — 工具/颜色/线宽选择
+  - R17: ThumbnailStrip — 精灵图时间轴缩略图
+  - R19: WaveformTrack — Canvas 音频波形可视化
+  - R20: SubtitleEditor — 时间轴字幕块
+  - R21: SafeZoneOverlay — 宽高比安全区参考线
+  - R22: VersionSwitcher — 版本导航 + 下拉列表
+- 评审基础设施
+  - R10: useKeyboardShortcuts — 模式感知键盘快捷键 (40+ 绑定)
+  - R11: review.js Pinia store — 完整评审状态管理
+  - ReviewView.vue — 主评审页面布局 (3 面板)
+  - /review 路由注册
+- 后端生成器 (FFmpeg)
+  - R16: thumbnail_generator.py — 精灵图缩略图生成
+  - R18: waveform_generator.py — 音频峰值提取
+  - 升级 review_routes.py 中的 thumbnails/waveform 端点 (stub → 实际实现)
+
+### 变更 (Changed)
+- review API thumbnails/waveform 端点从 stub (202) 升级为真实 FFmpeg 处理 (200/500)
+
+### 测试 (Tests)
+- 新增 13 个测试 (thumbnail_generator 6 + waveform_generator 7)
+- 更新 4 个测试适配非 stub 行为
+- 全量回归: 1184 passed, 0 failed
+
 ## [0.14.0] - 2026-03-31
 
 ### 新增 (Added)

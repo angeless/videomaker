@@ -132,8 +132,8 @@ class TestRoughcutToReviewFlow:
         assert resp.status_code == 200
         assert len(resp.get_json()["versions"]) == 0
 
-    def test_thumbnail_and_waveform_stubs(self, client):
-        """Stub endpoints return 202 with job_id."""
+    def test_thumbnail_and_waveform_nonexistent_video(self, client):
+        """Thumbnail/waveform endpoints return 500 for nonexistent video files."""
 
         resp = client.post("/api/roughcut/init", json={
             "project_path": "/tmp/proj",
@@ -141,15 +141,15 @@ class TestRoughcutToReviewFlow:
         })
         session_id = resp.get_json()["session_id"]
 
-        # Thumbnails stub
+        # Thumbnails — video doesn't exist → 500
         resp = client.post(f"/api/review/{session_id}/thumbnails")
-        assert resp.status_code == 202
-        assert resp.get_json()["status"] == "done"
+        assert resp.status_code == 500
+        assert resp.get_json()["error"] == "THUMBNAIL_FAILED"
 
-        # Waveform stub
+        # Waveform — video doesn't exist → 500
         resp = client.post(f"/api/review/{session_id}/waveform")
-        assert resp.status_code == 202
-        assert resp.get_json()["status"] == "done"
+        assert resp.status_code == 500
+        assert resp.get_json()["error"] == "WAVEFORM_FAILED"
 
     def test_cross_api_session_shared(self, client):
         """Session created via roughcut is accessible via review API."""

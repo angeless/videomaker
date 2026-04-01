@@ -169,7 +169,7 @@ def create_review_blueprint(
             return _error_response(str(e), "ROLLBACK_FAILED", 404)
         return _ok({"new_version": new_version})
 
-    # ── R28: Thumbnails + Waveform (stubs) ──
+    # ── R28: Thumbnails + Waveform ──
 
     @bp.route("/api/review/<session_id>/thumbnails", methods=["POST"])
     def review_generate_thumbnails(session_id):
@@ -178,9 +178,21 @@ def create_review_blueprint(
         if not session:
             return _error_response("Session not found", "SESSION_NOT_FOUND", 404)
 
-        # Stub: immediately mark as done (actual generation in v0.15.0)
-        job_id = uuid.uuid4().hex[:12]
-        return _ok({"job_id": job_id, "status": "done"}, 202)
+        video_path = session.get("video_path")
+        if not video_path:
+            return _error_response("No video path in session", "MISSING_VIDEO", 400)
+
+        try:
+            from modules.review_engine.thumbnail_generator import generate_thumbnails
+            import os
+            output_dir = os.path.join(
+                session.get("project_path", "/tmp"),
+                "data", "review", session_id, "thumbnails",
+            )
+            result = generate_thumbnails(video_path, output_dir)
+            return _ok({"thumbnails": result})
+        except ReviewEngineError as e:
+            return _error_response(str(e), "THUMBNAIL_FAILED", 500)
 
     @bp.route("/api/review/<session_id>/waveform", methods=["POST"])
     def review_generate_waveform(session_id):
@@ -189,8 +201,20 @@ def create_review_blueprint(
         if not session:
             return _error_response("Session not found", "SESSION_NOT_FOUND", 404)
 
-        # Stub: immediately mark as done (actual generation in v0.15.0)
-        job_id = uuid.uuid4().hex[:12]
-        return _ok({"job_id": job_id, "status": "done"}, 202)
+        video_path = session.get("video_path")
+        if not video_path:
+            return _error_response("No video path in session", "MISSING_VIDEO", 400)
+
+        try:
+            from modules.review_engine.waveform_generator import generate_waveform
+            import os
+            output_dir = os.path.join(
+                session.get("project_path", "/tmp"),
+                "data", "review", session_id, "waveform",
+            )
+            result = generate_waveform(video_path, output_dir)
+            return _ok({"waveform": result})
+        except ReviewEngineError as e:
+            return _error_response(str(e), "WAVEFORM_FAILED", 500)
 
     return bp
