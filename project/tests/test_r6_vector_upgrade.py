@@ -9,12 +9,21 @@ import time
 from pathlib import Path
 from unittest.mock import patch
 
+import subprocess
+import sys
+
 import numpy as np
 import pytest
 
 from modules.library.semantic.vector_index import VectorIndex
 
 DIM = 8
+
+try:
+    import faiss  # noqa: F401
+    _HAS_FAISS = True
+except ImportError:
+    _HAS_FAISS = False
 
 
 def _random_vec(dim: int = DIM) -> list:
@@ -34,8 +43,6 @@ def tmp_dir():
 
 
 import platform
-import subprocess
-import sys
 
 # IVFFlat segfaults on some FAISS builds (notably Homebrew macOS).
 # Run a subprocess probe to avoid crashing the test runner.
@@ -63,6 +70,7 @@ class TestIVFUpgrade:
         if idx._use_faiss and idx._faiss_index is not None:
             assert type(idx._faiss_index).__name__ == "IndexFlatIP"
 
+    @pytest.mark.skipif(not _HAS_FAISS, reason="faiss not installed")
     def test_ivf_subprocess_validation(self):
         """Validate IVFFlat works in a clean subprocess (avoids torch+FAISS OMP conflict)."""
         code = (
