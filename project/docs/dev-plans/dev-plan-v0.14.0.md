@@ -38,35 +38,35 @@
 
 | 任务ID | 任务名称 | 优先级 | 状态 |
 |--------|---------|--------|------|
-| R1 | review_engine 模块脚手架 | P0 | Planned |
-| R2 | 视频类型检测 (VAD) | P0 | Planned |
-| R3 | Whisper 词级转录集成 | P0 | Planned |
-| R4 | 说话人分离 (diarization) | P1 | Planned |
-| R5 | 语气词 + 静音检测 (规则标记) | P0 | Planned |
-| R6 | 废话句检测 (LLM 标记) | P1 | Planned |
-| R7 | Bad take 检测 — 重复片段 | P0 | Planned |
-| R8 | Bad take 检测 — false starts | P1 | Planned |
-| R9 | TranscriptEditor.vue — 段落展示 + 说话人标签 | P0 | Planned |
-| R10 | TranscriptEditor.vue — 标记展示 (颜色删除线) | P0 | Planned |
-| R11 | TranscriptEditor.vue — 点击跳转 + 播放跟随滚动 | P0 | Planned |
-| R12 | TranscriptEditor.vue — 编辑操作 (删除/恢复/拖拽排序) | P0 | Planned |
-| R13 | TranscriptEditor.vue — Hook 标记 + 统计栏 + 全部接受 | P0 | Planned |
-| R14 | 场景分割 (FFmpeg scene detection) | P1 | Planned |
-| R15 | VLM 镜头分析 (可选) | P2 | Planned |
-| R16 | SceneSelector.vue — 网格展示 + 筛选/排序 | P1 | Planned |
-| R17 | 混合路径逻辑 (VAD 分离 + 合并) | P1 | Planned |
-| R18 | 粗剪渲染引擎 (FFmpeg concat) | P0 | Planned |
-| R19 | roughcut.js Store + RoughCutView.vue 页面 | P0 | Planned |
-| R20 | 粗剪 API — init + detect-type + stats | P0 | Planned |
-| R21 | 粗剪 API — transcript + fillers + batch | P0 | Planned |
-| R22 | 粗剪 API — scenes + select + generate | P1 | Planned |
-| R23 | review_sessions + review_comments 表 CRUD | P0 | Planned |
-| R24 | review_versions 表 CRUD | P0 | Planned |
-| R25 | review_artifacts 表 + 文件管理 | P0 | Planned |
-| R26 | 评审 API — init + state + comments CRUD | P0 | Planned |
-| R27 | 评审 API — versions + diff + rollback | P0 | Planned |
-| R28 | 评审 API — thumbnails + waveform (生成 stub) | P1 | Planned |
-| R29 | 集成测试 + 冒烟测试 | P0 | Planned |
+| R1 | review_engine 模块脚手架 | P0 | ✅ Complete |
+| R2 | 视频类型检测 (VAD) | P0 | ✅ Complete |
+| R3 | Whisper 词级转录集成 | P0 | ✅ Complete |
+| R4 | 说话人分离 (diarization) | P1 | ✅ Complete |
+| R5 | 语气词 + 静音检测 (规则标记) | P0 | ✅ Complete |
+| R6 | 废话句检测 (LLM 标记) | P1 | ✅ Complete |
+| R7 | Bad take 检测 — 重复片段 | P0 | ✅ Complete |
+| R8 | Bad take 检测 — false starts | P1 | ✅ Complete |
+| R9 | TranscriptEditor.vue — 段落展示 + 说话人标签 | P0 | ✅ Complete |
+| R10 | TranscriptEditor.vue — 标记展示 (颜色删除线) | P0 | ✅ Complete |
+| R11 | TranscriptEditor.vue — 点击跳转 + 播放跟随滚动 | P0 | ✅ Complete |
+| R12 | TranscriptEditor.vue — 编辑操作 (删除/恢复/拖拽排序) | P0 | ✅ Complete |
+| R13 | TranscriptEditor.vue — Hook 标记 + 统计栏 + 全部接受 | P0 | ✅ Complete |
+| R14 | 场景分割 (FFmpeg scene detection) | P1 | ✅ Complete |
+| R15 | VLM 镜头分析 (可选) | P2 | Deferred (v0.15.0) |
+| R16 | SceneSelector.vue — 网格展示 + 筛选/排序 | P1 | ✅ Complete |
+| R17 | 混合路径逻辑 (VAD 分离 + 合并) | P1 | ✅ Complete |
+| R18 | 粗剪渲染引擎 (FFmpeg concat) | P0 | ✅ Complete |
+| R19 | roughcut.js Store + RoughCutView.vue 页面 | P0 | ✅ Complete |
+| R20 | 粗剪 API — init + detect-type + stats | P0 | ✅ Complete |
+| R21 | 粗剪 API — transcript + fillers + batch | P0 | ✅ Complete |
+| R22 | 粗剪 API — scenes + select + generate | P1 | ✅ Complete |
+| R23 | review_sessions + review_comments 表 CRUD | P0 | ✅ Complete |
+| R24 | review_versions 表 CRUD | P0 | ✅ Complete |
+| R25 | review_artifacts 表 + 文件管理 | P0 | ✅ Complete |
+| R26 | 评审 API — init + state + comments CRUD | P0 | ✅ Complete |
+| R27 | 评审 API — versions + diff + rollback | P0 | ✅ Complete |
+| R28 | 评审 API — thumbnails + waveform (生成 stub) | P1 | ✅ Complete |
+| R29 | 集成测试 + 冒烟测试 | P0 | ✅ Complete |
 
 ---
 
@@ -733,13 +733,13 @@
 
 | 任务 | 计划周期 | 实际完成 | 迭代 | 备注 |
 |------|---------|---------|------|------|
-| R1-R8 | 2.5 天 | — | 0 | 后端逻辑 |
-| R9-R13 | 2 天 | — | 0 | 编辑器 UI |
-| R14-R17 | 1.5 天 | — | 0 | 情景+混合 |
-| R18-R22 | 2 天 | — | 0 | 渲染+API |
-| R23-R28 | 2 天 | — | 0 | 数据层 |
-| R29 | 1 天 | — | 0 | 测试 |
-| **总计** | **11 天** | | | |
+| R1-R8 | 2.5 天 | 2026-03-31 | 1 | ✅ 后端逻辑 — 全部完成 |
+| R9-R13 | 2 天 | 2026-03-31 | 1 | ✅ 编辑器 UI — 全部完成 |
+| R14-R17 | 1.5 天 | 2026-03-31 | 1 | ✅ 情景+混合 — R15 VLM 推迟 |
+| R18-R22 | 2 天 | 2026-03-31 | 1 | ✅ 渲染+API — 全部完成 |
+| R23-R28 | 2 天 | 2026-03-31 | 1 | ✅ 数据层 — 全部完成 |
+| R29 | 1 天 | 2026-03-31 | 1 | ✅ 测试 — 125 tests passed |
+| **总计** | **11 天** | **2026-03-31** | **1** | **28/29 完成 (R15 Deferred)** |
 
 ## 6. 决策和假设
 

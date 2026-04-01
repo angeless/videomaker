@@ -45,6 +45,12 @@ class FillerMark:
     filler_type: str  # "filler_word" | "dead_air" | "filler_sentence"
     text: str
     auto_marked: bool = True
+    word_indices: List[int] = field(default_factory=list)
+
+    def __post_init__(self):
+        # Ensure word_indices always contains at least the primary word_idx
+        if not self.word_indices and self.word_idx >= 0:
+            self.word_indices = [self.word_idx]
 
 
 @dataclass

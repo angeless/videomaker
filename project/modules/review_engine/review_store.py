@@ -98,6 +98,21 @@ class ReviewStore:
         conn.row_factory = sqlite3.Row
         return conn
 
+    def execute_locked(self, callback):
+        """Execute a callback with a locked DB connection.
+
+        The callback receives a sqlite3.Connection and must NOT close it.
+        Commit/close are handled here.
+        """
+        with self._lock:
+            conn = self._connect()
+            try:
+                result = callback(conn)
+                conn.commit()
+                return result
+            finally:
+                conn.close()
+
     # ── Sessions ──
 
     def create_session(

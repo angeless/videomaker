@@ -94,6 +94,37 @@ class TestRollback:
         assert os.path.isfile(path2)
 
 
+class TestPathTraversal:
+    """Test path traversal prevention in _version_dir."""
+
+    def test_session_id_with_dotdot_raises(self, setup):
+        s = setup
+        with pytest.raises(ValueError, match="path traversal"):
+            s["store"].save("../../etc", 1, "node", "video", s["source_file"])
+
+    def test_session_id_with_slash_raises(self, setup):
+        s = setup
+        with pytest.raises(ValueError, match="path traversal"):
+            s["store"].save("foo/bar", 1, "node", "video", s["source_file"])
+
+    def test_node_name_with_backslash_raises(self, setup):
+        s = setup
+        with pytest.raises(ValueError, match="path traversal"):
+            s["store"].save(s["session_id"], 1, "..\\etc", "video", s["source_file"])
+
+    def test_node_name_with_dotdot_raises(self, setup):
+        s = setup
+        with pytest.raises(ValueError, match="path traversal"):
+            s["store"].save(s["session_id"], 1, "../secrets", "video", s["source_file"])
+
+    def test_valid_ids_pass(self, setup):
+        s = setup
+        aid = s["store"].save(
+            s["session_id"], 1, "transcode", "video", s["source_file"],
+        )
+        assert aid  # Should succeed with valid UUID + simple node name
+
+
 class TestLargeFileSymlink:
     """Test symlink behavior for large files."""
 

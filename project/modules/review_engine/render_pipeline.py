@@ -5,6 +5,7 @@ FFmpeg's concat demuxer. Handles HEVC transcoding, loudnorm, and
 audio sync.
 """
 
+import json
 import logging
 import os
 import shutil
@@ -209,7 +210,7 @@ def _get_duration(video_path: str, ffmpeg_bin: str) -> float:
     cmd = [ffprobe, "-v", "quiet", "-print_format", "json", "-show_format", video_path]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        data = __import__("json").loads(result.stdout)
+        data = json.loads(result.stdout)
         return float(data["format"]["duration"])
     except Exception as e:
         logger.warning("Failed to get duration for %s: %s", video_path, e)

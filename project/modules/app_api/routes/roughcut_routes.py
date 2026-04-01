@@ -232,10 +232,14 @@ def create_roughcut_blueprint(
             for p in doc.paragraphs:
                 for fm in (p.filler_marks or []):
                     if not filler_types or fm.filler_type in filler_types:
-                        # Mark words as deleted
-                        for wi in fm.word_indices:
-                            if wi < len(p.words):
-                                updated += 1
+                        fm.auto_marked = False
+                        updated += 1
+        elif action == "keep":
+            for p in doc.paragraphs:
+                for fm in (p.filler_marks or []):
+                    if not filler_types or fm.filler_type in filler_types:
+                        fm.auto_marked = True
+                        updated += 1
 
         return _ok({"updated_count": updated})
 

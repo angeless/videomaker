@@ -30,6 +30,7 @@ def create_legacy_project_blueprint(
     state_dict: Callable[[], Dict[str, Any]],
     run_in_bg: Callable[..., None],
     choose_path: Callable[[str], Dict[str, Any]],
+    choose_files_multiple: Callable[..., Dict[str, Any]] = None,
 ) -> Blueprint:
     bp = Blueprint("legacy_project_api", __name__)
 
@@ -141,8 +142,45 @@ def create_legacy_project_blueprint(
                 **state_dict(),
             })
 
+        # 直接传文件路径列表（跳过素材库）
+        selected_paths_raw = data.get("selected_video_paths") or []
+        if isinstance(selected_paths_raw, str):
+            selected_paths_raw = [x.strip() for x in selected_paths_raw.split(",") if x.strip()]
+
+        if selected_paths_raw:
+            valid_paths = [p for p in selected_paths_raw if Path(p).exists() and Path(p).is_file()]
+            if not valid_paths:
+                return jsonify({"error": "所选文件均不存在"}), 400
+            if len(valid_paths) > 50:
+                return jsonify({"error": "一次最多选择 50 个视频文件"}), 400
+
+            if not project_dir:
+                ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                project_dir = str(Path.cwd() / f"proj_files_{ts}")
+
+            project_path = Path(project_dir).expanduser().resolve()
+            prepare_project_dirs(project_path)
+
+            config = default_project_config({
+                "material_source": "direct_files",
+                "selected_video_paths": [str(Path(p).resolve()) for p in valid_paths],
+            })
+            ws = WorkflowState.create(project_path, "", config)
+            if project_name:
+                ws.data["project_display_name"] = project_name
+            ws.save()
+            load_state(project_path)
+            remember_last_project(project_path)
+            return jsonify({
+                "ok": True,
+                "project_dir": str(project_path),
+                "selected_count": len(valid_paths),
+                "needs_analysis": True,
+                **state_dict(),
+            })
+
         if not videos_dir:
-            return jsonify({"error": "videos_dir 不能为空（或传 selected_video_uids）"}), 400
+            return jsonify({"error": "videos_dir 不能为空（或传 selected_video_uids / selected_video_paths）"}), 400
 
         videos_path = Path(videos_dir).expanduser().resolve()
         if not videos_path.exists():
@@ -434,6 +472,24 @@ def create_legacy_project_blueprint(
             return jsonify({"path": None, "cancelled": True})
         return jsonify({
             "path": None,
+            "cancelled": False,
+            "error": result.get("error") or "无法打开文件选择对话框",
+        }), 400
+
+    @bp.route("/api/dialog/files", methods=["POST"])
+    def api_dialog_files():
+        """多选文件对话框（支持选择多个视频文件）。"""
+        if choose_files_multiple is None:
+            return jsonify({"paths": [], "cancelled": False, "error": "多选文件不可用"}), 501
+        file_types = ("Video Files (*.mp4;*.mov;*.avi;*.mkv;*.m4v;*.hevc;*.flv;*.wmv)",)
+        result = choose_files_multiple(file_types)
+        paths = result.get("paths") or []
+        if paths:
+            return jsonify({"paths": paths, "cancelled": False})
+        if result.get("cancelled"):
+            return jsonify({"paths": [], "cancelled": True})
+        return jsonify({
+            "paths": [],
             "cancelled": False,
             "error": result.get("error") or "无法打开文件选择对话框",
         }), 400
