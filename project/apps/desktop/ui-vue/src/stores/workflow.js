@@ -103,9 +103,22 @@ export const useWorkflowStore = defineStore('workflow', () => {
     appStore.currentStep = data.current_step || 1
     appStore.steps = data.steps || []
 
-    if (data.materials) {
-      // 解析素材数据
+    // 从 steps[].output 解析各步骤数据
+    const stepsArr = data.steps || []
+    for (const s of stepsArr) {
+      if (!s.output) continue
+      let parsed = s.output
+      if (typeof parsed === 'string') {
+        try { parsed = JSON.parse(parsed) } catch { continue }
+      }
+      if (!parsed || typeof parsed !== 'object') continue
+
+      if (s.n === 2 && parsed.topics) topics.value = parsed.topics
+      if (s.n === 3 && parsed.clips) scriptClips.value = parsed.clips
+      if (s.n === 3 && parsed.subs) scriptSubs.value = parsed.subs
     }
+
+    // 直接字段（如后端补充了顶层字段）
     if (data.topics) topics.value = data.topics
     if (data.script_clips) scriptClips.value = data.script_clips
     if (data.script_subs) scriptSubs.value = data.script_subs
@@ -115,7 +128,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
     if (data.final_url) finalUrl.value = data.final_url
 
     // 根据 step 状态推断文件 URL（后端 /api/status 不返回这些字段）
-    _inferFileUrls(data.steps || [])
+    _inferFileUrls(stepsArr)
   }
 
   /** 根据 step 完成状态推断可用的文件 URL */
@@ -137,7 +150,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
     jobProgress.value = 0
     jobRecovery.value = null
 
-    const data = await api.api('POST', '/api/run_step', { render_opts: renderOpts.value })
+    const data = await api.api('POST', '/api/run_step', { step, render_opts: renderOpts.value })
     if (data.error) {
       jobRunning.value = false
       const raw = `${data.raw_error || data.error || ''}`.toLowerCase()
@@ -159,13 +172,23 @@ export const useWorkflowStore = defineStore('workflow', () => {
   }
 
   async function approveStep(step) {
-    const data = await api.api('POST', `/api/approve/${step}`)
+    const data = await api.api('POST', `/api/approve/${step}`, {})
     if (data.error) {
       toast.show(data.error, 'danger')
       return
     }
     toast.show('已确认通过', 'success')
-    await loadStepData()
+    // approve 后端可能自动启动下一步的 job，需要 poll
+    if (data.job_id) {
+      jobId.value = data.job_id
+      jobRunning.value = true
+      jobStatus.value = ''
+      jobLog.value = []
+      jobProgress.value = 0
+      pollJob()
+    } else {
+      await loadStepData()
+    }
   }
 
   // ── Job 轮询 ──

@@ -532,15 +532,26 @@ def create_library_blueprint(
         job_id = str(uuid.uuid4())[:8]
 
         def _do():
+            _set_progress(job_id, 1, "正在扫描文件夹…")
+
             def _should_cancel():
                 return _cancel_requested(job_id)
 
             def _progress(done, total, current_path):
                 if _should_cancel():
                     raise _cancel_exc(_cancel_token())
-                if total > 0:
-                    name = Path(current_path).name if current_path else ""
-                    _set_progress(job_id, int(done * 100 / max(total, 1)), f"已处理 {done}/{total} {name}")
+                if total <= 0:
+                    _set_progress(job_id, 0, "正在扫描…")
+                    return
+                name = Path(current_path).name if current_path else ""
+                pct = int(done * 100 / max(total, 1))
+                _set_progress(job_id, pct, f"已处理 {done}/{total} {name}")
+                jobs = _jobs()
+                if job_id in jobs and isinstance(jobs[job_id], dict):
+                    jobs[job_id]["ingest_meta"] = {
+                        "processed": done, "total": total,
+                        "current_file": name, "percent": round(pct, 1),
+                    }
 
             result = _library().ingest_local_path(
                 source_path, max_videos=max_videos,

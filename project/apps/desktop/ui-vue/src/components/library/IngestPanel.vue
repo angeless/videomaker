@@ -20,17 +20,21 @@
       <!-- 本地视频 -->
       <div v-if="activeTab === 'local'">
         <div class="form-group">
-          <label class="form-label">选择视频文件夹</label>
+          <label class="form-label">选择视频文件夹或文件</label>
           <div class="form-row">
             <input v-model="lib.ingestLocalPath" class="form-input" readonly placeholder="点击选择…" />
             <button class="btn btn-ghost btn-sm" @click="pickLocalPath">选择文件夹</button>
+            <button class="btn btn-ghost btn-sm" @click="pickLocalFiles">选择文件</button>
           </div>
+        </div>
+        <div v-if="pickedFileNames.length > 0" class="form-hint" style="margin-top: -4px; margin-bottom: 8px">
+          已选 {{ pickedFileNames.length }} 个文件：{{ pickedFileNames.slice(0, 3).join(', ') }}{{ pickedFileNames.length > 3 ? '…' : '' }}
         </div>
         <div class="form-row" style="gap: 8px">
           <button class="btn btn-ghost btn-sm" :disabled="!lib.ingestLocalPath || lib.ingestLocalPreviewLoading" @click="lib.previewLocalIngest()">
             {{ lib.ingestLocalPreviewLoading ? '扫描中…' : '预览扫描' }}
           </button>
-          <button class="btn btn-primary btn-sm" :disabled="!lib.ingestLocalPath || lib.ingestLoading" @click="lib.startLocalIngest()">
+          <button class="btn btn-primary btn-sm" :disabled="(!lib.ingestLocalPath && pickedFilePaths.length === 0) || lib.ingestLoading" @click="startIngest">
             {{ lib.ingestLoading ? '入库中…' : '开始入库' }}
           </button>
         </div>
@@ -82,6 +86,8 @@ const apiStore = useApiStore()
 
 const expanded = ref(true)
 const panelEl = ref(null)
+const pickedFilePaths = ref([])
+const pickedFileNames = ref([])
 
 const activeTab = ref('local')
 const tabs = [
@@ -93,9 +99,44 @@ const tabs = [
 async function pickLocalPath() {
   try {
     const result = await apiStore.api('POST', '/api/dialog/folder')
-    if (result.path) lib.ingestLocalPath = result.path
+    if (result.path) {
+      lib.ingestLocalPath = result.path
+      pickedFilePaths.value = []
+      pickedFileNames.value = []
+    }
   } catch (e) {
     lib.ingestMessage = e.message || '文件夹选择失败'
+  }
+}
+
+async function pickLocalFiles() {
+  try {
+    const result = await apiStore.api('POST', '/api/dialog/files')
+    if (result.cancelled) return
+    const paths = result.paths || []
+    if (paths.length === 0) return
+    pickedFilePaths.value = paths
+    pickedFileNames.value = paths.map(p => p.replace(/\\/g, '/').split('/').pop())
+    // Show first file's parent dir as the path hint
+    const parts = paths[0].replace(/\\/g, '/').split('/')
+    parts.pop()
+    lib.ingestLocalPath = parts.join('/')
+  } catch (e) {
+    lib.ingestMessage = e.message || '文件选择失败'
+  }
+}
+
+async function startIngest() {
+  if (pickedFilePaths.value.length > 0) {
+    // Ingest each selected file individually through the existing API
+    for (const filePath of pickedFilePaths.value) {
+      lib.ingestLocalPath = filePath
+      await lib.startLocalIngest()
+    }
+    pickedFilePaths.value = []
+    pickedFileNames.value = []
+  } else {
+    await lib.startLocalIngest()
   }
 }
 

@@ -239,6 +239,15 @@ async function saveStepName(workflowId, stepId) {
 }
 
 async function runWorkflow(id) {
+  // 检查是否有项目，没有的话提示用户先选素材
+  if (!appStore.ready) {
+    toast.show(
+      '请先在「7步工作流」Step 1 中选择素材并创建项目，或先导入素材',
+      'warn',
+      8000,
+    )
+    return
+  }
   running.value = id
   const data = await api.api('POST', `/api/workflows/${id}/run`)
   running.value = ''
