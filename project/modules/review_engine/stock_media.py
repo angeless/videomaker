@@ -4,9 +4,11 @@ Uses an adapter pattern to isolate the Pexels API dependency.
 Requires PEXELS_API_KEY environment variable.
 """
 
+import json
 import logging
 import os
 import shutil
+import urllib.error
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Protocol
 
@@ -69,16 +71,23 @@ class PexelsAdapter:
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 return json.loads(resp.read())
-        except Exception as e:
+        except (urllib.error.URLError, json.JSONDecodeError, OSError) as e:
             raise StockMediaError(f"Pexels search failed: {e}") from e
 
     def download(self, video_url: str, output_path: str) -> str:
         import urllib.request
 
         try:
-            urllib.request.urlretrieve(video_url, output_path)
+            req = urllib.request.Request(video_url)
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                with open(output_path, "wb") as f:
+                    while True:
+                        chunk = resp.read(8192)
+                        if not chunk:
+                            break
+                        f.write(chunk)
             return output_path
-        except Exception as e:
+        except (urllib.error.URLError, OSError) as e:
             raise StockMediaError(f"Download failed: {e}") from e
 
 

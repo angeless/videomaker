@@ -4,6 +4,7 @@ Uses FFmpeg's xfade filter for crossfade effects and custom implementations
 for special effects (black_title, glitch, flash).
 """
 
+import json
 import logging
 import os
 import shutil
@@ -163,7 +164,6 @@ def _black_title_transition(
 
 
 def _get_segment_duration(ffmpeg: str, path: str) -> float:
-    import json
     ffprobe = ffmpeg.replace("ffmpeg", "ffprobe")
     try:
         result = subprocess.run(
@@ -172,5 +172,7 @@ def _get_segment_duration(ffmpeg: str, path: str) -> float:
         )
         data = json.loads(result.stdout)
         return float(data["format"]["duration"])
-    except Exception:
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired,
+            json.JSONDecodeError, KeyError, ValueError, OSError) as e:
+        logger.warning("Cannot probe segment duration for %s: %s", path, e)
         return 5.0

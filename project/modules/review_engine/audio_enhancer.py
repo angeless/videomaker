@@ -98,6 +98,7 @@ def enhance_audio(
         output_path,
     ]
 
+    last_error = None
     for attempt in range(MAX_RETRIES):
         try:
             result = subprocess.run(
@@ -105,10 +106,20 @@ def enhance_audio(
             )
             if result.returncode == 0:
                 return output_path
+            last_error = result.stderr[-500:] if result.stderr else "unknown error"
             logger.warning(
-                "FFmpeg attempt %d failed: %s", attempt + 1, result.stderr[-500:]
+                "FFmpeg attempt %d/%d failed (rc=%d): %s",
+                attempt + 1, MAX_RETRIES, result.returncode, last_error,
             )
         except subprocess.TimeoutExpired:
-            logger.warning("FFmpeg timeout on attempt %d", attempt + 1)
+            last_error = f"timeout after {FFMPEG_TIMEOUT_S}s"
+            logger.warning(
+                "FFmpeg attempt %d/%d timed out after %ds",
+                attempt + 1, MAX_RETRIES, FFMPEG_TIMEOUT_S,
+            )
+        except OSError as e:
+            raise RenderError(f"FFmpeg not found or not executable: {e}") from e
 
-    raise RenderError(f"Audio enhancement failed after {MAX_RETRIES} retries")
+    raise RenderError(
+        f"Audio enhancement failed after {MAX_RETRIES} retries: {last_error}"
+    )

@@ -32,6 +32,8 @@ def create_enhance_blueprint(*, review_store_getter, jobs_getter):
         session = store.get_session(session_id)
         if not session:
             return None, _error_response("Session not found", "SESSION_NOT_FOUND", 404)
+        if not session.get("video_path"):
+            return None, _error_response("Session has no video", "MISSING_VIDEO", 400)
         return session, None
 
     def _create_job(enhance_type, session_id, params):

@@ -3,6 +3,7 @@
 Supports 7 platform presets with intelligent center crop.
 """
 
+import json
 import logging
 import os
 import shutil
@@ -34,7 +35,6 @@ def _find_ffmpeg() -> str:
 
 def _get_video_info(ffmpeg: str, path: str) -> Dict:
     """Get video width, height, duration."""
-    import json
     ffprobe = ffmpeg.replace("ffmpeg", "ffprobe")
     cmd = [
         ffprobe, "-v", "quiet", "-print_format", "json",
@@ -52,7 +52,9 @@ def _get_video_info(ffmpeg: str, path: str) -> Dict:
             "height": int(video_stream.get("height", 1080)),
             "duration": float(data.get("format", {}).get("duration", 0)),
         }
-    except Exception:
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired,
+            json.JSONDecodeError, KeyError, ValueError, OSError) as e:
+        logger.warning("Cannot probe video info for %s: %s", path, e)
         return {"width": 1920, "height": 1080, "duration": 0}
 
 

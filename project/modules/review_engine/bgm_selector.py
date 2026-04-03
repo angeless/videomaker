@@ -4,6 +4,7 @@ Analyzes BGM beat positions and micro-adjusts segment cut points
 to align with beats for smoother transitions.
 """
 
+import json
 import logging
 import os
 import shutil
@@ -137,8 +138,9 @@ def _get_duration(path: str, ffmpeg: str) -> float:
             [ffprobe, "-v", "quiet", "-print_format", "json", "-show_format", path],
             capture_output=True, text=True, timeout=30,
         )
-        import json
         data = json.loads(result.stdout)
         return float(data["format"]["duration"])
-    except Exception:
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired,
+            json.JSONDecodeError, KeyError, ValueError, OSError) as e:
+        logger.warning("Cannot probe duration for %s: %s", path, e)
         return 60.0  # fallback
