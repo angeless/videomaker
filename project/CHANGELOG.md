@@ -4,6 +4,45 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/) 规范。
 
+## [0.16.0] - 2026-04-03
+
+### 新增 (Added)
+- AI 重编辑引擎
+  - R1-R2: CommentResolver — 时间→segment 二分搜索映射 + gap 检测
+  - R3-R4: IntentRouter — 自然语言→14 类结构化编辑指令 (LLM + 关键词回退)
+  - R5-R6: EditPlanner — 指令应用 + 冲突检测 + diff 生成
+  - R7-R8: NodeManager — 10 节点 DAG 拓扑排序 + 选择性重跑 (auto/skip/force)
+  - R9: render_incremental() — 增量渲染 + artifact 缓存
+  - R10: AI Reedit API — POST /api/review/<id>/ai-reedit (202 async) + dry-run
+  - R11: AI Reply API — GET /api/review/<id>/comments/<cid>/ai-reply
+  - R12: VersionDiff.vue — 时间轴 diff 标记 (绿/红/黄)
+- 增强能力
+  - R14: AudioEnhancer — FFmpeg afftdn+eq+compressor+loudnorm (-ar 44100)
+  - R15: TTSVoiceover — edge-tts adapter + 4 语音预设
+  - R16: BGMSelector — librosa 节拍分析 + beat sync ±200ms 微调
+  - R17: TransitionEffects — 12 种效果 (xfade + 自定义)
+  - R18: StockMedia — Pexels API adapter (搜索 + 下载)
+  - R19: SocialReframe — 7 平台预设 (tiktok/ig/yt/shorts/wechat/xhs/square)
+  - R20: StyleSkill — YAML 风格配置 (保存/加载/自动提取)
+  - R21: CommentExporter — JSON/CSV/EDL (CMX 3600) 导出
+  - R13: EnhancePanel.vue — 5-tab 增强面板
+  - R21: ExportDialog.vue — 格式选择 + 预览 + 复制
+- API 路由
+  - R22: enhance_routes — 5 个增强端点 (audio/tts/bgm/transition/reframe)
+  - R23: stock_routes — 搜索 + 下载
+  - R24: style_routes — 风格 CRUD
+
+### 修复 (Fixed)
+- review_routes.py 调用不存在的 store.get_comments() → 修正为 list_comments()
+- comment_exporter.py EDL 导出 _ms_to_smpte(None) 崩溃
+- security.py Python 3.9 不兼容 `dict | None` → Optional[dict]
+- style_skills.py 硬依赖 yaml → 可选依赖 + 优雅降级
+- bgm_selector.py librosa+scipy 版本不兼容 → try/except 降级
+
+### 测试 (Tests)
+- 新增 148 个测试 (118 unit + 30 integration/smoke)
+- 全量回归 1289 passed, 54 skipped, 0 new failures
+
 ## [0.15.0] - 2026-04-01
 
 ### 新增 (Added)

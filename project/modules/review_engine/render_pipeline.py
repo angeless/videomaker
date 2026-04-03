@@ -204,6 +204,61 @@ def render_rough_cut(
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
+def render_incremental(
+    execution_plan: Dict,
+    node_runners: Dict[str, Callable],
+    artifact_store=None,
+    on_progress: Optional[Callable] = None,
+) -> Dict:
+    """Execute nodes according to the plan, using cached artifacts where possible.
+
+    Args:
+        execution_plan: {"run": [...], "skip": [...]} from NodeManager.plan_execution
+        node_runners: {node_name: callable() -> artifact_data}
+        artifact_store: ArtifactStore instance for loading/saving artifacts
+        on_progress: callback(node_name, status, progress_pct)
+    """
+    results = {}
+    run_nodes = execution_plan.get("run", [])
+    skip_nodes = execution_plan.get("skip", [])
+    total = len(run_nodes) + len(skip_nodes)
+
+    for i, node in enumerate(skip_nodes):
+        if on_progress:
+            on_progress(node, "skipped", int((i + 1) * 100 / max(total, 1)))
+        if artifact_store:
+            cached = artifact_store.load(node)
+            if cached is not None:
+                results[node] = cached
+
+    for i, node in enumerate(run_nodes):
+        if on_progress:
+            pct = int((len(skip_nodes) + i + 1) * 100 / max(total, 1))
+            on_progress(node, "running", pct)
+
+        runner = node_runners.get(node)
+        if runner is None:
+            logger.warning("No runner for node: %s, skipping", node)
+            results[node] = None
+            continue
+
+        try:
+            result = runner()
+            results[node] = result
+            if artifact_store and result is not None:
+                artifact_store.save(node, result)
+            if on_progress:
+                on_progress(node, "done", pct)
+        except Exception as e:
+            logger.error("Node %s failed: %s", node, e)
+            if on_progress:
+                on_progress(node, "failed", pct)
+            # Mark all downstream as failed
+            raise RenderError(f"Node '{node}' failed: {e}") from e
+
+    return results
+
+
 def _get_duration(video_path: str, ffmpeg_bin: str) -> float:
     """Get video duration."""
     ffprobe = ffmpeg_bin.replace("ffmpeg", "ffprobe")

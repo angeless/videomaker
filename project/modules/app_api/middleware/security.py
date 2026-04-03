@@ -1,7 +1,7 @@
 """Security middleware extracted from server.py."""
 
 import time
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from flask import jsonify, request
 
@@ -76,7 +76,7 @@ def _get_security_state():
         return (_REQUIRE_LOCAL_API_TOKEN, _REQUIRE_CSRF_PROTECTION, _LOCAL_API_TOKEN, _LOCAL_CSRF_TOKEN)
 
 
-def _audit_security_event(operation: str, *, detail: dict | None = None) -> None:
+def _audit_security_event(operation: str, *, detail: Optional[dict] = None) -> None:
     """Best-effort write a security event to audit_log."""
     try:
         from modules.app_api.services.audit_log import audit

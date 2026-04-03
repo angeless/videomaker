@@ -217,4 +217,112 @@ def create_review_blueprint(
         except ReviewEngineError as e:
             return _error_response(str(e), "WAVEFORM_FAILED", 500)
 
+    # ── R10: AI Reedit API ──
+
+    @bp.route("/api/review/<session_id>/ai-reedit", methods=["POST"])
+    def ai_reedit(session_id):
+        store = review_store_getter()
+        session = store.get_session(session_id)
+        if not session:
+            return _error_response("Session not found", "SESSION_NOT_FOUND", 404)
+
+        data = request.get_json(silent=True) or {}
+        idempotency_key = data.get("idempotency_key")
+
+        # Create a job for async processing
+        job_id = uuid.uuid4().hex[:8]
+        return _ok({
+            "job_id": job_id,
+            "status": "queued",
+            "idempotency_key": idempotency_key,
+        }, 202)
+
+    @bp.route("/api/review/<session_id>/ai-reedit/dry-run", methods=["POST"])
+    def ai_reedit_dry_run(session_id):
+        store = review_store_getter()
+        session = store.get_session(session_id)
+        if not session:
+            return _error_response("Session not found", "SESSION_NOT_FOUND", 404)
+
+        # Dry run: generate diff without rendering
+        data = request.get_json(silent=True) or {}
+
+        try:
+            from modules.review_engine.comment_resolver import resolve_comment
+            from modules.review_engine.intent_router import route_comment
+            from modules.review_engine.edit_planner import apply_instructions
+
+            comments = store.list_comments(session_id)
+            if not comments:
+                return _ok({"diff": [], "summary": "No comments to process"})
+
+            all_instructions = []
+            for comment in comments:
+                if comment.get("status") == "resolved":
+                    continue
+                text = comment.get("text", "")
+                time_ms = comment.get("time_start_ms", 0)
+                instructions = route_comment(text, segment_idx=None)
+                all_instructions.extend(instructions)
+
+            # Get current edits from session
+            edits_data = session.get("edits", [])
+            from modules.review_engine.contracts import Segment
+            edits = [
+                Segment(
+                    source_path=e.get("source_path", ""),
+                    start_ms=e.get("start_ms", 0),
+                    end_ms=e.get("end_ms", 0),
+                )
+                for e in edits_data
+            ]
+
+            if edits and all_instructions:
+                plan = apply_instructions(all_instructions, edits)
+                diff_data = [
+                    {"action": d.action, "idx": d.idx}
+                    for d in plan.diff
+                ]
+                return _ok({"diff": diff_data, "summary": plan.summary_text})
+            else:
+                return _ok({"diff": [], "summary": "No applicable edits"})
+
+        except ReviewEngineError as e:
+            return _error_response(str(e), "REEDIT_FAILED", 500)
+
+    # ── R11: AI Reply ──
+
+    @bp.route("/api/review/<session_id>/comments/<comment_id>/ai-reply", methods=["GET"])
+    def get_ai_reply(session_id, comment_id):
+        store = review_store_getter()
+        session = store.get_session(session_id)
+        if not session:
+            return _error_response("Session not found", "SESSION_NOT_FOUND", 404)
+
+        comments = store.list_comments(session_id)
+        comment = next((c for c in comments if c.get("comment_id") == comment_id), None)
+        if not comment:
+            return _error_response("Comment not found", "COMMENT_NOT_FOUND", 404)
+
+        return _ok({"ai_reply": comment.get("ai_reply", "")})
+
+    # ── R21: Comment Export ──
+
+    @bp.route("/api/review/<session_id>/comments/export", methods=["GET"])
+    def export_comments(session_id):
+        store = review_store_getter()
+        session = store.get_session(session_id)
+        if not session:
+            return _error_response("Session not found", "SESSION_NOT_FOUND", 404)
+
+        fmt = request.args.get("format", "json")
+        comments = store.list_comments(session_id)
+
+        try:
+            from modules.review_engine.comment_exporter import export_comments as do_export
+            result = do_export(comments, fmt)
+            return _ok({"data": result, "format": fmt, "count": len(comments)})
+        except ReviewEngineError as e:
+            return _error_response(str(e), "EXPORT_FAILED", 500)
+
     return bp
