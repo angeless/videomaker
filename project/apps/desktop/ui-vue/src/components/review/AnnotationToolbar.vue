@@ -63,10 +63,14 @@ const store = useReviewStore()
 const emit = defineEmits(['undo', 'redo', 'clear', 'toolChange', 'colorChange', 'widthChange'])
 
 const tools = [
-  { id: 'pen',    icon: '✏️', label: '画笔' },
-  { id: 'arrow',  icon: '➡️', label: '箭头' },
-  { id: 'rect',   icon: '⬜', label: '矩形' },
-  { id: 'circle', icon: '⭕', label: '圆形' },
+  { id: 'pen',       icon: '✏️', label: '画笔' },
+  { id: 'arrow',     icon: '➡️', label: '箭头' },
+  { id: 'rect',      icon: '⬜', label: '矩形' },
+  { id: 'circle',    icon: '⭕', label: '圆形' },
+  { id: 'text',      icon: 'T',  label: '文字标注' },
+  { id: 'spotlight', icon: '🔦', label: '聚光灯' },
+  { id: 'blur',      icon: '▦',  label: '模糊遮盖' },
+  { id: 'eraser',    icon: '🧹', label: '橡皮擦' },
 ]
 
 const colors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#a855f7', '#ffffff']

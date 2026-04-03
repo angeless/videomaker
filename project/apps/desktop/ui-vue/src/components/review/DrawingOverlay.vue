@@ -23,7 +23,7 @@ const canvasRef = ref(null)
 const canvasSize = reactive({ w: 800, h: 450 })
 
 // Drawing state
-const tool = ref('pen')        // 'pen' | 'arrow' | 'rect' | 'circle' | 'text'
+const tool = ref('pen')        // 'pen' | 'arrow' | 'rect' | 'circle' | 'text' | 'spotlight' | 'blur' | 'eraser'
 const color = ref('#ef4444')
 const lineWidth = ref(3)
 const strokes = ref([])        // completed strokes
@@ -45,11 +45,29 @@ function onMouseDown(e) {
   isDrawing.value = true
   const pos = getPos(e)
 
-  if (tool.value === 'pen') {
+  if (tool.value === 'text') {
+    const text = prompt('输入标注文字:')
+    if (text) {
+      strokes.value.push({
+        type: 'text',
+        color: color.value,
+        width: lineWidth.value,
+        pos,
+        text,
+        fontSize: 16 + lineWidth.value * 4,
+      })
+      redraw()
+      serializeToStore()
+    }
+    isDrawing.value = false
+    return
+  }
+
+  if (tool.value === 'pen' || tool.value === 'eraser') {
     currentStroke.value = {
-      type: 'pen',
-      color: color.value,
-      width: lineWidth.value,
+      type: tool.value,
+      color: tool.value === 'eraser' ? 'eraser' : color.value,
+      width: tool.value === 'eraser' ? lineWidth.value * 4 : lineWidth.value,
       points: [pos],
     }
   } else {
@@ -68,7 +86,7 @@ function onMouseMove(e) {
   if (!isDrawing.value || !currentStroke.value) return
   const pos = getPos(e)
 
-  if (currentStroke.value.type === 'pen') {
+  if (currentStroke.value.type === 'pen' || currentStroke.value.type === 'eraser') {
     currentStroke.value.points.push(pos)
   } else {
     currentStroke.value.end = pos
@@ -116,6 +134,86 @@ function drawStroke(ctx, s) {
   ctx.lineWidth = s.width
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
+
+  if (s.type === 'eraser' && s.points?.length > 1) {
+    ctx.save()
+    ctx.globalCompositeOperation = 'destination-out'
+    ctx.lineWidth = s.width
+    ctx.beginPath()
+    ctx.moveTo(s.points[0].x * w, s.points[0].y * h)
+    for (let i = 1; i < s.points.length; i++) {
+      ctx.lineTo(s.points[i].x * w, s.points[i].y * h)
+    }
+    ctx.stroke()
+    ctx.restore()
+    return
+  }
+
+  if (s.type === 'text' && s.pos) {
+    ctx.save()
+    ctx.font = `${s.fontSize || 20}px "PingFang SC", sans-serif`
+    ctx.fillStyle = s.color
+    ctx.fillText(s.text || '', s.pos.x * w, s.pos.y * h)
+    ctx.restore()
+    return
+  }
+
+  if (s.type === 'spotlight' && s.start && s.end) {
+    // Dim entire canvas, then clear the spotlight region
+    ctx.save()
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'
+    ctx.fillRect(0, 0, w, h)
+    ctx.globalCompositeOperation = 'destination-out'
+    const sx = Math.min(s.start.x, s.end.x) * w
+    const sy = Math.min(s.start.y, s.end.y) * h
+    const sw = Math.abs(s.end.x - s.start.x) * w
+    const sh = Math.abs(s.end.y - s.start.y) * h
+    ctx.fillStyle = 'white'
+    ctx.beginPath()
+    ctx.ellipse(sx + sw / 2, sy + sh / 2, sw / 2, sh / 2, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.restore()
+    // Draw border around spotlight
+    ctx.strokeStyle = s.color
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.ellipse(
+      (Math.min(s.start.x, s.end.x) + Math.abs(s.end.x - s.start.x) / 2) * w,
+      (Math.min(s.start.y, s.end.y) + Math.abs(s.end.y - s.start.y) / 2) * h,
+      Math.abs(s.end.x - s.start.x) * w / 2,
+      Math.abs(s.end.y - s.start.y) * h / 2,
+      0, 0, Math.PI * 2,
+    )
+    ctx.stroke()
+    return
+  }
+
+  if (s.type === 'blur' && s.start && s.end) {
+    // Simulate blur with semi-transparent overlay + hatching pattern
+    const bx = Math.min(s.start.x, s.end.x) * w
+    const by = Math.min(s.start.y, s.end.y) * h
+    const bw = Math.abs(s.end.x - s.start.x) * w
+    const bh = Math.abs(s.end.y - s.start.y) * h
+    ctx.save()
+    ctx.fillStyle = 'rgba(128, 128, 128, 0.4)'
+    ctx.fillRect(bx, by, bw, bh)
+    // Hatching lines to visually indicate blur
+    ctx.strokeStyle = 'rgba(128, 128, 128, 0.3)'
+    ctx.lineWidth = 1
+    for (let i = 0; i < bw + bh; i += 6) {
+      ctx.beginPath()
+      ctx.moveTo(bx + Math.min(i, bw), by + Math.max(0, i - bw))
+      ctx.lineTo(bx + Math.max(0, i - bh), by + Math.min(i, bh))
+      ctx.stroke()
+    }
+    ctx.strokeStyle = s.color
+    ctx.lineWidth = 2
+    ctx.setLineDash([4, 4])
+    ctx.strokeRect(bx, by, bw, bh)
+    ctx.setLineDash([])
+    ctx.restore()
+    return
+  }
 
   if (s.type === 'pen' && s.points?.length > 1) {
     ctx.beginPath()

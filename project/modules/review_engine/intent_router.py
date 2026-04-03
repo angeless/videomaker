@@ -224,3 +224,88 @@ def _route_via_keywords(
         ))
 
     return instructions
+
+
+# ── R11: AI Reply Generation ──
+
+# Human-readable descriptions for each instruction type
+_ACTION_LABELS = {
+    "remove": "删除",
+    "extend": "延长",
+    "trim": "裁剪",
+    "insert": "插入",
+    "reorder": "移动",
+    "split": "拆分",
+    "merge": "合并",
+    "transition": "添加转场",
+    "subtitle": "修改字幕",
+    "speaker": "切换说话人",
+    "hook": "设为开场",
+    "speed": "调速",
+    "broll": "补充B-roll",
+    "audio": "音频调整",
+}
+
+
+def generate_ai_reply(
+    comment_text: str,
+    instructions: List[EditInstruction],
+    diff: Optional[List] = None,
+) -> str:
+    """Generate a concise AI reply explaining what was done for a comment.
+
+    Args:
+        comment_text: The original review comment
+        instructions: Applied EditInstruction objects
+        diff: Optional list of DiffEntry dicts with action/idx keys
+
+    Returns:
+        Natural language reply (< 100 chars)
+    """
+    if not instructions:
+        return "已记录，暂无自动操作"
+
+    parts = []
+    for inst in instructions:
+        label = _ACTION_LABELS.get(inst.instruction_type, inst.instruction_type)
+        idx = inst.segment_idx
+        params = inst.params or {}
+
+        if inst.instruction_type == "remove" and idx is not None:
+            parts.append(f"已{label}片段 #{idx}")
+        elif inst.instruction_type == "extend":
+            dur = params.get("duration_ms")
+            direction = params.get("direction", "end")
+            if dur:
+                parts.append(f"已{label} {dur}ms ({direction})")
+            else:
+                parts.append(f"已{label}片段")
+        elif inst.instruction_type == "trim":
+            trim_s = params.get("trim_start_ms", 0)
+            trim_e = params.get("trim_end_ms", 0)
+            total = trim_s + trim_e
+            if total:
+                parts.append(f"已{label} {total}ms")
+            else:
+                parts.append(f"已{label}片段")
+        elif inst.instruction_type == "speed":
+            factor = params.get("factor", 1.0)
+            parts.append(f"已{label}至 {factor}x")
+        elif inst.instruction_type == "transition":
+            effect = params.get("effect", "cross_dissolve")
+            parts.append(f"已{label} ({effect})")
+        else:
+            parts.append(f"已{label}")
+
+    reply = "；".join(parts)
+
+    # Append diff summary if available
+    if diff:
+        n_changes = len(diff)
+        reply += f"（共 {n_changes} 处变更）"
+
+    # Ensure under 100 chars
+    if len(reply) > 100:
+        reply = reply[:97] + "..."
+
+    return reply

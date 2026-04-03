@@ -4,7 +4,7 @@ import json
 import logging
 import urllib.request
 import urllib.error
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from modules.mcp_server.health import DEFAULT_BACKEND_URL, check_backend_health
 
@@ -41,7 +41,7 @@ def _call_backend(endpoint: str, payload: Dict[str, Any], base_url: str = DEFAUL
         return {"error": str(e), "success": False}
 
 
-def run_workflow_step(tool_name: str, project_dir: str, config: Dict[str, Any] | None = None) -> Dict[str, Any]:
+def run_workflow_step(tool_name: str, project_dir: str, config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Run a workflow step via the backend API.
 
     Args:

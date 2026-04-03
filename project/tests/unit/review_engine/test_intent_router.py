@@ -1,4 +1,4 @@
-"""Tests for IntentRouter — R3 + R4."""
+"""Tests for IntentRouter — R3 + R4 + R11."""
 
 import json
 
@@ -8,6 +8,7 @@ from modules.review_engine.contracts import EditInstruction
 from modules.review_engine.exceptions import IntentRouterError
 from modules.review_engine.intent_router import (
     INSTRUCTION_SCHEMAS,
+    generate_ai_reply,
     parse_llm_response,
     route_comment,
     validate_instruction,
@@ -189,3 +190,49 @@ class TestAllInstructionTypes:
             "source_end_ms": 5000,
         })
         assert inst.instruction_type == "insert"
+
+
+class TestGenerateAiReply:
+    """R11: AI reply generation."""
+
+    def test_generates_reply_for_remove(self):
+        instructions = [EditInstruction(
+            instruction_type="remove", segment_idx=3, params={},
+        )]
+        reply = generate_ai_reply("删掉这段", instructions)
+        assert "删除" in reply
+        assert "#3" in reply
+        assert len(reply) <= 100
+
+    def test_generates_reply_for_extend_with_duration(self):
+        instructions = [EditInstruction(
+            instruction_type="extend", segment_idx=1,
+            params={"duration_ms": 2000, "direction": "end"},
+        )]
+        reply = generate_ai_reply("这里砍了，恢复一下", instructions)
+        assert "延长" in reply
+        assert "2000ms" in reply
+
+    def test_generates_reply_with_diff(self):
+        instructions = [EditInstruction(
+            instruction_type="trim", segment_idx=0,
+            params={"trim_start_ms": 500, "trim_end_ms": 300},
+        )]
+        diff = [{"action": "modified", "idx": 0}]
+        reply = generate_ai_reply("缩短开头", instructions, diff=diff)
+        assert "裁剪" in reply
+        assert "800ms" in reply
+        assert "1 处变更" in reply
+
+    def test_no_instructions_returns_default(self):
+        reply = generate_ai_reply("这是个备注", [])
+        assert reply == "已记录，暂无自动操作"
+
+    def test_reply_under_100_chars(self):
+        """Even with many instructions, reply stays under 100 chars."""
+        instructions = [
+            EditInstruction(instruction_type="remove", segment_idx=i, params={})
+            for i in range(20)
+        ]
+        reply = generate_ai_reply("全删了", instructions)
+        assert len(reply) <= 100

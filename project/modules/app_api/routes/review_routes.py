@@ -249,21 +249,33 @@ def create_review_blueprint(
 
         try:
             from modules.review_engine.comment_resolver import resolve_comment
-            from modules.review_engine.intent_router import route_comment
+            from modules.review_engine.intent_router import route_comment, generate_ai_reply
             from modules.review_engine.edit_planner import apply_instructions
 
             comments = store.list_comments(session_id)
             if not comments:
                 return _ok({"diff": [], "summary": "No comments to process"})
 
+            # Per-comment instruction routing + AI reply generation
             all_instructions = []
+            comment_replies = []
             for comment in comments:
                 if comment.get("status") == "resolved":
                     continue
                 text = comment.get("text", "")
-                time_ms = comment.get("time_start_ms", 0)
+                comment_id = comment.get("comment_id")
                 instructions = route_comment(text, segment_idx=None)
                 all_instructions.extend(instructions)
+
+                # R11: generate AI reply for this comment
+                reply = generate_ai_reply(text, instructions)
+                comment_replies.append({
+                    "comment_id": comment_id,
+                    "ai_reply": reply,
+                })
+                # Persist ai_reply to DB
+                if comment_id:
+                    store.update_comment(comment_id, ai_reply=reply)
 
             # Get current edits from session
             edits_data = session.get("edits", [])
@@ -283,9 +295,17 @@ def create_review_blueprint(
                     {"action": d.action, "idx": d.idx}
                     for d in plan.diff
                 ]
-                return _ok({"diff": diff_data, "summary": plan.summary_text})
+                return _ok({
+                    "diff": diff_data,
+                    "summary": plan.summary_text,
+                    "replies": comment_replies,
+                })
             else:
-                return _ok({"diff": [], "summary": "No applicable edits"})
+                return _ok({
+                    "diff": [],
+                    "summary": "No applicable edits",
+                    "replies": comment_replies,
+                })
 
         except ReviewEngineError as e:
             return _error_response(str(e), "REEDIT_FAILED", 500)

@@ -7,7 +7,17 @@
       hook: paragraph.is_hook,
     }"
     @click="$emit('seek', paragraph.start_ms)"
+    @contextmenu.prevent="showMenu = true"
   >
+    <!-- R13: Right-click context menu -->
+    <div v-if="showMenu" class="para-menu" @click.stop>
+      <button @click="markHook">{{ paragraph.is_hook ? '取消 Hook' : '标记为 Hook' }}</button>
+      <button @click="$emit('toggle', paragraph.idx); showMenu = false">
+        {{ paragraph.is_deleted ? '恢复段落' : '删除段落' }}
+      </button>
+      <button @click="showMenu = false">取消</button>
+    </div>
+
     <!-- Speaker + timestamp -->
     <div class="para-header">
       <span v-if="paragraph.speaker" class="para-speaker">{{ paragraph.speaker }}</span>
@@ -43,7 +53,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 
 const props = defineProps({
   paragraph: { type: Object, required: true },
@@ -52,7 +62,14 @@ const props = defineProps({
   retakeWordIndices: { type: Set, default: () => new Set() },
 })
 
-defineEmits(['seek', 'toggle'])
+const emit = defineEmits(['seek', 'toggle', 'markHook'])
+
+const showMenu = ref(false)
+
+function markHook() {
+  emit('markHook', props.paragraph.idx)
+  showMenu.value = false
+}
 
 const isActive = computed(() => {
   const t = props.currentTimeMs
@@ -123,4 +140,28 @@ const marksSummary = computed(() => {
 .word.current { background: rgba(59,130,246,0.3); border-radius: 2px; }
 
 .para-marks { font-size: 11px; margin-top: 4px; }
+
+.para-menu {
+  position: absolute;
+  right: 8px;
+  top: 4px;
+  background: #1a1a2e;
+  border: 1px solid #444;
+  border-radius: 4px;
+  z-index: 20;
+  overflow: hidden;
+}
+.para-menu button {
+  display: block;
+  width: 100%;
+  padding: 4px 12px;
+  background: none;
+  border: none;
+  color: #ccc;
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+}
+.para-menu button:hover { background: rgba(255,255,255,0.08); }
 </style>
