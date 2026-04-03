@@ -21,8 +21,14 @@ if _mod_name in sys.modules:
         del sys.modules[_mod_name]
         importlib.import_module(_mod_name)
 
-_SEED_DIR = Path(os.path.expanduser("~/Downloads/语义数据库-chatgpt-20260306"))
-_SEED_JSONL = _SEED_DIR / "semantic_keyword_library_flat.jsonl"
+_PROJECT_SEED_DIR = Path(__file__).resolve().parent.parent / "data" / "seeds"
+_DOWNLOAD_SEED_DIR = Path(os.path.expanduser("~/Downloads/语义数据库-chatgpt-20260306"))
+_SEED_DIR = _PROJECT_SEED_DIR if _PROJECT_SEED_DIR.exists() else _DOWNLOAD_SEED_DIR
+_SEED_JSONL = (
+    _PROJECT_SEED_DIR / "semantic_keyword_library_flat.jsonl"
+    if (_PROJECT_SEED_DIR / "semantic_keyword_library_flat.jsonl").exists()
+    else _DOWNLOAD_SEED_DIR / "semantic_keyword_library_flat.jsonl"
+)
 
 
 def _seed_data_readable():

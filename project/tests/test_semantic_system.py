@@ -25,8 +25,14 @@ if _mod_name in sys.modules:
 # ---------------------------------------------------------------------------
 # Skip entire module if seed data directory doesn't exist
 # ---------------------------------------------------------------------------
-_SEED_DIR = Path(os.path.expanduser("~/Downloads/语义数据库-chatgpt-20260306"))
-_SEED_JSONL = _SEED_DIR / "semantic_keyword_library_flat.jsonl"
+_PROJECT_SEED_DIR = Path(__file__).resolve().parent.parent / "data" / "seeds"
+_DOWNLOAD_SEED_DIR = Path(os.path.expanduser("~/Downloads/语义数据库-chatgpt-20260306"))
+_SEED_DIR = _PROJECT_SEED_DIR if _PROJECT_SEED_DIR.exists() else _DOWNLOAD_SEED_DIR
+_SEED_JSONL = (
+    _PROJECT_SEED_DIR / "semantic_keyword_library_flat.jsonl"
+    if (_PROJECT_SEED_DIR / "semantic_keyword_library_flat.jsonl").exists()
+    else _DOWNLOAD_SEED_DIR / "semantic_keyword_library_flat.jsonl"
+)
 
 
 def _seed_data_readable():

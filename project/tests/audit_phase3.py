@@ -34,7 +34,9 @@ TAG_HIT_STRENGTH = mod.TAG_HIT_STRENGTH
 QUERY_TYPE_WEIGHTS = mod.QUERY_TYPE_WEIGHTS
 
 # ── Check seed data ──
-_SEED_DIR = Path(os.path.expanduser("~/Downloads/语义数据库-chatgpt-20260306"))
+_PROJECT_SEED_DIR = Path(__file__).resolve().parent.parent / "data" / "seeds"
+_DOWNLOAD_SEED_DIR = Path(os.path.expanduser("~/Downloads/语义数据库-chatgpt-20260306"))
+_SEED_DIR = _PROJECT_SEED_DIR if _PROJECT_SEED_DIR.exists() else _DOWNLOAD_SEED_DIR
 if not _SEED_DIR.exists():
     print(f"SKIP: Seed data directory not found: {_SEED_DIR}")
     sys.exit(0)
