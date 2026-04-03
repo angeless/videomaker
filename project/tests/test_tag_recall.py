@@ -208,7 +208,7 @@ def test_tag_recall_parent_expansion(lib):
                FROM tag_relation tr
                JOIN tag t1 ON tr.from_tag_id = t1.tag_id
                JOIN tag t2 ON tr.to_tag_id = t2.tag_id
-               WHERE tr.relation_type = 'parent_child' LIMIT 1"""
+               WHERE tr.relation_type IN ('parent_child', 'parent') LIMIT 1"""
         ).fetchone()
         if pc is None:
             pytest.skip("No parent_child relations in seed data")
