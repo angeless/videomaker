@@ -83,14 +83,34 @@ class ReviewStore:
         self._init_db()
 
     def _init_db(self) -> None:
-        """Create tables if they don't exist."""
+        """Create tables if they don't exist, then run migrations."""
         with self._lock:
             conn = sqlite3.connect(self._db_path)
             try:
                 conn.executescript(SCHEMA_SQL)
                 conn.commit()
+                self._migrate_v17(conn)
             finally:
                 conn.close()
+
+    def _migrate_v17(self, conn: sqlite3.Connection) -> None:
+        """v0.17.0 migration: add visual_context + ai_generated columns."""
+        cursor = conn.execute("PRAGMA table_info(review_comments)")
+        existing_cols = {row[1] for row in cursor.fetchall()}
+
+        if "visual_context" not in existing_cols:
+            conn.execute(
+                "ALTER TABLE review_comments ADD COLUMN visual_context TEXT"
+            )
+            logger.info("Migration v0.17: added visual_context column")
+
+        if "ai_generated" not in existing_cols:
+            conn.execute(
+                "ALTER TABLE review_comments ADD COLUMN ai_generated INTEGER DEFAULT 0"
+            )
+            logger.info("Migration v0.17: added ai_generated column")
+
+        conn.commit()
 
     def _connect(self) -> sqlite3.Connection:
         """Create a new connection with row_factory."""
@@ -165,8 +185,14 @@ class ReviewStore:
         text: str,
         time_end_ms: Optional[int] = None,
         drawing_data: Optional[str] = None,
+        visual_context: Optional[str] = None,
+        ai_generated: bool = False,
     ) -> str:
         """Add a comment to a session.
+
+        Args:
+            visual_context: JSON string with VLM analysis (v0.17.0).
+            ai_generated: True for AI diagnostic comments (v0.17.0).
 
         Returns:
             comment_id (UUID string).
@@ -178,10 +204,11 @@ class ReviewStore:
                 conn.execute(
                     """INSERT INTO review_comments
                        (comment_id, session_id, version, time_start_ms, time_end_ms,
-                        comment_type, text, drawing_data)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                        comment_type, text, drawing_data, visual_context, ai_generated)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (comment_id, session_id, version, time_start_ms, time_end_ms,
-                     comment_type, text, drawing_data),
+                     comment_type, text, drawing_data, visual_context,
+                     1 if ai_generated else 0),
                 )
                 conn.commit()
             finally:
@@ -243,24 +270,34 @@ class ReviewStore:
         self,
         session_id: str,
         version: Optional[int] = None,
+        filter_ai: Optional[bool] = None,
     ) -> List[Dict]:
-        """List comments for a session, optionally filtered by version."""
+        """List comments for a session.
+
+        Args:
+            version: Filter by version number.
+            filter_ai: If True, only AI comments. If False, only human.
+                       If None, return all.
+        """
         conn = self._connect()
         try:
+            clauses = ["session_id = ?"]
+            params: list = [session_id]
+
             if version is not None:
-                rows = conn.execute(
-                    """SELECT * FROM review_comments
-                       WHERE session_id = ? AND version = ?
-                       ORDER BY time_start_ms""",
-                    (session_id, version),
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    """SELECT * FROM review_comments
-                       WHERE session_id = ?
-                       ORDER BY time_start_ms""",
-                    (session_id,),
-                ).fetchall()
+                clauses.append("version = ?")
+                params.append(version)
+
+            if filter_ai is True:
+                clauses.append("ai_generated = 1")
+            elif filter_ai is False:
+                clauses.append("(ai_generated = 0 OR ai_generated IS NULL)")
+
+            where = " AND ".join(clauses)
+            rows = conn.execute(
+                f"SELECT * FROM review_comments WHERE {where} ORDER BY time_start_ms",
+                params,
+            ).fetchall()
             return [dict(r) for r in rows]
         finally:
             conn.close()
