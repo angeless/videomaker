@@ -60,8 +60,22 @@ class RegionExtractor:
 
         frame_w, frame_h = frame.size
         canvas_w, canvas_h = canvas_size or (frame_w, frame_h)
-        scale_x = frame_w / canvas_w
-        scale_y = frame_h / canvas_h
+
+        # Auto-detect normalized coordinates (0-1 range from DrawingOverlay)
+        all_points = [p for s in strokes for p in s.get("points", [])]
+        is_normalized = all_points and all(
+            0 <= p.get("x", 0) <= 1.01 and 0 <= p.get("y", 0) <= 1.01
+            for p in all_points
+        )
+
+        if is_normalized:
+            # Normalized coords: multiply directly by frame size
+            scale_x = float(frame_w)
+            scale_y = float(frame_h)
+        else:
+            # Pixel coords: scale from canvas to frame
+            scale_x = frame_w / canvas_w
+            scale_y = frame_h / canvas_h
 
         # Determine the primary tool and compute bounding box
         tool_type = strokes[0].get("tool", "pen")
