@@ -154,7 +154,7 @@ export const useReviewStore = defineStore('review', () => {
     comments.value = data.comments || []
   }
 
-  async function addComment({ timeStartMs, timeEndMs, commentType, text, drawingData: drawing }) {
+  async function addComment({ timeStartMs, timeEndMs, commentType, text, drawingData: drawing, visualContext: vc }) {
     if (!sessionId.value) return
     const data = await _fetch(`/api/review/${sessionId.value}/comments`, {
       method: 'POST',
@@ -165,6 +165,7 @@ export const useReviewStore = defineStore('review', () => {
         comment_type: commentType,
         text,
         drawing_data: drawing || null,
+        visual_context: vc || null,
       }),
     })
     await loadComments()

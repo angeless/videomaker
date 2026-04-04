@@ -107,6 +107,7 @@ def create_review_blueprint(
             text=data["text"],
             time_end_ms=data.get("time_end_ms"),
             drawing_data=data.get("drawing_data"),
+            visual_context=data.get("visual_context"),
         )
         return _ok({"comment_id": comment_id}, 201)
 

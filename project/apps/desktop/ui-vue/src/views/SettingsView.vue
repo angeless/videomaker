@@ -356,9 +356,8 @@ function onVlmProviderChanged() {
 }
 
 async function saveVlmSettings() {
-  // Save via settings API
   try {
-    await fetch('/api/settings', {
+    const resp = await fetch('/api/settings/ai', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -367,8 +366,14 @@ async function saveVlmSettings() {
         vlm_claude_key: vlmClaudeKey.value,
       }),
     })
+    const data = await resp.json()
+    if (!data.ok) {
+      vlmTestResult.value = '保存失败'
+      setTimeout(() => { vlmTestResult.value = '' }, 3000)
+    }
   } catch (e) {
-    // silent
+    vlmTestResult.value = '保存失败'
+    setTimeout(() => { vlmTestResult.value = '' }, 3000)
   }
 }
 

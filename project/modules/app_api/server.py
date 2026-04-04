@@ -60,6 +60,7 @@ from modules.app_api.routes.roughcut_routes import create_roughcut_blueprint
 from modules.app_api.routes.enhance_routes import create_enhance_blueprint
 from modules.app_api.routes.stock_routes import create_stock_blueprint
 from modules.app_api.routes.style_routes import create_style_blueprint
+from modules.app_api.routes.vlm_routes import create_vlm_blueprint
 from modules.workflow_engine.workflow import WorkflowState, WorkflowRunner
 from modules.library.global_media_library import GlobalMediaLibrary
 from modules.step2_topic_planning.ai_client import AIClient
@@ -483,6 +484,22 @@ def _get_review_store():
         _review_store = ReviewStore(db_path)
     return _review_store
 
+def _get_vlm_adapter():
+    """Lazy-load VLM adapter based on settings."""
+    from modules.adapters.vlm_adapter import get_vlm_adapter
+    import os
+    # Check settings for provider preference; default to env var or None
+    provider = os.environ.get("VIDEOEDITOR_VLM_PROVIDER", "")
+    if not provider:
+        # Try loading from AI settings
+        try:
+            from modules.app_api.services.settings_service import load_ai_settings
+            ai = load_ai_settings()
+            provider = ai.get("vlm_provider", "")
+        except Exception:
+            pass
+    return get_vlm_adapter(provider) if provider else None
+
 app.register_blueprint(
     create_review_blueprint(
         review_store_getter=_get_review_store,
@@ -509,6 +526,13 @@ app.register_blueprint(
 app.register_blueprint(
     create_style_blueprint(
         project_dir_getter=lambda: _project_dir,
+    )
+)
+
+app.register_blueprint(
+    create_vlm_blueprint(
+        review_store_getter=_get_review_store,
+        vlm_adapter_getter=_get_vlm_adapter,
     )
 )
 

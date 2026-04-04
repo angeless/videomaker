@@ -16,7 +16,7 @@
         <ReviewPlayer ref="playerRef">
           <template #overlay>
             <SafeZoneOverlay v-if="store.safeZone" :ratio="store.safeZone" />
-            <DrawingOverlay ref="drawingRef" />
+            <DrawingOverlay ref="drawingRef" @annotationComplete="onAnnotationComplete" />
             <AnnotationToolbar
               @undo="drawingRef?.undo()"
               @redo="drawingRef?.redo()"
@@ -49,9 +49,10 @@
         />
       </div>
 
-      <!-- Sidebar: comments -->
+      <!-- Sidebar: comments + diagnostics -->
       <div class="rl-sidebar">
         <CommentPanel @seek="ms => playerRef?.seek(ms)" />
+        <DiagnosticsPanel />
       </div>
     </div>
 
@@ -112,6 +113,7 @@ import SafeZoneOverlay from '../components/review/SafeZoneOverlay.vue'
 import ThumbnailStrip from '../components/review/ThumbnailStrip.vue'
 import WaveformTrack from '../components/review/WaveformTrack.vue'
 import VersionSwitcher from '../components/review/VersionSwitcher.vue'
+import DiagnosticsPanel from '../components/review/DiagnosticsPanel.vue'
 
 const store = useReviewStore()
 const route = useRoute()
@@ -237,6 +239,32 @@ function onCommentSubmitted() {
 
 function onCommentCancelled() {
   // Back to normal mode
+}
+
+// ── R8/R7 (v0.17.0): VLM annotation handler ──
+async function onAnnotationComplete({ strokes, frameDataUrl, timestamp_ms }) {
+  if (!store.sessionId || !frameDataUrl) return
+  commentInputRef.value?.setAiHintLoading(true)
+  try {
+    const frameB64 = frameDataUrl.split(',')[1]
+    const resp = await fetch(`/api/review/${store.sessionId}/vlm/describe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        frame_base64: frameB64,
+        strokes,
+        timestamp_ms,
+      }),
+    })
+    const data = await resp.json()
+    if (data.success && data.description) {
+      commentInputRef.value?.setAiHint(data.description)
+    }
+  } catch (e) {
+    // VLM unavailable — silently skip
+  } finally {
+    commentInputRef.value?.setAiHintLoading(false)
+  }
 }
 
 function retry() {
