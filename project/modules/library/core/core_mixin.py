@@ -5209,7 +5209,7 @@ class CoreMixin:
             # parent → child expansion
             child_rows = conn.execute(
                 f"""SELECT from_tag_id, to_tag_id FROM tag_relation
-                    WHERE relation_type = 'parent_child'
+                    WHERE relation_type IN ('parent_child', 'parent')
                     AND from_tag_id IN ({placeholders})""",
                 tag_id_list,
             ).fetchall()

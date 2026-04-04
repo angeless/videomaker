@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import inspect
 import json
+from pathlib import Path
 
 import pytest
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 class TestFusionModeValidation:
@@ -66,22 +69,22 @@ class TestUIFusionButtons:
     """R6: UI includes visual and fusion mode buttons."""
 
     def test_ui_has_visual_button(self):
-        with open("apps/desktop/ui-legacy/index.html", "r") as f:
+        with open(_PROJECT_ROOT / "apps/desktop/ui-legacy/index.html", "r") as f:
             html = f.read()
         assert "setLibrarySearchMode('visual')" in html
 
     def test_ui_has_fusion_button(self):
-        with open("apps/desktop/ui-legacy/index.html", "r") as f:
+        with open(_PROJECT_ROOT / "apps/desktop/ui-legacy/index.html", "r") as f:
             html = f.read()
         assert "setLibrarySearchMode('fusion')" in html
 
     def test_ui_has_visual_status_badge(self):
-        with open("apps/desktop/ui-legacy/index.html", "r") as f:
+        with open(_PROJECT_ROOT / "apps/desktop/ui-legacy/index.html", "r") as f:
             html = f.read()
         assert "libraryVisualSearchEnabled" in html
 
     def test_retrieval_mode_zh_includes_fusion(self):
-        with open("apps/desktop/ui-legacy/modules/capability_admin_mixin.js", "r") as f:
+        with open(_PROJECT_ROOT / "apps/desktop/ui-legacy/modules/capability_admin_mixin.js", "r") as f:
             js = f.read()
         assert "融合检索" in js
         assert "视觉检索" in js

@@ -22,7 +22,8 @@ except ImportError:
 
 try:
     import mediapipe as mp
-    HAS_MEDIAPIPE = True
+    # mediapipe >= 0.10.33 removed mp.solutions; check availability
+    HAS_MEDIAPIPE = hasattr(mp, 'solutions')
 except ImportError:
     HAS_MEDIAPIPE = False
 

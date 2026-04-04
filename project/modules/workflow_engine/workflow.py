@@ -473,6 +473,7 @@ class WorkflowRunner:
             tech = an.get("local_analysis", {}).get("technical", {})
             scene = an.get("local_analysis", {}).get("scene", {})
             objs = an.get("local_analysis", {}).get("objects", {})
+            trans = an.get("transcription", {})
             fname = vdata.get("filename", vid_hash[:8])
             dur = meta.get("duration", "?")
             res = tech.get("resolution", "?")
@@ -484,9 +485,24 @@ class WorkflowRunner:
                 str(sem.get(k, "")) for k in ("setting", "activity", "time_of_day", "weather", "narrative_role")
                 if sem.get(k)
             )
-            lines.append(
-                f"- {fname} | {dur}s | {res} | 场景:{desc} | 情绪:{mood} | 物体:{obj_list} | 语义:{sem_hint}"
-            )
+            # 包含转录文本（截取前 200 字）
+            transcript = (trans.get("transcript") or "").strip()[:200]
+            has_speech = trans.get("has_speech", False)
+
+            parts = [f"- {fname} | {dur}s | {res}"]
+            if desc:
+                parts.append(f"场景:{desc}")
+            if mood:
+                parts.append(f"情绪:{mood}")
+            if obj_list:
+                parts.append(f"物体:{obj_list}")
+            if sem_hint:
+                parts.append(f"语义:{sem_hint}")
+            if has_speech and transcript:
+                parts.append(f"语音内容:「{transcript}」")
+            elif not has_speech:
+                parts.append("语音:无人声")
+            lines.append(" | ".join(parts))
         return "\n".join(lines) if lines else "（未找到素材信息）"
 
     def _sync_topic_library_from_materials(self, materials: Dict) -> None:
@@ -582,7 +598,7 @@ class WorkflowRunner:
                 elif "核心情绪" in clean:
                     emotion = clean.split("：", 1)[-1].split(":", 1)[-1].strip()
                 elif "开场钩子" in clean:
-                    hook = clean.split("：", 1)[-1].split(":", 1)[-1].strip().strip("“”\"")
+                    hook = clean.split("\uff1a", 1)[-1].split(":", 1)[-1].strip().strip('"\'  ')
                 elif "推荐素材" in clean:
                     raw_assets = clean.split("：", 1)[-1].split(":", 1)[-1].strip()
                     recommended_assets = [
@@ -622,26 +638,57 @@ class WorkflowRunner:
         clusters = {}
         all_files = []
         hooks = []
+        all_transcripts = []  # 收集所有转录文本
+
         for _, vdata in materials.items():
             fname = str(vdata.get("filename", "") or "").strip()
             if fname:
                 all_files.append(fname)
 
+            an = vdata.get("analysis", {})
+            trans = an.get("transcription", {})
+            transcript = (trans.get("transcript") or "").strip()
+            has_speech = trans.get("has_speech", False)
+            if has_speech and transcript:
+                all_transcripts.append({"file": fname, "text": transcript})
+
             sem = vdata.get("semantic", {}) if isinstance(vdata.get("semantic", {}), dict) else {}
-            setting = str(sem.get("setting", "") or "").strip() or "旅行场景"
-            activity = str(sem.get("activity", "") or "").strip() or "探索"
-            mood = str(sem.get("mood", "") or "").strip() or "真实"
+            scene = an.get("local_analysis", {}).get("scene", {})
+            # 从多个来源推断 setting/activity，不再硬编码默认值
+            setting = (str(sem.get("setting", "") or "").strip()
+                       or str(scene.get("description", "") or "").strip()[:20]
+                       or "")
+            activity = str(sem.get("activity", "") or "").strip() or ""
+            mood = str(sem.get("mood", "") or scene.get("mood", "") or "").strip() or ""
+
+            # 如果有转录文本，用前 30 字作为 setting 补充
+            if not setting and has_speech and transcript:
+                setting = transcript[:30]
+            if not setting:
+                setting = fname.rsplit(".", 1)[0][:20] if fname else "未知场景"
+            if not activity:
+                activity = "记录"
+            if not mood:
+                mood = "真实"
+
             key = (setting, activity)
-            info = clusters.setdefault(key, {"count": 0, "mood": {}, "files": []})
+            info = clusters.setdefault(key, {"count": 0, "mood": {}, "files": [], "transcripts": []})
             info["count"] += 1
             info["mood"][mood] = info["mood"].get(mood, 0) + 1
             if fname:
                 info["files"].append(fname)
+            if has_speech and transcript:
+                info["transcripts"].append(transcript[:100])
 
             hint = self._material_scene_hint(vdata)
             if hint:
                 hooks.append(hint)
 
+        # 如果有转录文本，优先基于内容生成选题
+        if all_transcripts:
+            return self._generate_topics_from_transcripts(all_transcripts, all_files, materials)
+
+        # 无转录文本 → 基于视觉分析生成
         ranked = sorted(
             clusters.items(),
             key=lambda kv: kv[1]["count"],
@@ -651,11 +698,11 @@ class WorkflowRunner:
         for idx, ((setting, activity), info) in enumerate(ranked[:5], 1):
             mood = max(info["mood"], key=info["mood"].get) if info["mood"] else "真实"
             picks = info.get("files", [])[:5]
-            hook = hooks[idx - 1][:24] if idx - 1 < len(hooks) else f"{setting}里最抓人的一幕"
+            hook = hooks[idx - 1][:24] if idx - 1 < len(hooks) else f"最抓人的一幕"
             topics.append({
                 "index": idx,
                 "title": f"{setting}·{activity}高光合集",
-                "theme": f"围绕“{setting}+{activity}”展开，突出真实现场感和人物情绪起伏。",
+                "theme": f"围绕\u300c{setting}+{activity}\u300d展开，突出真实现场感和人物情绪起伏。",
                 "emotion": mood,
                 "duration": "60秒" if info["count"] >= 3 else "45秒",
                 "hook": hook,
@@ -663,19 +710,105 @@ class WorkflowRunner:
                 "_from_materials": True,
             })
 
-        while len(topics) < 5:
+        while len(topics) < 3:
             idx = len(topics) + 1
             fallback_files = all_files[(idx - 1) * 2:(idx - 1) * 2 + 4] or all_files[:4]
             topics.append({
                 "index": idx,
-                "title": f"旅行素材混剪方案{idx}",
+                "title": f"素材混剪方案{idx}",
                 "theme": "基于现有素材做节奏剪辑，突出前3秒钩子和结尾记忆点。",
                 "emotion": "真实",
                 "duration": "45秒",
                 "hook": "先看这一秒，再决定要不要划走",
                 "recommended_assets": fallback_files[:5],
+                "_from_materials": True,
             })
 
+        return topics[:5]
+
+    def _generate_topics_from_transcripts(self, transcripts: List[Dict], all_files: List[str], materials: Dict) -> List[Dict]:
+        """基于转录文本生成选题（有人声的情况）"""
+        # 合并所有转录文本
+        combined = " ".join(t["text"] for t in transcripts)
+
+        # 提取关键词（简单频率分析）
+        import re as _re
+        # 去掉标点和常见停用词
+        stopwords = {"的", "了", "在", "是", "我", "你", "他", "她", "们", "这", "那",
+                     "有", "就", "不", "都", "也", "很", "到", "说", "会", "去", "能",
+                     "和", "着", "地", "得", "把", "被", "让", "给", "但", "而", "又",
+                     "一个", "一", "什么", "怎么", "嗯", "啊", "哦", "吧", "呢", "吗",
+                     "然后", "所以", "因为", "如果", "可以", "没有", "这个", "那个"}
+        words = _re.findall(r'[\u4e00-\u9fff]{2,4}', combined)
+        freq = {}
+        for w in words:
+            if w not in stopwords and len(w) >= 2:
+                freq[w] = freq.get(w, 0) + 1
+        top_words = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:15]
+        keywords = [w for w, _ in top_words[:8]]
+
+        # 生成基于内容的选题
+        topics = []
+
+        # 选题 1：基于核心内容
+        core_keywords = keywords[:3] if keywords else ["精彩瞬间"]
+        topic1_title = "·".join(core_keywords[:2]) if len(core_keywords) >= 2 else core_keywords[0]
+        first_sentence = transcripts[0]["text"][:50].strip()
+        topics.append({
+            "index": 1,
+            "title": f"{topic1_title}｜真实记录",
+            "theme": f"围绕「{'、'.join(core_keywords)}」展开叙事，用第一人称视角讲述真实体验。",
+            "emotion": "真实",
+            "duration": "60秒",
+            "hook": f"「{first_sentence[:20]}」",
+            "recommended_assets": [t["file"] for t in transcripts[:5]],
+            "_from_materials": True,
+        })
+
+        # 选题 2：情绪向剪辑
+        if len(keywords) >= 4:
+            emotion_keywords = keywords[2:5]
+            topics.append({
+                "index": 2,
+                "title": f"{'·'.join(emotion_keywords[:2])}｜氛围感混剪",
+                "theme": f"以情绪为线索，围绕「{'、'.join(emotion_keywords)}」营造沉浸氛围。",
+                "emotion": "共鸣",
+                "duration": "45秒",
+                "hook": "有些画面，看一眼就忘不掉",
+                "recommended_assets": all_files[:5],
+                "_from_materials": True,
+            })
+
+        # 选题 3：叙事向
+        if len(transcripts) >= 2:
+            topics.append({
+                "index": len(topics) + 1,
+                "title": "完整叙事版｜从头到尾",
+                "theme": "按时间线完整呈现，保留原声对话和环境音，最大化故事完整度。",
+                "emotion": "真实",
+                "duration": "90秒" if len(transcripts) >= 3 else "60秒",
+                "hook": f"「{first_sentence[:20]}」",
+                "recommended_assets": [t["file"] for t in transcripts],
+                "_from_materials": True,
+            })
+
+        # 填充到至少 3 个
+        while len(topics) < 3:
+            idx = len(topics) + 1
+            topics.append({
+                "index": idx,
+                "title": f"节奏混剪方案{idx}",
+                "theme": "基于素材内容做节奏剪辑，突出前3秒钩子和结尾记忆点。",
+                "emotion": "真实",
+                "duration": "45秒",
+                "hook": "先看这一秒，再决定要不要划走",
+                "recommended_assets": all_files[:5],
+                "_from_materials": True,
+            })
+
+        # 重新编号
+        for i, t in enumerate(topics, 1):
+            t["index"] = i
         return topics[:5]
 
     def _write_review_02(self, ai_response: str, summary: str, topics: List[Dict]):

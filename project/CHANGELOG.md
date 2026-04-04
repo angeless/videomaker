@@ -4,6 +4,81 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/) 规范。
 
+## [0.16.0] - 2026-04-03
+
+### 新增 (Added)
+- AI 重编辑引擎
+  - R1-R2: CommentResolver — 时间→segment 二分搜索映射 + gap 检测
+  - R3-R4: IntentRouter — 自然语言→14 类结构化编辑指令 (LLM + 关键词回退)
+  - R5-R6: EditPlanner — 指令应用 + 冲突检测 + diff 生成
+  - R7-R8: NodeManager — 10 节点 DAG 拓扑排序 + 选择性重跑 (auto/skip/force)
+  - R9: render_incremental() — 增量渲染 + artifact 缓存
+  - R10: AI Reedit API — POST /api/review/<id>/ai-reedit (202 async) + dry-run
+  - R11: AI Reply API — GET /api/review/<id>/comments/<cid>/ai-reply
+  - R12: VersionDiff.vue — 时间轴 diff 标记 (绿/红/黄)
+- 增强能力
+  - R14: AudioEnhancer — FFmpeg afftdn+eq+compressor+loudnorm (-ar 44100)
+  - R15: TTSVoiceover — edge-tts adapter + 4 语音预设
+  - R16: BGMSelector — librosa 节拍分析 + beat sync ±200ms 微调
+  - R17: TransitionEffects — 12 种效果 (xfade + 自定义)
+  - R18: StockMedia — Pexels API adapter (搜索 + 下载)
+  - R19: SocialReframe — 7 平台预设 (tiktok/ig/yt/shorts/wechat/xhs/square)
+  - R20: StyleSkill — YAML 风格配置 (保存/加载/自动提取)
+  - R21: CommentExporter — JSON/CSV/EDL (CMX 3600) 导出
+  - R13: EnhancePanel.vue — 5-tab 增强面板
+  - R21: ExportDialog.vue — 格式选择 + 预览 + 复制
+- API 路由
+  - R22: enhance_routes — 5 个增强端点 (audio/tts/bgm/transition/reframe)
+  - R23: stock_routes — 搜索 + 下载
+  - R24: style_routes — 风格 CRUD
+
+### 修复 (Fixed)
+- review_routes.py 调用不存在的 store.get_comments() → 修正为 list_comments()
+- comment_exporter.py EDL 导出 _ms_to_smpte(None) 崩溃
+- security.py Python 3.9 不兼容 `dict | None` → Optional[dict]
+- style_skills.py 硬依赖 yaml → 可选依赖 + 优雅降级
+- bgm_selector.py librosa+scipy 版本不兼容 → try/except 降级
+
+### 测试 (Tests)
+- 新增 148 个测试 (118 unit + 30 integration/smoke)
+- 全量回归 1289 passed, 54 skipped, 0 new failures
+
+## [0.15.0] - 2026-04-01
+
+### 新增 (Added)
+- 核心评审 UI (14 Vue 组件)
+  - R1: ReviewPlayer — HTML5 视频播放器 + 缩放/平移/全屏
+  - R2-R4: PlayerControls — 进度条、SMPTE 时间码、速度/音量/IO 控制
+  - R5: CommentInput — 评审类型选择器 (7 类) + 文本输入 + 时间范围
+  - R6: CommentCard — 单条评审显示 (类型徽章/时间码/状态)
+  - R7: CommentPanel — 评审侧边栏 (筛选/排序/计数)
+  - R8: TrackComments — 时间轴评审标记 + tooltip
+  - R9: ReviewTimeline — 时间尺/轨道容器/缩放控制
+  - R12-R15: DrawingOverlay — Canvas 标注 (画笔/箭头/矩形/椭圆)
+  - R13: AnnotationToolbar — 工具/颜色/线宽选择
+  - R17: ThumbnailStrip — 精灵图时间轴缩略图
+  - R19: WaveformTrack — Canvas 音频波形可视化
+  - R20: SubtitleEditor — 时间轴字幕块
+  - R21: SafeZoneOverlay — 宽高比安全区参考线
+  - R22: VersionSwitcher — 版本导航 + 下拉列表
+- 评审基础设施
+  - R10: useKeyboardShortcuts — 模式感知键盘快捷键 (40+ 绑定)
+  - R11: review.js Pinia store — 完整评审状态管理
+  - ReviewView.vue — 主评审页面布局 (3 面板)
+  - /review 路由注册
+- 后端生成器 (FFmpeg)
+  - R16: thumbnail_generator.py — 精灵图缩略图生成
+  - R18: waveform_generator.py — 音频峰值提取
+  - 升级 review_routes.py 中的 thumbnails/waveform 端点 (stub → 实际实现)
+
+### 变更 (Changed)
+- review API thumbnails/waveform 端点从 stub (202) 升级为真实 FFmpeg 处理 (200/500)
+
+### 测试 (Tests)
+- 新增 13 个测试 (thumbnail_generator 6 + waveform_generator 7)
+- 更新 4 个测试适配非 stub 行为
+- 全量回归: 1184 passed, 0 failed
+
 ## [0.14.0] - 2026-03-31
 
 ### 新增 (Added)

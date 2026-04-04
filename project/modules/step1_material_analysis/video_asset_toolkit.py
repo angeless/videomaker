@@ -138,10 +138,10 @@ class VideoAssetToolkit:
         if self.config["local_models"]["enabled"]:
             result["local_analysis"] = self.local_analysis(video_path)
 
-        # 语音转录
+        # 语音转录（默认开启：faster-whisper VAD 自动跳过无语音视频）
         do_transcribe = enable_transcription
         if do_transcribe is None:
-            do_transcribe = self.config.get("transcription", {}).get("enabled", False)
+            do_transcribe = self.config.get("transcription", {}).get("enabled", True)
         if do_transcribe:
             result["transcription"] = self._transcribe_video(video_path)
 

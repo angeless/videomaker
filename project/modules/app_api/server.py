@@ -57,6 +57,9 @@ from modules.app_api.routes.ui_routes import create_ui_blueprint
 from modules.app_api.routes.workflow_routes import create_workflow_blueprint
 from modules.app_api.routes.review_routes import create_review_blueprint
 from modules.app_api.routes.roughcut_routes import create_roughcut_blueprint
+from modules.app_api.routes.enhance_routes import create_enhance_blueprint
+from modules.app_api.routes.stock_routes import create_stock_blueprint
+from modules.app_api.routes.style_routes import create_style_blueprint
 from modules.workflow_engine.workflow import WorkflowState, WorkflowRunner
 from modules.library.global_media_library import GlobalMediaLibrary
 from modules.step2_topic_planning.ai_client import AIClient
@@ -489,6 +492,23 @@ app.register_blueprint(
 app.register_blueprint(
     create_roughcut_blueprint(
         review_store_getter=_get_review_store,
+    )
+)
+
+app.register_blueprint(
+    create_enhance_blueprint(
+        review_store_getter=_get_review_store,
+        jobs_getter=lambda: _jobs,
+    )
+)
+app.register_blueprint(
+    create_stock_blueprint(
+        jobs_getter=lambda: _jobs,
+    )
+)
+app.register_blueprint(
+    create_style_blueprint(
+        project_dir_getter=lambda: _project_dir,
     )
 )
 

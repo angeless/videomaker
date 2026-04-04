@@ -3,16 +3,23 @@
     <!-- Header: stats + actions (R13) -->
     <div class="te-header">
       <div class="te-stats">
-        <span class="te-stat">{{ activeParagraphs.length }}/{{ paragraphs.length }} 段落</span>
+        <span class="te-stat">原始 {{ formatDuration(store.totalDurationMs) }}</span>
+        <span class="te-stat">已删 {{ formatDuration(deletedDurationMs) }}</span>
         <span class="te-stat">预计 {{ formatDuration(store.estimatedDurationMs) }}</span>
+        <span class="te-stat">语气词 {{ fillers.length }}</span>
+        <span class="te-stat">重复 {{ retakeCount }}</span>
+        <span class="te-stat">静音 {{ silenceCount }}</span>
         <span v-if="hookParagraph" class="te-stat hook-badge">Hook ¶{{ hookParagraph.idx }}</span>
       </div>
       <div class="te-actions">
-        <button class="btn btn-ghost btn-sm" @click="removeAllFillers" :disabled="!fillers.length">
-          清除语气词 ({{ fillers.length }})
+        <button class="btn btn-accent btn-sm" @click="acceptAllAI" :disabled="!hasAIMarks">
+          全部接受
+        </button>
+        <button class="btn btn-ghost btn-sm" @click="acceptFillersOnly" :disabled="!fillers.length">
+          只接受语气词
         </button>
         <button class="btn btn-ghost btn-sm" @click="restoreAll" :disabled="!deletedCount">
-          恢复全部 ({{ deletedCount }})
+          全部拒绝
         </button>
         <button class="btn btn-primary btn-sm" @click="submitChanges" :disabled="!hasChanges">
           提交编辑
@@ -41,6 +48,7 @@
         :retakeWordIndices="retakeIndicesForParagraph(p.idx)"
         @seek="onSeek"
         @toggle="onToggle"
+        @markHook="onMarkHook"
       />
     </div>
   </div>
@@ -69,6 +77,20 @@ const hookParagraph = computed(() => {
 
 // Track if user has made changes
 const hasChanges = ref(false)
+
+// R13: Extended stats
+const deletedDurationMs = computed(() =>
+  paragraphs.value.filter(p => p.is_deleted).reduce((sum, p) => sum + (p.end_ms - p.start_ms), 0)
+)
+const retakeCount = computed(() =>
+  paragraphs.value.reduce((sum, p) => sum + (p.retake_marks?.length || 0), 0)
+)
+const silenceCount = computed(() =>
+  paragraphs.value.filter(p => p.is_silence).length
+)
+const hasAIMarks = computed(() =>
+  paragraphs.value.some(p => p.ai_marked_delete || p.ai_marked_filler)
+)
 
 // R10: Build filler/retake word index sets per paragraph
 function fillerIndicesForParagraph(paraIdx) {
@@ -104,9 +126,25 @@ function onToggle(idx) {
   hasChanges.value = true
 }
 
-// Batch actions
-function removeAllFillers() {
+// R13: Batch actions
+function acceptAllAI() {
+  for (const p of paragraphs.value) {
+    if ((p.ai_marked_delete || p.ai_marked_filler) && !p.is_deleted) {
+      store.toggleParagraph(p.idx)
+    }
+  }
   store.batchRemoveFillers()
+  hasChanges.value = true
+}
+
+function acceptFillersOnly() {
+  store.batchRemoveFillers()
+  hasChanges.value = true
+}
+
+// R13: Mark paragraph as hook (copied to beginning)
+function onMarkHook(idx) {
+  store.markHook(idx)
   hasChanges.value = true
 }
 

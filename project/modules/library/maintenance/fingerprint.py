@@ -88,7 +88,7 @@ class FingerprintMixin:
         if len(x) != len(y):
             return None
         try:
-            return int(int(x, 16) ^ int(y, 16)).bit_count()
+            return bin(int(x, 16) ^ int(y, 16)).count("1")
         except Exception:
             return None
 
