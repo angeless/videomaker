@@ -125,10 +125,15 @@ class TestBeautyV2Pipeline:
         assert result.shape == synthetic_image.shape
 
     def test_pipeline_degradation_tracking(self, synthetic_image):
+        from modules.step7_final_render.beauty import HAS_MEDIAPIPE
         degradations = []
         apply_beauty_v2(synthetic_image, degradations=degradations)
-        # Without mediapipe, should have face_detection degradation
-        assert any(d["feature"] == "face_detection" for d in degradations)
+        if not HAS_MEDIAPIPE:
+            # Without mediapipe, should have face_detection degradation
+            assert any(d["feature"] == "face_detection" for d in degradations)
+        else:
+            # With mediapipe available, no degradation on a faceless image
+            assert not any(d["feature"] == "face_detection" for d in degradations)
 
     def test_pipeline_all_luts(self, synthetic_image):
         for name in LUT_PRESETS:

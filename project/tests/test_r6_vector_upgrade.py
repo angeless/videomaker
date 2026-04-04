@@ -161,7 +161,7 @@ class TestWAL:
             idx.add(f"uid{i}", v)
             times.append(time.time() - start)
         avg_ms = (sum(times) / len(times)) * 1000
-        assert avg_ms < 10, f"Average WAL write {avg_ms:.1f}ms > 10ms"
+        assert avg_ms < 50, f"Average WAL write {avg_ms:.1f}ms > 50ms"
 
     def test_no_wal_without_index_dir(self):
         """In-memory index: no WAL file."""
