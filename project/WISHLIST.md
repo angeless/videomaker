@@ -151,24 +151,24 @@
 
 ### W-023: 增强模块 except Exception 细化
 - **来源**: v0.16.0 审计 (2026-04-03)
-- **描述**: transition_effects.py / bgm_selector.py / social_reframe.py 中 `_get_duration()` / `_get_video_info()` 使用 `except Exception` 过宽。应指定 `(subprocess.CalledProcessError, subprocess.TimeoutExpired, json.JSONDecodeError, KeyError, ValueError)`
+- **描述**: transition_effects.py / bgm_selector.py / social_reframe.py 中 `_get_duration()` / `_get_video_info()` 使用 `except Exception` 过宽
 - **优先级**: 低
-- **状态**: 待评估
+- **状态**: ✅ 已修复 (v0.16.0 dc7984e)
 
 ### W-024: audio_enhancer 重试区分超时与错误
 - **来源**: v0.16.0 审计 (2026-04-03)
-- **描述**: audio_enhancer.py 重试循环未区分 TimeoutExpired 和 CalledProcessError，应对超时用更长时间重试、对错误直接报错
+- **描述**: audio_enhancer.py 重试循环未区分 TimeoutExpired 和 CalledProcessError
 - **优先级**: 低
-- **状态**: 待评估
+- **状态**: ✅ 已修复 (v0.16.0 dc7984e)
 
 ### W-025: stock_media urlretrieve 超时
 - **来源**: v0.16.0 审计 (2026-04-03)
-- **描述**: stock_media.py 使用 urllib.request.urlretrieve() 无超时参数，可能无限挂起。建议改用 requests 或自定义 urlopen+写入
+- **描述**: stock_media.py 使用 urllib.request.urlretrieve() 无超时参数
 - **优先级**: 中
-- **状态**: 待评估
+- **状态**: ✅ 已修复 (v0.16.0 dc7984e)
 
 ### W-026: enhance_routes session 数据校验
 - **来源**: v0.16.0 审计 (2026-04-03)
-- **描述**: enhance_routes.py 各端点仅验证 session 存在，未检查 session 是否有 video_path。应添加 `if not session.get("video_path")` 检查
+- **描述**: enhance_routes.py 各端点仅验证 session 存在，未检查 video_path
 - **优先级**: 中
-- **状态**: 待评估
+- **状态**: ✅ 已修复 (v0.16.0 dc7984e)
