@@ -155,6 +155,142 @@ class VLMAnalyzer:
             visual_issues=[],
         )
 
+    # ------------------------------------------------------------------
+    # R14: AI Reviewer — generate diagnostic comments
+    # ------------------------------------------------------------------
+
+    _SEVERITY_STATUS = {
+        "info": "info",
+        "warning": "open",
+        "error": "flagged",
+    }
+
+    _TYPE_LABELS = {
+        "composition": "构图",
+        "exposure": "曝光",
+        "color_temp": "色温",
+        "continuity": "连续性",
+    }
+
+    @staticmethod
+    def generate_ai_review(
+        store: Any,
+        session_id: str,
+        version: int,
+        diagnostics: List[Any],
+        scene_times: Optional[Dict[int, tuple]] = None,
+    ) -> int:
+        """Convert diagnostic issues into AI review comments.
+
+        Args:
+            store: ReviewStore instance.
+            session_id: Review session ID.
+            version: Current version number.
+            diagnostics: List[DiagnosticIssue].
+            scene_times: Optional {scene_idx: (start_ms, end_ms)} mapping.
+
+        Returns:
+            Number of comments created.
+        """
+        if not diagnostics:
+            return 0
+
+        # Check existing AI comments to avoid duplicates (idempotency)
+        existing = store.list_comments(session_id, filter_ai=True)
+        existing_descs = {c["text"] for c in existing}
+
+        created = 0
+        for diag in diagnostics:
+            label = VLMAnalyzer._TYPE_LABELS.get(diag.issue_type, diag.issue_type)
+            text = f"[{label}] {diag.description}"
+            if diag.suggestion:
+                text += f" — {diag.suggestion}"
+            text += " — AI 诊断"
+
+            if text in existing_descs:
+                continue
+
+            # Determine time range from scene_times
+            start_ms = 0
+            end_ms = None
+            if scene_times and diag.scene_idx is not None:
+                times = scene_times.get(diag.scene_idx)
+                if times:
+                    start_ms, end_ms = times
+
+            status = VLMAnalyzer._SEVERITY_STATUS.get(diag.severity, "info")
+            store.add_comment(
+                session_id=session_id,
+                version=version,
+                time_start_ms=start_ms,
+                time_end_ms=end_ms,
+                comment_type="ai_diagnostic",
+                text=text,
+                ai_generated=True,
+            )
+            # Update status after creation
+            comments = store.list_comments(session_id, filter_ai=True)
+            for c in comments:
+                if c["text"] == text and c["status"] != status:
+                    try:
+                        store.update_comment(c["comment_id"], status=status)
+                    except Exception:
+                        pass  # update_comment may not support status
+            created += 1
+
+        return created
+
+    # ------------------------------------------------------------------
+    # R10: Reference resolution
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def resolve_references(
+        comment_text: str,
+        visual_context: Optional["RegionDescription"] = None,
+    ) -> str:
+        """Replace vague references with concrete objects from VLM context.
+
+        Examples:
+            "这个太大了" + objects=["logo"] → "logo 太大了"
+            "颜色不对" + visual_issues=["色温偏冷"] → "颜色不对（色温偏冷）"
+        """
+        if visual_context is None or not comment_text:
+            return comment_text
+
+        result = comment_text
+
+        # Chinese demonstrative pronouns to replace
+        _SINGLE_REF = ["这个", "那个", "它", "这里", "那里", "这边", "那边", "这"]
+        _PLURAL_REF = ["这些", "那些", "它们"]
+
+        objects = visual_context.objects or []
+        issues = visual_context.visual_issues or []
+
+        # Replace single-object references
+        if objects:
+            obj_str = (
+                objects[0] if len(objects) == 1
+                else " 和 ".join(objects[:3])
+            )
+            for ref in _SINGLE_REF:
+                if ref in result:
+                    result = result.replace(ref, obj_str, 1)
+                    break
+
+            for ref in _PLURAL_REF:
+                if ref in result:
+                    result = result.replace(ref, obj_str, 1)
+                    break
+
+        # Append visual issues as clarification
+        if issues and ("颜色" in result or "色" in result or "光" in result or "暗" in result or "亮" in result):
+            issue_str = "、".join(issues[:2])
+            if issue_str not in result:
+                result += f"（{issue_str}）"
+
+        return result
+
     @staticmethod
     def _make_cache_key(
         image: Any, context: Optional[AnalysisContext] = None
