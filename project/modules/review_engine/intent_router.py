@@ -114,6 +114,7 @@ def route_comment(
     segment_idx: Optional[int],
     context: Optional[Dict] = None,
     llm_caller: Optional[Callable] = None,
+    visual_context: Optional[Dict] = None,
 ) -> List[EditInstruction]:
     """Route a comment through LLM to get edit instructions.
 
@@ -123,9 +124,13 @@ def route_comment(
         context: Optional context (video_type, duration, etc.)
         llm_caller: Callable(system_prompt, user_prompt) -> str
                     If None, uses keyword-based fallback
+        visual_context: Optional VLM analysis dict (v0.17.0 R9).
+                        Keys: summary, objects, scene_type, visual_issues
     """
     if llm_caller is not None:
-        return _route_via_llm(comment_text, segment_idx, context, llm_caller)
+        return _route_via_llm(
+            comment_text, segment_idx, context, llm_caller, visual_context
+        )
     return _route_via_keywords(comment_text, segment_idx)
 
 
@@ -134,6 +139,7 @@ def _route_via_llm(
     segment_idx: Optional[int],
     context: Optional[Dict],
     llm_caller: Callable,
+    visual_context: Optional[Dict] = None,
 ) -> List[EditInstruction]:
     """Use LLM to parse comment into instructions."""
     ctx_str = ""
@@ -144,7 +150,22 @@ def _route_via_llm(
     if segment_idx is not None:
         seg_str = f"\n目标片段索引: {segment_idx}"
 
-    user_prompt = f"评论: {comment_text}{seg_str}{ctx_str}"
+    # v0.17.0 R9: Inject visual context from VLM analysis
+    vis_str = ""
+    if visual_context:
+        vis_parts = []
+        if visual_context.get("summary"):
+            vis_parts.append(f"画面描述: {visual_context['summary']}")
+        if visual_context.get("objects"):
+            vis_parts.append(f"识别对象: {', '.join(visual_context['objects'])}")
+        if visual_context.get("scene_type"):
+            vis_parts.append(f"场景类型: {visual_context['scene_type']}")
+        if visual_context.get("visual_issues"):
+            vis_parts.append(f"画面问题: {', '.join(visual_context['visual_issues'])}")
+        if vis_parts:
+            vis_str = "\n[画面上下文]\n" + "\n".join(vis_parts)
+
+    user_prompt = f"评论: {comment_text}{seg_str}{ctx_str}{vis_str}"
 
     try:
         response = llm_caller(SYSTEM_PROMPT, user_prompt)
@@ -216,12 +237,8 @@ def _route_via_keywords(
             break  # One keyword match per comment in fallback mode
 
     if not instructions:
-        # Default: treat as a general note, no instruction
-        instructions.append(EditInstruction(
-            instruction_type="remove",
-            segment_idx=segment_idx,
-            params={},
-        ))
+        # No matching keyword — return empty (no auto-action for unrecognized text)
+        pass
 
     return instructions
 

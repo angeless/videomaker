@@ -16,6 +16,8 @@
 import { ref, reactive, computed, watch, onMounted, nextTick } from 'vue'
 import { useReviewStore } from '../../stores/review.js'
 
+const emit = defineEmits(['annotationComplete'])
+
 const store = useReviewStore()
 const containerRef = ref(null)
 const canvasRef = ref(null)
@@ -101,6 +103,7 @@ function onMouseUp() {
   currentStroke.value = null
   redraw()
   serializeToStore()
+  emitAnnotationComplete()
 }
 
 function getPos(e) {
@@ -284,6 +287,35 @@ function serializeToStore() {
     return
   }
   store.drawingData = JSON.stringify(strokes.value)
+}
+
+// ── R8 (v0.17.0): Debounced annotation complete event ──
+let _annotationTimer = null
+
+function emitAnnotationComplete() {
+  if (_annotationTimer) clearTimeout(_annotationTimer)
+  _annotationTimer = setTimeout(() => {
+    if (strokes.value.length === 0) return
+    // Capture current video frame as data URL
+    let frameDataUrl = null
+    try {
+      const video = document.querySelector('.review-player video')
+      if (video) {
+        const c = document.createElement('canvas')
+        c.width = video.videoWidth || video.clientWidth
+        c.height = video.videoHeight || video.clientHeight
+        c.getContext('2d').drawImage(video, 0, 0, c.width, c.height)
+        frameDataUrl = c.toDataURL('image/jpeg', 0.85)
+      }
+    } catch (e) {
+      // tainted canvas or no video — proceed without frame
+    }
+    emit('annotationComplete', {
+      strokes: JSON.parse(JSON.stringify(strokes.value)),
+      frameDataUrl,
+      timestamp_ms: store.currentTimeMs || 0,
+    })
+  }, 500) // 500ms debounce
 }
 
 // ── Load from store (for editing existing drawing) ──

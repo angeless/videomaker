@@ -38,6 +38,16 @@
       </template>
     </div>
 
+    <!-- R7 (v0.17.0): AI description prefill from VLM -->
+    <div v-if="aiHint || aiHintLoading" class="ci-ai-hint">
+      <span v-if="aiHintLoading" class="ci-ai-spinner">分析画面中…</span>
+      <template v-else>
+        <span class="ci-ai-label">AI:</span>
+        <span class="ci-ai-text">{{ aiHint }}</span>
+        <button class="ci-ai-dismiss" @click="dismissAiHint" title="关闭">✕</button>
+      </template>
+    </div>
+
     <!-- Text input -->
     <textarea
       ref="textareaRef"
@@ -73,6 +83,11 @@ const text = ref('')
 const hasRange = ref(false)
 const rangeEndMs = ref(0)
 
+// R7 (v0.17.0): AI hint from VLM analysis
+const aiHint = ref('')
+const aiHintLoading = ref(false)
+const visualContext = ref(null) // stored VLM analysis result
+
 const canSubmit = computed(() => text.value.trim().length > 0 && selectedType.value)
 
 // Auto-focus textarea when entering comment mode
@@ -89,6 +104,23 @@ function selectTypeByKey(key) {
   if (ct) selectedType.value = ct.type
 }
 
+// R7: Set AI hint from VLM analysis (called by parent via expose)
+async function setAiHint(description) {
+  if (description && description.summary && description.summary !== '[画面区域]') {
+    aiHint.value = description.summary
+    visualContext.value = description
+  }
+}
+
+function setAiHintLoading(loading) {
+  aiHintLoading.value = loading
+}
+
+function dismissAiHint() {
+  aiHint.value = ''
+  visualContext.value = null
+}
+
 async function submit() {
   if (!canSubmit.value) return
   try {
@@ -98,6 +130,7 @@ async function submit() {
       commentType: selectedType.value,
       text: text.value.trim(),
       drawingData: store.drawingData,
+      visualContext: visualContext.value ? JSON.stringify(visualContext.value) : null,
     })
     text.value = ''
     selectedType.value = 'general'
@@ -124,7 +157,7 @@ function formatTime(ms) {
   return m + ':' + String(sec).padStart(2, '0')
 }
 
-defineExpose({ selectTypeByKey })
+defineExpose({ selectTypeByKey, setAiHint, setAiHintLoading, dismissAiHint })
 </script>
 
 <style scoped>
@@ -224,6 +257,51 @@ defineExpose({ selectTypeByKey })
   padding: 2px 6px;
   border-radius: 3px;
   font-size: 0.7rem;
+}
+
+.ci-ai-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  background: #2a2a3a;
+  border: 1px solid #4a4a6a;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  color: #aab;
+}
+
+.ci-ai-label {
+  color: #7b8cff;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.ci-ai-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ci-ai-dismiss {
+  background: none;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 0.7rem;
+  flex-shrink: 0;
+}
+
+.ci-ai-dismiss:hover {
+  color: #fff;
+}
+
+.ci-ai-spinner {
+  color: #7b8cff;
+  font-style: italic;
 }
 
 .ci-textarea {

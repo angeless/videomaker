@@ -1,61 +1,46 @@
 # VideoEditor — 待办进度
 
-> 更新于 2026-04-03
+> 更新于 2026-04-04
 
-## 当前版本：v0.16.0 — AI 重编辑引擎 + 增强能力
-## 当前状态：Phase 6 收尾完成，待 commit + PR
+## 当前版本：v0.17.0 — VLM 画笔分析引擎
+## 当前状态：版本完成 — 待 PR 合并
 
-## 三版本规划
+## 版本规划
 
 | 版本 | 内容 | R 任务数 | 计划文档 | 状态 |
 |------|------|---------|---------|------|
-| v0.14.0 | 智能粗剪 + 评审数据层 | 29 | `docs/dev-plans/dev-plan-v0.14.0.md` | Done (merged PR #7) |
-| v0.15.0 | 核心评审 UI + 高级标注 | 23 | `docs/dev-plans/dev-plan-v0.15.0.md` | Done (merged PR #8) |
-| v0.16.0 | AI 重编辑引擎 + 增强能力 | 25 | `docs/dev-plans/dev-plan-v0.16.0.md` | Phase 6 完成 |
+| v0.14.0 | 智能粗剪 + 评审数据层 | 29 | `docs/dev-plans/dev-plan-v0.14.0.md` | Done |
+| v0.15.0 | 核心评审 UI + 高级标注 | 23 | `docs/dev-plans/dev-plan-v0.15.0.md` | Done |
+| v0.16.0 | AI 重编辑引擎 + 增强能力 | 25 | `docs/dev-plans/dev-plan-v0.16.0.md` | Done |
+| v0.17.0 | VLM 画笔分析引擎 | 18 | `docs/dev-plans/dev-plan-v0.17.0.md` | Done |
 
-总参考文档: `docs/dev-plans/timeline-review-ai-reedit.md`
+## v0.17.0 完成总结
 
-## v0.16.0 完成总结
-
-- **25 R 任务**: 全部完成
-  - 6 桥接层模块 (comment_resolver/intent_router/edit_planner)
-  - 3 DAG + 渲染 (node_manager/render_incremental)
-  - 8 增强能力 (audio/tts/bgm/transition/stock/reframe/style/export)
-  - 4 API 路由 (review新端点/enhance/stock/style)
-  - 3 Vue 组件 (VersionDiff/EnhancePanel/ExportDialog)
-  - 1 集成测试套件
-- **148 new tests**: 全部通过 (118 unit + 30 integration/smoke)
-- **全量回归**: 1289 passed, 54 skipped, 0 new failures
-- **审计**: A 级通过 (5 Critical 已修复, 4 IMPORTANT → WISHLIST)
-- **分支**: feat/v0.16.0-ai-reedit
-- **审计报告**: `docs/audit/2026-04-03-v0.16.0-phase2-audit.md`
-- **测试报告**: `docs/test-reports/test-report-v0.16.0-phase2.md`
+- **18 R 任务**: 全部完成
+- **86 新增测试**: 全部通过
+- **全量回归**: 1504 passed, 1 skipped, 0 failures
+- **审计**: 7 项发现全部修复 (2 Critical + 5 Important)
+- **分支**: feat/v0.17.0-vlm-analysis
 
 ## 下一步
 
-1. **Commit + PR** — 提交 v0.16.0 代码，创建 PR 合并到 main
-2. **进入 v0.17.0 规划** — 可选方向:
+1. **创建 PR** — feat/v0.17.0-vlm-analysis → main
+2. **进入 v0.18.0 规划** — 可选方向:
    - GPU 加速渲染
    - 动态字幕样式
-   - VLM 画笔分析
    - 多轨道时间线编辑器
+   - VLM 实时视频流分析
 
-## WISHLIST 新增 (v0.16.0 审计)
+## 已知遗留
 
-- W-023: 增强模块 except Exception 细化
-- W-024: audio_enhancer 重试区分超时与错误
-- W-025: stock_media urlretrieve 超时
-- W-026: enhance_routes session 数据校验
+- Issue #3 (settings→adapter 连通): VLM settings UI 保存 API key 但 adapter 从 env var 读取，中间无桥接
+  → 低优先级，v0.18.0 可补
+- Issue #4 (thread-safety doc): _migrate_v17 需加注释说明调用须持锁
+  → 观察级
 
 ## 注意事项
 
-- 基线 commit: main HEAD (v0.15.0 merged)
-- review_engine 独立于 step pipeline (并行路径)
-- 异常继承自 VideoEditorError (modules/exceptions.py)
-- 外部 API (Pexels/TTS) 走 adapters/ 层
-- loudnorm 必须加 `-ar 44100`
-- 大文件 (>50MB) artifact 使用 symlink
-- _error_response 格式: {success, error, message, code, timestamp, trace_id}
-- ReviewStore.execute_locked() 是外部模块访问 DB 的公共 API
-- style_skills 依赖 pyyaml (可选, 无 yaml 时报 ReviewEngineError)
-- librosa beat 分析依赖 scipy (可选, 不兼容时返回空节拍列表)
+- VLM 模块遵循优雅降级原则：VLM 不可用 → 所有现有功能不受影响
+- LLaVA 依赖标记为可选
+- review_engine 独立于 step pipeline（并行路径）
+- Python 3.9: 禁止 `X | None` 语法，用 `Optional[X]`
