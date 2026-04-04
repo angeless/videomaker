@@ -4,6 +4,43 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/) 规范。
 
+## [0.17.0] - 2026-04-04
+
+### 新增 (Added)
+- VLM 画笔分析引擎
+  - R1: VLMAdapter 抽象层 — Protocol + StubAdapter + factory (stub/local_llava/openai/claude)
+  - R2: LocalLlavaAdapter — 本地 LLaVA-7B 推理 (延迟加载, 优雅降级)
+  - R3: APIVisionAdapter — OpenAI GPT-4o + Claude Vision 双 adapter
+  - R4: RegionExtractor — 画笔笔画→裁剪区域 (rect/circle/pen/arrow/spotlight + 归一化坐标自动检测)
+  - R5: VLMAnalyzer — 结构化画面描述 (JSON 解析 + 文本回退 + 缓存)
+  - R6: ReviewStore migration — visual_context + ai_generated 列 (向后兼容)
+- 多模态评审增强
+  - R9: IntentRouter 多模态升级 — visual_context 注入 LLM prompt
+  - R10: 指代消解 — "这个/那个/它" → VLM 识别的具体对象
+- AI 画面诊断
+  - R11: 构图检查 (VLM 辅助: 三分法/头顶空间/水平线/边缘裁切)
+  - R12: 曝光/色温检查 (直方图算法: 高光溢出/阴影死黑/B-R 色温偏移)
+  - R13: 连续性检查 (相邻场景: 亮度跳变/色温跳变)
+  - R14: AI 评审员 — 诊断结果→自动生成 AI 评论 (幂等)
+- 前端集成
+  - R7: CommentInput AI 描述预填充 (loading/提示/关闭)
+  - R8: DrawingOverlay annotationComplete 事件 (500ms debounce + 帧截图)
+  - R15: DiagnosticsPanel.vue — 诊断面板 (severity 色彩编码 + 点击跳转)
+  - R17: VLM 设置页 (provider 选择 + API Key + 测试连接)
+- API
+  - R16: VLM API — POST describe / POST diagnose / GET diagnostics / GET status
+
+### 修复 (Fixed)
+- PIL.Image.convert("HSV") 不支持 → 改用 RGB B-R 通道差值分析色温
+- DrawingOverlay 笔画格式 (type/start/end) 与 RegionExtractor (tool/points) 不匹配 → 自动格式归一化
+- generate_ai_review N+1 查询 → 使用 add_comment 返回的 comment_id
+- 关键词回退模式对未识别文本错误生成 'remove' 指令 → 返回空列表
+- VLM 缓存键只采样 1 像素 → 5 像素采样减少误命中
+
+### 测试 (Tests)
+- 新增 86 个测试 (75 unit + 7 API + 5 integration)
+- 全量回归 1504 passed, 1 skipped, 0 failures
+
 ## [0.16.0] - 2026-04-03
 
 ### 新增 (Added)
