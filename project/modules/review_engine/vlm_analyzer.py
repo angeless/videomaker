@@ -219,7 +219,7 @@ class VLMAnalyzer:
                     start_ms, end_ms = times
 
             status = VLMAnalyzer._SEVERITY_STATUS.get(diag.severity, "info")
-            store.add_comment(
+            comment_id = store.add_comment(
                 session_id=session_id,
                 version=version,
                 time_start_ms=start_ms,
@@ -228,14 +228,12 @@ class VLMAnalyzer:
                 text=text,
                 ai_generated=True,
             )
-            # Update status after creation
-            comments = store.list_comments(session_id, filter_ai=True)
-            for c in comments:
-                if c["text"] == text and c["status"] != status:
-                    try:
-                        store.update_comment(c["comment_id"], status=status)
-                    except Exception:
-                        pass  # update_comment may not support status
+            # Update status using returned comment_id (avoids N+1 query)
+            if status != "pending":
+                try:
+                    store.update_comment(comment_id, status=status)
+                except Exception:
+                    pass  # update_comment may not support status field
             created += 1
 
         return created
@@ -298,12 +296,20 @@ class VLMAnalyzer:
         """Generate a cache key from image content + context."""
         parts = []
         try:
-            # Use image size + a sample of pixel data for fast hashing
             w, h = image.size
             parts.append(f"{w}x{h}")
-            # Sample center pixel
-            cx, cy = w // 2, h // 2
-            parts.append(str(image.getpixel((cx, cy))))
+            # Sample 5 pixels for better uniqueness
+            samples = [
+                (w // 2, h // 2),
+                (w // 4, h // 4),
+                (3 * w // 4, h // 4),
+                (w // 4, 3 * h // 4),
+                (3 * w // 4, 3 * h // 4),
+            ]
+            for sx, sy in samples:
+                sx = min(sx, w - 1)
+                sy = min(sy, h - 1)
+                parts.append(str(image.getpixel((sx, sy))))
         except Exception:
             parts.append("unknown_image")
 

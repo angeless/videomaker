@@ -78,7 +78,7 @@ class RegionExtractor:
             scale_y = frame_h / canvas_h
 
         # Determine the primary tool and compute bounding box
-        tool_type = strokes[0].get("tool", "pen")
+        tool_type = strokes[0].get("tool", strokes[0].get("type", "pen"))
 
         if len(strokes) == 1:
             bbox = self._stroke_to_bbox(strokes[0], scale_x, scale_y)
@@ -116,6 +116,25 @@ class RegionExtractor:
     # Internal helpers
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _normalize_stroke(stroke: Dict) -> Dict:
+        """Normalize DrawingOverlay stroke format differences.
+
+        DrawingOverlay uses 'type' key and 'start'/'end' for rect/circle/arrow.
+        RegionExtractor expects 'tool' key and 'points' list.
+        """
+        result = dict(stroke)
+        # Accept both 'tool' and 'type' keys
+        if "tool" not in result and "type" in result:
+            result["tool"] = result["type"]
+        # Convert 'start'/'end' to 'points' list
+        if "points" not in result and "start" in result:
+            pts = [result["start"]]
+            if "end" in result:
+                pts.append(result["end"])
+            result["points"] = pts
+        return result
+
     def _stroke_to_bbox(
         self,
         stroke: Dict,
@@ -123,6 +142,7 @@ class RegionExtractor:
         scale_y: float,
     ) -> Tuple[int, int, int, int]:
         """Convert a single stroke to (x, y, w, h) bounding box."""
+        stroke = self._normalize_stroke(stroke)
         tool = stroke.get("tool", "pen")
         points = stroke.get("points", [])
 

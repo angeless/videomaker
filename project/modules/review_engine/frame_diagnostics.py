@@ -144,34 +144,34 @@ class FrameDiagnostics:
         return issues
 
     def check_color_temperature(self, frame: Any) -> List[DiagnosticIssue]:
-        """Check color temperature bias using HSV hue analysis."""
+        """Check color temperature bias using RGB blue-red ratio.
+
+        Uses blue vs red channel mean difference instead of HSV hue,
+        because PIL.Image.convert("HSV") is not supported.
+        """
         if not _HAS_NUMPY or not _HAS_PIL:
             return []
 
         issues = []
         try:
-            hsv_img = frame.convert("HSV")
-            arr = np.array(hsv_img)
-            h_mean = np.mean(arr[:, :, 0])  # Hue channel (0-255 in PIL)
+            arr = np.array(frame.convert("RGB")).astype(float)
+            r_mean = np.mean(arr[:, :, 0])
+            b_mean = np.mean(arr[:, :, 2])
 
-            # PIL HSV: H=0-255 maps to 0-360 degrees
-            # Blue/cool: ~150-180 in PIL scale (~210-260 degrees)
-            # Yellow/warm: ~20-40 in PIL scale (~28-57 degrees)
-            neutral_center = 85  # ~120 degrees, greenish-neutral
-
-            shift = abs(h_mean - neutral_center)
-            if h_mean > 140:
+            # Blue-Red difference: positive = cool, negative = warm
+            br_diff = b_mean - r_mean
+            if br_diff > 30:
                 issues.append(DiagnosticIssue(
                     issue_type="color_temp",
                     severity="info",
-                    description=f"色温偏冷 (H均值={h_mean:.0f})",
+                    description=f"色温偏冷 (B-R差={br_diff:.0f})",
                     suggestion="增加暖色调或调整白平衡",
                 ))
-            elif h_mean < 30:
+            elif br_diff < -30:
                 issues.append(DiagnosticIssue(
                     issue_type="color_temp",
                     severity="info",
-                    description=f"色温偏暖 (H均值={h_mean:.0f})",
+                    description=f"色温偏暖 (B-R差={br_diff:.0f})",
                     suggestion="降低暖色调或调整白平衡",
                 ))
 
@@ -226,10 +226,12 @@ class FrameDiagnostics:
                             description=f"亮度跳变 {jump:.0%} (场景 {idx_a}→{idx_b})",
                         ))
 
-                # Color temperature jump (HSV H channel)
-                hsv_a = np.array(frames[i].convert("HSV"))
-                hsv_b = np.array(frames[i + 1].convert("HSV"))
-                h_diff = abs(float(np.mean(hsv_a[:, :, 0])) - float(np.mean(hsv_b[:, :, 0])))
+                # Color temperature jump (blue-red ratio difference)
+                rgb_a = np.array(frames[i].convert("RGB")).astype(float)
+                rgb_b = np.array(frames[i + 1].convert("RGB")).astype(float)
+                br_a = np.mean(rgb_a[:, :, 2]) - np.mean(rgb_a[:, :, 0])
+                br_b = np.mean(rgb_b[:, :, 2]) - np.mean(rgb_b[:, :, 0])
+                h_diff = abs(br_a - br_b)
                 if h_diff > COLOR_TEMP_SHIFT_H:
                     issues.append(ContinuityIssue(
                         scene_a_idx=idx_a,

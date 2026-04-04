@@ -237,12 +237,8 @@ def _route_via_keywords(
             break  # One keyword match per comment in fallback mode
 
     if not instructions:
-        # Default: treat as a general note, no instruction
-        instructions.append(EditInstruction(
-            instruction_type="remove",
-            segment_idx=segment_idx,
-            params={},
-        ))
+        # No matching keyword — return empty (no auto-action for unrecognized text)
+        pass
 
     return instructions
 
