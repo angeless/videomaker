@@ -100,6 +100,38 @@
           </div>
         </div>
 
+        <!-- R17 (v0.17.0): VLM 画面分析设置 -->
+        <div class="card">
+          <div class="card-header">🧠 VLM 画面分析</div>
+
+          <div class="form-group">
+            <label class="form-label">分析引擎</label>
+            <select v-model="vlmProvider" class="form-select" @change="onVlmProviderChanged">
+              <option value="">未启用</option>
+              <option value="local_llava">本地 LLaVA（离线，需 8GB+ 内存）</option>
+              <option value="openai">OpenAI GPT-4o（联网，需 API Key）</option>
+              <option value="claude">Anthropic Claude（联网，需 API Key）</option>
+            </select>
+          </div>
+
+          <div v-if="vlmProvider === 'openai'" class="form-group">
+            <label class="form-label">OpenAI API Key</label>
+            <input type="password" v-model="vlmOpenaiKey" class="form-input" placeholder="sk-..." />
+          </div>
+
+          <div v-if="vlmProvider === 'claude'" class="form-group">
+            <label class="form-label">Claude API Key</label>
+            <input type="password" v-model="vlmClaudeKey" class="form-input" placeholder="sk-ant-..." />
+          </div>
+
+          <div class="form-group form-actions">
+            <button class="btn btn-sm" @click="saveVlmSettings">保存</button>
+            <button class="btn btn-ghost" :disabled="vlmTesting" @click="testVlmConnection">
+              {{ vlmTestResult ? vlmTestResult : (vlmTesting ? '测试中...' : '测试连接') }}
+            </button>
+          </div>
+        </div>
+
         <!-- 平台连接 -->
         <div class="card">
           <div class="card-header">🔗 {{ labels.settings.platformConnections.title }}</div>
@@ -311,6 +343,52 @@ let ytPollTimer = null
 
 const aiTesting = ref(false)
 const aiTestResult = ref('')
+
+// R17 (v0.17.0): VLM settings
+const vlmProvider = ref('')
+const vlmOpenaiKey = ref('')
+const vlmClaudeKey = ref('')
+const vlmTesting = ref(false)
+const vlmTestResult = ref('')
+
+function onVlmProviderChanged() {
+  vlmTestResult.value = ''
+}
+
+async function saveVlmSettings() {
+  // Save via settings API
+  try {
+    await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        vlm_provider: vlmProvider.value,
+        vlm_openai_key: vlmOpenaiKey.value,
+        vlm_claude_key: vlmClaudeKey.value,
+      }),
+    })
+  } catch (e) {
+    // silent
+  }
+}
+
+async function testVlmConnection() {
+  vlmTesting.value = true
+  vlmTestResult.value = ''
+  try {
+    const resp = await fetch('/api/vlm/status')
+    const data = await resp.json()
+    if (data.available) {
+      vlmTestResult.value = `✓ ${data.provider} 可用`
+    } else {
+      vlmTestResult.value = '✗ 不可用'
+    }
+  } catch (e) {
+    vlmTestResult.value = '✗ 连接失败'
+  }
+  vlmTesting.value = false
+  setTimeout(() => { vlmTestResult.value = '' }, 5000)
+}
 
 async function testAiConnection() {
   aiTesting.value = true
