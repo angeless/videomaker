@@ -82,8 +82,34 @@ def build_tracks_from_script(
             "volume": 1.0,
         })
 
-    return {
+    result = {
         "video": video_track,
         "subtitle": subtitle_track,
         "audio": audio_track,
     }
+
+    # C5: Multi-track extensions — extra tracks from config
+    extra_audio = config.get("extra_audio_tracks", [])
+    if extra_audio and isinstance(extra_audio, list):
+        for i, ea in enumerate(extra_audio):
+            if isinstance(ea, dict):
+                result[f"audio_{i+2}"] = [{
+                    "label": str(ea.get("label", f"Audio {i+2}")),
+                    "start_ms": int(ea.get("start_ms", 0)),
+                    "end_ms": int(ea.get("end_ms", total_ms)),
+                    "volume": float(ea.get("volume", 1.0)),
+                    "path": str(ea.get("path", "")),
+                }]
+
+    extra_video = config.get("extra_video_tracks", [])
+    if extra_video and isinstance(extra_video, list):
+        for i, ev in enumerate(extra_video):
+            if isinstance(ev, dict):
+                result[f"video_{i+2}"] = [{
+                    "label": str(ev.get("label", f"PiP {i+1}")),
+                    "start_ms": int(ev.get("start_ms", 0)),
+                    "end_ms": int(ev.get("end_ms", total_ms)),
+                    "path": str(ev.get("path", "")),
+                }]
+
+    return result

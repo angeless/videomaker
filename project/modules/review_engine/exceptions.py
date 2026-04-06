@@ -44,3 +44,8 @@ class ConflictingCommentsError(ReviewEngineError):
 class StockMediaError(ReviewEngineError):
     """Stock media search/download failed."""
     pass
+
+
+class LockedTrackError(ReviewEngineError):
+    """Attempted to modify a locked track or its clips."""
+    pass

@@ -7,8 +7,10 @@ import pytest
 from modules.hardware.detector import (
     CPUInfo, MemoryInfo, GPUInfo, HardwareProfile,
     detect_cpu, detect_memory, detect_gpu,
-    detect_ffmpeg_hwaccels, get_system_profile,
+    detect_ffmpeg_hwaccels, detect_decoders, has_hevc_hardware_decode,
+    get_system_profile,
 )
+from modules.hardware.encoding_strategy import choose_decoder, DecodingParams
 
 
 class TestDetectCPU:
@@ -73,3 +75,63 @@ class TestGetSystemProfile:
         assert isinstance(profile.gpu, GPUInfo)
         assert profile.ffmpeg_path  # non-empty
         assert isinstance(profile.ffmpeg_hwaccels, list)
+        assert isinstance(profile.ffmpeg_decoders, list)
+        assert isinstance(profile.has_hevc_hw_decode, bool)
+
+
+# ── D1: Decoder detection tests ──────────────────────────────────
+
+
+class TestDetectDecoders:
+    def test_decoders_detected(self):
+        decoders = detect_decoders()
+        assert isinstance(decoders, list)
+        # FFmpeg should have at least some decoders
+        assert len(decoders) > 0
+
+    def test_hevc_hw_detection(self):
+        # Test with known hardware decoder list
+        assert has_hevc_hardware_decode(["h264", "hevc_videotoolbox", "aac"]) is True
+        assert has_hevc_hardware_decode(["h264", "hevc", "aac"]) is False
+
+    def test_fallback_empty(self):
+        """Simulated failure returns empty list."""
+        with patch("modules.hardware.detector.subprocess.check_output", side_effect=OSError):
+            result = detect_decoders("/nonexistent/ffmpeg")
+        assert result == []
+
+    def test_backward_compat(self):
+        """Old code using HardwareProfile without new fields should still work."""
+        profile = get_system_profile()
+        # Old fields still present
+        assert hasattr(profile, "cpu")
+        assert hasattr(profile, "ffmpeg_hwaccels")
+        # New fields also present
+        assert hasattr(profile, "ffmpeg_decoders")
+        assert hasattr(profile, "has_hevc_hw_decode")
+
+
+class TestChooseDecoder:
+    def _profile(self, decoders, hwaccels):
+        return HardwareProfile(
+            cpu=CPUInfo(8, 8, "arm64", "Apple M1"),
+            memory=MemoryInfo(16.0, 8.0),
+            gpu=GPUInfo("apple", "M1", has_videotoolbox=True),
+            ffmpeg_path="/opt/homebrew/bin/ffmpeg",
+            ffmpeg_hwaccels=hwaccels,
+            ffmpeg_decoders=decoders,
+            has_hevc_hw_decode=has_hevc_hardware_decode(decoders),
+        )
+
+    def test_hevc_videotoolbox(self):
+        p = self._profile(["hevc_videotoolbox", "h264"], ["videotoolbox"])
+        d = choose_decoder(p, "hevc")
+        assert d.hwaccel == "videotoolbox"
+        assert d.decoder == "hevc_videotoolbox"
+
+    def test_cpu_fallback(self):
+        p = self._profile(["h264", "hevc"], [])
+        d = choose_decoder(p, "hevc")
+        assert d.hwaccel is None
+        assert d.decoder is None
+        assert "CPU" in d.label

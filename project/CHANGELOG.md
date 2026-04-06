@@ -4,6 +4,25 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/) 规范。
 
+## [0.18.0] - (Unreleased)
+
+### 新增 (Added)
+- X0: 异步 Job 管理器 — job_system/job_manager.py (submit/progress/cancel/cleanup，线程安全)
+- A1: MCP 评审操作工具组 — 6 工具 (init/comment/resolve/reedit/dry-run/export)
+- A2: MCP VLM 工具组 — 3 工具 (describe_region/diagnose_frame/status)
+- A3: MCP 增强工具组 — 4 工具 (audio/tts/bgm/transition)
+- B1: FrameSampler 关键帧采样策略 — 三种采样模式 (scene_boundary/uniform/hybrid) + max_frames 限制
+- contracts.py 扩展: SampledFrame, StreamIssue, StreamAnalysis, SceneSummary, Clip, TimelineTrack, Timeline 数据类
+- C1: TimelineStore — 多轨时间线 SQLite 持久化 (WAL 模式, track/clip CRUD)
+- D1: 硬件检测扩展 — FFmpeg 解码器探测 + HEVC 硬解检测 + choose_decoder() 解码策略
+- A4: MCP 只读查询工具组 — 4 工具 (query_state/comments/diagnostics/versions)
+- A5: MCP 安全升级 — 工具权限分级 (READ/WRITE/DANGEROUS) + JSONL 审计日志 + 路径白名单扩展
+- C2: TimelineOps 轨道操作 — 增删/重排/锁定/静音/音量 + 类型限制
+- C3: TimelineOps 片段操作 — 移动/裁剪/分割/跨轨移动/重叠检测 + LockedTrackError
+- D2: render_pipeline 硬件加速 — 自适应编码器选择 + HEVC 硬解 + CRF→码率自动切换
+- B2: VideoStreamAnalyzer — 跨帧时序分析 (委托 check_continuity + VLM 增强转场/叙事)
+- C5: track_builder 动态多轨输出 — extra_audio_tracks + extra_video_tracks 扩展
+
 ## [0.17.0] - 2026-04-04
 
 ### 新增 (Added)

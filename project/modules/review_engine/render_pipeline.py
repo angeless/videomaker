@@ -72,20 +72,27 @@ def _transcode_segment(
     end_ms: int,
     output_path: str,
     ffmpeg_bin: str,
+    hw_profile: Optional["HardwareProfile"] = None,
 ) -> str:
     """Trim and transcode a segment to H.264+AAC.
 
+    Uses hardware encoding when available (D2), with CPU fallback.
     Handles HEVC iPhone MOV files by transcoding to H.264.
     """
     start_s = start_ms / 1000.0
     duration_s = (end_ms - start_ms) / 1000.0
 
+    # Build adaptive encoding args (D2: no more hardcoded libx264)
+    video_args = _build_video_encode_args(hw_profile)
+    decode_args = _build_decode_args(source_path, hw_profile)
+
     cmd = [
         ffmpeg_bin, "-y",
+        *decode_args,
         "-ss", f"{start_s:.3f}",
         "-i", source_path,
         "-t", f"{duration_s:.3f}",
-        "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+        *video_args,
         "-c:a", "aac", "-b:a", "128k", "-ar", "44100", "-ac", "2",
         "-movflags", "+faststart",
         output_path,
@@ -93,6 +100,61 @@ def _transcode_segment(
 
     _run_ffmpeg(cmd)
     return output_path
+
+
+def _build_video_encode_args(hw_profile: Optional["HardwareProfile"] = None) -> List[str]:
+    """Build video encoding args from hardware profile. CPU fallback if unavailable."""
+    if hw_profile is not None:
+        try:
+            from modules.hardware.encoding_strategy import choose_encoder
+            params = choose_encoder(hw_profile)
+            args = ["-c:v", params.video_encoder]
+            if params.hwaccel:
+                args.extend(params.extra_args)
+            # Hardware encoders don't support CRF — use bitrate mode
+            if params.video_encoder != "libx264":
+                args.extend(["-b:v", "8M"])
+            else:
+                args.extend(["-crf", "23"])
+            return args
+        except Exception as exc:
+            logger.warning("Hardware encoding setup failed, falling back to CPU: %s", exc)
+
+    # CPU fallback (original behavior)
+    return ["-c:v", "libx264", "-preset", "fast", "-crf", "23"]
+
+
+def _build_decode_args(source_path: str, hw_profile: Optional["HardwareProfile"] = None) -> List[str]:
+    """Build hardware decode args for HEVC input."""
+    if hw_profile is None:
+        return []
+
+    try:
+        from modules.hardware.encoding_strategy import choose_decoder
+        # Detect input codec via ffprobe
+        input_codec = _probe_video_codec(source_path, hw_profile.ffmpeg_path)
+        if input_codec and input_codec.startswith("hevc"):
+            params = choose_decoder(hw_profile, "hevc")
+            if params.hwaccel:
+                return ["-hwaccel", params.hwaccel]
+    except Exception as exc:
+        logger.debug("Decode args setup failed: %s", exc)
+    return []
+
+
+def _probe_video_codec(source_path: str, ffmpeg_path: str) -> Optional[str]:
+    """Probe the video codec of a file."""
+    ffprobe = ffmpeg_path.replace("ffmpeg", "ffprobe")
+    try:
+        result = subprocess.run(
+            [ffprobe, "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=codec_name", "-of", "csv=p=0",
+             source_path],
+            capture_output=True, text=True, timeout=5, check=False,
+        )
+        return result.stdout.strip() if result.returncode == 0 else None
+    except Exception:
+        return None
 
 
 def render_rough_cut(

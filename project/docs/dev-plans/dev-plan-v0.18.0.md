@@ -1268,28 +1268,28 @@ Feature D: GPU 渲染
 
 | 任务ID | 任务名称 | 状态 | 完成日期 | 备注 |
 |--------|---------|------|---------|------|
-| X0 | 异步任务管理器 | Planned | — | — |
-| A1 | MCP 评审操作工具组（6 工具） | Planned | — | — |
-| A2 | MCP VLM 工具组（3 工具） | Planned | — | — |
-| A3 | MCP 增强工具组 | Planned | — | — |
-| A4 | MCP 只读查询工具组 | Planned | — | — |
-| A5 | MCP 安全升级 | Planned | — | — |
+| X0 | 异步任务管理器 | Done | 2026-04-06 | 5 UT passed |
+| A1 | MCP 评审操作工具组（6 工具） | Done | 2026-04-06 | 5 UT passed |
+| A2 | MCP VLM 工具组（3 工具） | Done | 2026-04-06 | 3 UT passed |
+| A3 | MCP 增强工具组 | Done | 2026-04-06 | 4 UT passed |
+| A4 | MCP 只读查询工具组 | Done | 2026-04-06 | 4 UT passed |
+| A5 | MCP 安全升级 | Done | 2026-04-06 | 4 UT passed |
 | A6 | MCP 集成测试 | Planned | — | — |
-| B1 | FrameSampler | Planned | — | — |
-| B2 | VideoStreamAnalyzer | Planned | — | — |
+| B1 | FrameSampler | Done | 2026-04-06 | 5 UT passed |
+| B2 | VideoStreamAnalyzer | Done | 2026-04-06 | 5 UT passed |
 | B3 | SceneSummarizer | Planned | — | — |
 | B4a | 视频流分析 API（3 端点） | Planned | — | — |
 | B4b | 视频流分析 UI（DiagnosticsPanel） | Planned | — | — |
 | B5 | 视频流集成测试 | Planned | — | — |
-| C1 | Timeline 数据模型 | Planned | — | — |
-| C2 | 轨道操作 | Planned | — | — |
-| C3 | 片段操作 | Planned | — | — |
+| C1 | Timeline 数据模型 | Done | 2026-04-06 | 7 UT passed |
+| C2 | 轨道操作 | Done | 2026-04-06 | 6 UT passed |
+| C3 | 片段操作 | Done | 2026-04-06 | 7 UT passed |
 | C4 | Timeline API | Planned | — | — |
-| C5 | track_builder 升级 | Planned | — | — |
+| C5 | track_builder 升级 | Done | 2026-04-06 | 4 UT passed |
 | C6 | 多轨 UI（components/timeline/） | Planned | — | — |
 | C7 | 多轨集成测试 | Planned | — | — |
-| D1 | 硬件检测扩展 | Planned | — | — |
-| D2 | render_pipeline 硬件加速（auto_render 已 wired） | Planned | — | — |
+| D1 | 硬件检测扩展 | Done | 2026-04-06 | 6 UT passed |
+| D2 | render_pipeline 硬件加速（auto_render 已 wired） | Done | 2026-04-06 | 5 UT passed |
 | D3 | RenderManager | Planned | — | — |
 | D4a | 渲染进度 API（3 端点） | Planned | — | — |
 | D4b | 渲染进度 UI（RenderProgress.vue） | Planned | — | — |
