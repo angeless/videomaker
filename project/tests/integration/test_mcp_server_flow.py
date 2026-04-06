@@ -83,8 +83,12 @@ def test_tool_discovery():
     pytest.importorskip("fastmcp")
     from modules.mcp_server.server import mcp
 
-    # FastMCP stores tools in _tool_manager._tools (dict keyed by name)
-    tools = mcp._tool_manager._tools
+    # FastMCP stores tools in _tool_manager._tools (dict keyed by name).
+    # Guard against internal API changes.
+    tool_mgr = getattr(mcp, "_tool_manager", None)
+    assert tool_mgr is not None, "FastMCP internal structure changed — _tool_manager not found"
+    tools = getattr(tool_mgr, "_tools", None)
+    assert tools is not None, "FastMCP internal structure changed — _tools dict not found"
     registered_names = sorted(tools.keys())
     assert len(registered_names) == EXPECTED_TOOL_COUNT, (
         f"Expected {EXPECTED_TOOL_COUNT} tools, got {len(registered_names)}. "
