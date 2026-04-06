@@ -20,6 +20,8 @@
 - C2: TimelineOps 轨道操作 — 增删/重排/锁定/静音/音量 + 类型限制
 - C3: TimelineOps 片段操作 — 移动/裁剪/分割/跨轨移动/重叠检测 + LockedTrackError
 - D2: render_pipeline 硬件加速 — 自适应编码器选择 + HEVC 硬解 + CRF→码率自动切换
+- B2: VideoStreamAnalyzer — 跨帧时序分析 (委托 check_continuity + VLM 增强转场/叙事)
+- C5: track_builder 动态多轨输出 — extra_audio_tracks + extra_video_tracks 扩展
 
 ## [0.17.0] - 2026-04-04
 

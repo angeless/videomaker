@@ -1276,7 +1276,7 @@ Feature D: GPU 渲染
 | A5 | MCP 安全升级 | Done | 2026-04-06 | 4 UT passed |
 | A6 | MCP 集成测试 | Planned | — | — |
 | B1 | FrameSampler | Done | 2026-04-06 | 5 UT passed |
-| B2 | VideoStreamAnalyzer | Planned | — | — |
+| B2 | VideoStreamAnalyzer | Done | 2026-04-06 | 5 UT passed |
 | B3 | SceneSummarizer | Planned | — | — |
 | B4a | 视频流分析 API（3 端点） | Planned | — | — |
 | B4b | 视频流分析 UI（DiagnosticsPanel） | Planned | — | — |
@@ -1285,7 +1285,7 @@ Feature D: GPU 渲染
 | C2 | 轨道操作 | Done | 2026-04-06 | 6 UT passed |
 | C3 | 片段操作 | Done | 2026-04-06 | 7 UT passed |
 | C4 | Timeline API | Planned | — | — |
-| C5 | track_builder 升级 | Planned | — | — |
+| C5 | track_builder 升级 | Done | 2026-04-06 | 4 UT passed |
 | C6 | 多轨 UI（components/timeline/） | Planned | — | — |
 | C7 | 多轨集成测试 | Planned | — | — |
 | D1 | 硬件检测扩展 | Done | 2026-04-06 | 6 UT passed |
