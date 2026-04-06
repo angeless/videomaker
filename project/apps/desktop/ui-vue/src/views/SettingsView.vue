@@ -288,6 +288,55 @@
           </button>
         </div>
 
+        <!-- D5: 渲染设置 -->
+        <div class="card">
+          <div class="card-header">🎬 渲染设置</div>
+
+          <div class="form-group">
+            <label class="form-label">视频编码器</label>
+            <select v-model="renderSettings.encoder" class="form-select">
+              <option value="auto">自动（跟随硬件检测）</option>
+              <option v-for="enc in renderAvailableEncoders" :key="enc" :value="enc">{{ enc }}</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">质量预设 — {{ renderQualityLabel }}</label>
+            <select v-model="renderSettings.quality_preset" class="form-select">
+              <option value="high">高质量 (CRF 15)</option>
+              <option value="balanced">平衡 (CRF 18)</option>
+              <option value="fast">快速 (CRF 23)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">分辨率</label>
+            <select v-model="renderSettings.resolution" class="form-select">
+              <option value="1080x1920">竖屏 1080×1920</option>
+              <option value="1920x1080">横屏 1920×1080</option>
+              <option value="720x1280">竖屏 720×1280</option>
+              <option value="1280x720">横屏 1280×720</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">
+              <input type="checkbox" v-model="renderSettings.parallel_render" />
+              启用并行渲染
+            </label>
+            <div class="form-hint">关闭后使用单线程顺序渲染</div>
+          </div>
+
+          <div v-if="renderHardwareInfo" class="form-group" style="opacity: 0.7">
+            <label class="form-label">硬件信息</label>
+            <div class="form-hint">{{ renderHardwareInfo }}</div>
+          </div>
+
+          <button class="btn btn-primary btn-sm" :disabled="renderSaving" @click="saveRenderSettings()">
+            {{ renderSaving ? '保存中…' : '保存渲染设置' }}
+          </button>
+        </div>
+
         <!-- 系统自检 -->
         <div class="card">
           <div class="card-header">🔧 系统自检</div>
@@ -562,6 +611,39 @@ async function saveQueueConfig() {
   queueLoading.value = false
 }
 
+// D5: 渲染设置
+const renderSettings = ref({ encoder: 'auto', quality_preset: 'balanced', resolution: '1080x1920', parallel_render: true })
+const renderAvailableEncoders = ref([])
+const renderSaving = ref(false)
+const renderHardwareInfo = ref('')
+const renderQualityLabel = computed(() => {
+  const map = { high: '高质量', balanced: '平衡', fast: '快速' }
+  return map[renderSettings.value.quality_preset] || renderSettings.value.quality_preset
+})
+
+async function loadRenderSettings() {
+  const data = await apiStore.api('GET', '/api/settings/render')
+  if (data && data.settings) {
+    Object.assign(renderSettings.value, data.settings)
+    renderAvailableEncoders.value = data.available_encoders || ['libx264']
+  }
+  // Load hardware info for display
+  try {
+    const hw = await apiStore.api('GET', '/api/system/hardware')
+    if (hw && hw.ok) {
+      const enc = hw.encoding?.label || hw.encoding?.encoder || '未知'
+      const gpu = hw.gpu?.model || '无独立 GPU'
+      renderHardwareInfo.value = `编码器: ${enc} | GPU: ${gpu} | 并发建议: ${hw.suggested_max_concurrent}`
+    }
+  } catch (e) { /* hardware info is optional */ }
+}
+
+async function saveRenderSettings() {
+  renderSaving.value = true
+  await apiStore.api('PUT', '/api/settings/render', renderSettings.value)
+  renderSaving.value = false
+}
+
 function badgeClass(status) {
   const key = `${status || ''}`.trim().toLowerCase()
   if (key === 'ok') return 'badge-success'
@@ -590,6 +672,7 @@ function fillUrl() {
 onMounted(async () => {
   await settings.loadAiSettings()
   loadQueueConfig()
+  loadRenderSettings()
   loadYouTubeStatus()
   loadWebhookConnectors()
 })

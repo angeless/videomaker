@@ -10,6 +10,9 @@ from flask import Blueprint, jsonify, request
 
 from modules.app_api.param_utils import parse_int_param, parse_str_param
 
+# D5: Render settings file path (module-level for testability)
+_RENDER_SETTINGS_FILE = "data/render_settings.json"
+
 
 def create_system_blueprint(
     *,
@@ -192,5 +195,68 @@ def create_system_blueprint(
             return jsonify({"error": "max_running 必须是 1-4 的整数"}), 400
         queue_max_running_setter(val)
         return jsonify({"ok": True, "max_running": val})
+
+    # ── D5: Render settings ────────────────────────────────────────
+
+    def _load_render_settings() -> dict:
+        """Load render settings from JSON file."""
+        import json
+        try:
+            with open(_RENDER_SETTINGS_FILE, "r") as f:
+                return json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return {
+                "encoder": "auto",
+                "quality_preset": "balanced",
+                "resolution": "1080x1920",
+                "parallel_render": True,
+            }
+
+    def _save_render_settings(settings: dict) -> None:
+        """Save render settings to JSON file."""
+        import json, os
+        os.makedirs(os.path.dirname(_RENDER_SETTINGS_FILE) or ".", exist_ok=True)
+        with open(_RENDER_SETTINGS_FILE, "w") as f:
+            json.dump(settings, f, indent=2)
+
+    @bp.route("/api/settings/render", methods=["GET"])
+    def api_render_settings_get():
+        """Get render settings + available encoder options from hardware."""
+        settings = _load_render_settings()
+        # Enrich with available encoders from hardware detection
+        available_encoders = ["libx264"]  # always available
+        try:
+            from modules.hardware.detector import get_system_profile
+            profile = get_system_profile()
+            if profile.gpu.has_videotoolbox:
+                available_encoders.append("h264_videotoolbox")
+            if profile.gpu.has_nvenc:
+                available_encoders.append("h264_nvenc")
+            if profile.gpu.has_vaapi:
+                available_encoders.append("h264_vaapi")
+        except Exception:
+            pass
+        return jsonify({
+            "ok": True,
+            "settings": settings,
+            "available_encoders": available_encoders,
+            "quality_presets": {
+                "high": {"crf": 15, "label": "高质量"},
+                "balanced": {"crf": 18, "label": "平衡"},
+                "fast": {"crf": 23, "label": "快速"},
+            },
+        })
+
+    @bp.route("/api/settings/render", methods=["PUT"])
+    def api_render_settings_put():
+        """Save render settings."""
+        body = request.get_json(silent=True) or {}
+        allowed = {"encoder", "quality_preset", "resolution", "parallel_render"}
+        settings = _load_render_settings()
+        for k, v in body.items():
+            if k in allowed:
+                settings[k] = v
+        _save_render_settings(settings)
+        return jsonify({"ok": True, "settings": settings})
 
     return bp

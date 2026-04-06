@@ -1293,7 +1293,7 @@ Feature D: GPU 渲染
 | D3 | RenderManager | Done | 2026-04-06 | 6 UT passed |
 | D4a | 渲染进度 API（3 端点） | Planned | — | — |
 | D4b | 渲染进度 UI（RenderProgress.vue） | Planned | — | — |
-| D5 | 渲染设置 UI | Planned | — | — |
+| D5 | 渲染设置 UI | Done | 2026-04-06 | 3 API tests passed |
 | D6 | GPU 渲染集成测试 | Planned | — | — |
 
 ## 11. 变更日志（Change Log）
