@@ -8,6 +8,9 @@
 
 ### 新增 (Added)
 - X0: 异步 Job 管理器 — job_system/job_manager.py (submit/progress/cancel/cleanup，线程安全)
+- A1: MCP 评审操作工具组 — 6 工具 (init/comment/resolve/reedit/dry-run/export)
+- A2: MCP VLM 工具组 — 3 工具 (describe_region/diagnose_frame/status)
+- A3: MCP 增强工具组 — 4 工具 (audio/tts/bgm/transition)
 
 ## [0.17.0] - 2026-04-04
 

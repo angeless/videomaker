@@ -46,6 +46,25 @@ from modules.mcp_server.tools.capability_tools import (
     project_list,
     workflow_run,
 )
+from modules.mcp_server.tools.review_tools import (
+    review_init,
+    review_add_comment,
+    review_resolve_comment,
+    review_ai_reedit,
+    review_ai_reedit_dry_run,
+    review_export_comments,
+)
+from modules.mcp_server.tools.vlm_tools import (
+    vlm_describe_region,
+    vlm_diagnose_frame,
+    vlm_status,
+)
+from modules.mcp_server.tools.enhance_tools import (
+    enhance_audio,
+    enhance_tts,
+    enhance_bgm,
+    enhance_transition,
+)
 
 mcp = FastMCP("VideoEditor", dependencies=["fastmcp>=0.9"])
 
@@ -124,6 +143,90 @@ def project_create_tool(name: str, source_dir: str) -> dict:
 def workflow_run_tool(workflow_id: str, project_dir: str, config: dict | None = None) -> dict:
     """Run a custom workflow by ID."""
     return workflow_run(workflow_id, project_dir, config)
+
+
+# ── 6 Review Tools (A1) ────────────────────────────────────────
+
+@mcp.tool()
+def review_init_tool(project_dir: str, video_path: str) -> dict:
+    """Create a review session for a video. Returns session_id."""
+    return review_init(project_dir, video_path)
+
+
+@mcp.tool()
+def review_add_comment_tool(session_id: str, text: str, timestamp_ms: int = 0, visual_context: dict | None = None) -> dict:
+    """Add a comment to a review session with optional VLM visual context."""
+    return review_add_comment(session_id, text, timestamp_ms, visual_context)
+
+
+@mcp.tool()
+def review_resolve_comment_tool(comment_id: str) -> dict:
+    """Mark a review comment as resolved."""
+    return review_resolve_comment(comment_id)
+
+
+@mcp.tool()
+def review_ai_reedit_tool(session_id: str) -> dict:
+    """Trigger AI re-edit based on review comments."""
+    return review_ai_reedit(session_id)
+
+
+@mcp.tool()
+def review_ai_reedit_dry_run_tool(session_id: str) -> dict:
+    """Preview AI re-edit changes without applying (dry-run)."""
+    return review_ai_reedit_dry_run(session_id)
+
+
+@mcp.tool()
+def review_export_comments_tool(session_id: str) -> dict:
+    """Export all comments from a review session."""
+    return review_export_comments(session_id)
+
+
+# ── 3 VLM Tools (A2) ───────────────────────────────────────────
+
+@mcp.tool()
+def vlm_describe_region_tool(session_id: str, frame_base64: str, strokes: list, timestamp_ms: int = 0) -> dict:
+    """Analyze a brush-selected region using VLM. frame_base64 max 10MB."""
+    return vlm_describe_region(session_id, frame_base64, strokes, timestamp_ms)
+
+
+@mcp.tool()
+def vlm_diagnose_frame_tool(session_id: str, frame_base64: str, timestamp_ms: int = 0) -> dict:
+    """Run frame diagnostics (composition, exposure, color temp). Synchronous."""
+    return vlm_diagnose_frame(session_id, frame_base64, timestamp_ms)
+
+
+@mcp.tool()
+def vlm_status_tool() -> dict:
+    """Check VLM availability and provider status."""
+    return vlm_status()
+
+
+# ── 4 Enhance Tools (A3) ───────────────────────────────────────
+
+@mcp.tool()
+def enhance_audio_tool(session_id: str, denoise: bool = True, eq: bool = True, compressor: bool = True, loudness_target: float = -16.0) -> dict:
+    """Apply audio enhancement (denoise, EQ, compression, loudness normalization)."""
+    return enhance_audio(session_id, denoise, eq, compressor, loudness_target)
+
+
+@mcp.tool()
+def enhance_tts_tool(session_id: str, text: str, voice: str = "default", language: str = "zh") -> dict:
+    """Generate text-to-speech voiceover for a review session."""
+    return enhance_tts(session_id, text, voice, language)
+
+
+@mcp.tool()
+def enhance_bgm_tool(session_id: str, genre: str = "ambient", beat_align: bool = True) -> dict:
+    """Select and apply background music with optional beat alignment."""
+    return enhance_bgm(session_id, genre, beat_align)
+
+
+@mcp.tool()
+def enhance_transition_tool(session_id: str, effect: str = "cross_dissolve", duration_ms: int = 500) -> dict:
+    """Add transition effect between video segments."""
+    return enhance_transition(session_id, effect, duration_ms)
 
 
 if __name__ == "__main__":
