@@ -1284,7 +1284,7 @@ Feature D: GPU 渲染
 | C1 | Timeline 数据模型 | Done | 2026-04-06 | 7 UT passed |
 | C2 | 轨道操作 | Done | 2026-04-06 | 6 UT passed |
 | C3 | 片段操作 | Done | 2026-04-06 | 7 UT passed |
-| C4 | Timeline API | Planned | — | — |
+| C4 | Timeline API | Done | 2026-04-06 | 7 API tests passed |
 | C5 | track_builder 升级 | Done | 2026-04-06 | 4 UT passed |
 | C6 | 多轨 UI（components/timeline/） | Planned | — | — |
 | C7 | 多轨集成测试 | Planned | — | — |
