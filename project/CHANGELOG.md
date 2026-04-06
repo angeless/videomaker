@@ -4,6 +4,11 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/) 规范。
 
+## [0.18.0] - (Unreleased)
+
+### 新增 (Added)
+- X0: 异步 Job 管理器 — job_system/job_manager.py (submit/progress/cancel/cleanup，线程安全)
+
 ## [0.17.0] - 2026-04-04
 
 ### 新增 (Added)

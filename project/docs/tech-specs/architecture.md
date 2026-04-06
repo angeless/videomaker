@@ -116,7 +116,7 @@
 |------|------|--------|--------|
 | 接入层 | 路由、认证、会话、UI 协议 | app_api/server.py, launcher.py, routes/* | 中 |
 | 业务层 | 核心工作流、能力组件、编排 | step1~7, capabilities/*, workflow_engine | 高 |
-| 支撑层 | 模块间通信、数据定义、库管理 | adapters, contracts, library, registry | 低 |
+| 支撑层 | 模块间通信、数据定义、库管理、异步任务 | adapters, contracts, library, registry, job_system | 低 |
 | 数据层 | 存储、缓存、外部服务 | SQLite, FileSystem, Redis (Future) | 低 |
 
 ---
