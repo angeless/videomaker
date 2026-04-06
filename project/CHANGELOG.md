@@ -11,6 +11,8 @@
 - A1: MCP 评审操作工具组 — 6 工具 (init/comment/resolve/reedit/dry-run/export)
 - A2: MCP VLM 工具组 — 3 工具 (describe_region/diagnose_frame/status)
 - A3: MCP 增强工具组 — 4 工具 (audio/tts/bgm/transition)
+- B1: FrameSampler 关键帧采样策略 — 三种采样模式 (scene_boundary/uniform/hybrid) + max_frames 限制
+- contracts.py 扩展: SampledFrame, StreamIssue, StreamAnalysis, SceneSummary 数据类
 
 ## [0.17.0] - 2026-04-04
 

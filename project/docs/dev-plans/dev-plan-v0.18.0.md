@@ -1275,7 +1275,7 @@ Feature D: GPU 渲染
 | A4 | MCP 只读查询工具组 | Planned | — | — |
 | A5 | MCP 安全升级 | Planned | — | — |
 | A6 | MCP 集成测试 | Planned | — | — |
-| B1 | FrameSampler | Planned | — | — |
+| B1 | FrameSampler | Done | 2026-04-06 | 5 UT passed |
 | B2 | VideoStreamAnalyzer | Planned | — | — |
 | B3 | SceneSummarizer | Planned | — | — |
 | B4a | 视频流分析 API（3 端点） | Planned | — | — |

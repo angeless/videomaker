@@ -6,7 +6,7 @@ external callers. All types are plain dataclasses for easy serialization.
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 
 class VideoType(str, Enum):
@@ -121,3 +121,43 @@ class EditInstruction:
     segment_idx: Optional[int] = None
     params: Dict = field(default_factory=dict)
     source_comment_id: Optional[str] = None
+
+
+# ── B1/B2/B3: Video stream analysis data classes ─────────────────
+
+
+@dataclass
+class SampledFrame:
+    """A single frame extracted from a video for stream analysis."""
+    frame: Any  # PIL.Image (kept as Any to avoid hard dependency)
+    timestamp_ms: int
+    scene_idx: int = 0
+    source: str = "uniform"  # "scene_boundary" | "uniform" | "hybrid"
+
+
+@dataclass
+class StreamIssue:
+    """An issue detected during video stream analysis."""
+    issue_type: str  # "brightness_jump" | "color_temp_shift" | "transition_quality" | etc.
+    severity: str = "warning"  # "info" | "warning" | "error"
+    description: str = ""
+    timestamp_ms: int = 0
+    frame_indices: List[int] = field(default_factory=list)
+
+
+@dataclass
+class StreamAnalysis:
+    """Result of video stream temporal analysis."""
+    issues: List[StreamIssue] = field(default_factory=list)
+    narrative_arc: str = ""
+    scene_descriptions: Dict = field(default_factory=dict)
+
+
+@dataclass
+class SceneSummary:
+    """Aggregated summary for a single scene."""
+    scene_idx: int = 0
+    summary: str = ""
+    key_objects: List[str] = field(default_factory=list)
+    duration_ms: int = 0
+    representative_frame_ms: int = 0
