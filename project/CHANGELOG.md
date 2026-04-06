@@ -27,6 +27,8 @@
 - C4: Timeline API — 9 个多轨端点 (create/get/track CRUD/clip CRUD/split) + 统一错误格式 + 锁定轨道 403
 - D3: RenderManager — 分段并行渲染 (Clip→Segment 适配/ThreadPoolExecutor/FFmpeg concat/重试/清理)
 - D5: 渲染设置 UI — 编码器选择/质量预设/分辨率/并行开关 + 硬件信息显示 + 设置持久化
+- B4a: 视频流分析 API — 3 端点 (analyze-stream/stream-analysis/scene-summaries) + JobManager 异步
+- D4a: 渲染进度 API — 3 端点 (render/progress/cancel) + 实时进度 + 编码器信息
 
 ## [0.17.0] - 2026-04-04
 

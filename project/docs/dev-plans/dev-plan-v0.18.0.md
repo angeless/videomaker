@@ -1278,7 +1278,7 @@ Feature D: GPU 渲染
 | B1 | FrameSampler | Done | 2026-04-06 | 5 UT passed |
 | B2 | VideoStreamAnalyzer | Done | 2026-04-06 | 5 UT passed |
 | B3 | SceneSummarizer | Done | 2026-04-06 | 5 UT passed |
-| B4a | 视频流分析 API（3 端点） | Planned | — | — |
+| B4a | 视频流分析 API（3 端点） | Done | 2026-04-06 | 3 API tests passed |
 | B4b | 视频流分析 UI（DiagnosticsPanel） | Planned | — | — |
 | B5 | 视频流集成测试 | Planned | — | — |
 | C1 | Timeline 数据模型 | Done | 2026-04-06 | 7 UT passed |
@@ -1291,7 +1291,7 @@ Feature D: GPU 渲染
 | D1 | 硬件检测扩展 | Done | 2026-04-06 | 6 UT passed |
 | D2 | render_pipeline 硬件加速（auto_render 已 wired） | Done | 2026-04-06 | 5 UT passed |
 | D3 | RenderManager | Done | 2026-04-06 | 6 UT passed |
-| D4a | 渲染进度 API（3 端点） | Planned | — | — |
+| D4a | 渲染进度 API（3 端点） | Done | 2026-04-06 | 4 API tests passed |
 | D4b | 渲染进度 UI（RenderProgress.vue） | Planned | — | — |
 | D5 | 渲染设置 UI | Done | 2026-04-06 | 3 API tests passed |
 | D6 | GPU 渲染集成测试 | Planned | — | — |
