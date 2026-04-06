@@ -22,6 +22,7 @@
 - D2: render_pipeline 硬件加速 — 自适应编码器选择 + HEVC 硬解 + CRF→码率自动切换
 - B2: VideoStreamAnalyzer — 跨帧时序分析 (委托 check_continuity + VLM 增强转场/叙事)
 - C5: track_builder 动态多轨输出 — extra_audio_tracks + extra_video_tracks 扩展
+- A6: MCP 集成测试 — 端到端验证 (review chain/VLM chain/security/tool discovery) + README 更新 (12→29 工具)
 
 ## [0.17.0] - 2026-04-04
 
