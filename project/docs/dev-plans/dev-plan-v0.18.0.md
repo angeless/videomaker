@@ -1277,7 +1277,7 @@ Feature D: GPU 渲染
 | A6 | MCP 集成测试 | Done | 2026-04-06 | 5 IT (3 passed + 2 skipped on Py3.9) |
 | B1 | FrameSampler | Done | 2026-04-06 | 5 UT passed |
 | B2 | VideoStreamAnalyzer | Done | 2026-04-06 | 5 UT passed |
-| B3 | SceneSummarizer | Planned | — | — |
+| B3 | SceneSummarizer | Done | 2026-04-06 | 5 UT passed |
 | B4a | 视频流分析 API（3 端点） | Planned | — | — |
 | B4b | 视频流分析 UI（DiagnosticsPanel） | Planned | — | — |
 | B5 | 视频流集成测试 | Planned | — | — |

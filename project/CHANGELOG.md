@@ -23,6 +23,7 @@
 - B2: VideoStreamAnalyzer — 跨帧时序分析 (委托 check_continuity + VLM 增强转场/叙事)
 - C5: track_builder 动态多轨输出 — extra_audio_tracks + extra_video_tracks 扩展
 - A6: MCP 集成测试 — 端到端验证 (review chain/VLM chain/security/tool discovery) + README 更新 (12→29 工具)
+- B3: SceneSummarizer — 场景级描述聚合 (多帧去重合并/代表帧选择/VLM 摘要/降级策略)
 
 ## [0.17.0] - 2026-04-04
 
