@@ -1274,7 +1274,7 @@ Feature D: GPU 渲染
 | A3 | MCP 增强工具组 | Done | 2026-04-06 | 4 UT passed |
 | A4 | MCP 只读查询工具组 | Done | 2026-04-06 | 4 UT passed |
 | A5 | MCP 安全升级 | Done | 2026-04-06 | 4 UT passed |
-| A6 | MCP 集成测试 | Planned | — | — |
+| A6 | MCP 集成测试 | Done | 2026-04-06 | 5 IT (3 passed + 2 skipped on Py3.9) |
 | B1 | FrameSampler | Done | 2026-04-06 | 5 UT passed |
 | B2 | VideoStreamAnalyzer | Done | 2026-04-06 | 5 UT passed |
 | B3 | SceneSummarizer | Planned | — | — |
