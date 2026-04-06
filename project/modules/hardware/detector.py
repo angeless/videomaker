@@ -50,6 +50,8 @@ class HardwareProfile:
     gpu: GPUInfo
     ffmpeg_path: str
     ffmpeg_hwaccels: List[str] = field(default_factory=list)
+    ffmpeg_decoders: List[str] = field(default_factory=list)
+    has_hevc_hw_decode: bool = False
 
 
 # ── CPU detection ─────────────────────────────────────────────────────
@@ -276,15 +278,48 @@ def detect_ffmpeg_hwaccels(ffmpeg_path: Optional[str] = None) -> List[str]:
         return []
 
 
+# ── FFmpeg decoder detection (D1) ───────────────────────────────────
+
+def detect_decoders(ffmpeg_path: Optional[str] = None) -> List[str]:
+    """Return list of available FFmpeg decoders."""
+    path = ffmpeg_path or _find_ffmpeg()
+    try:
+        out = subprocess.check_output(
+            [path, "-decoders"], text=True, timeout=10,
+            stderr=subprocess.DEVNULL,
+        )
+        decoders = []
+        for line in out.splitlines():
+            # Decoder lines start with " V" or " A" or " S" (video/audio/subtitle)
+            stripped = line.strip()
+            if stripped and len(stripped) > 8 and stripped[0] in "VAS":
+                parts = stripped.split()
+                if len(parts) >= 2:
+                    decoders.append(parts[1])
+        return decoders
+    except Exception:
+        logger.debug("ffmpeg -decoders failed", exc_info=True)
+        return []
+
+
+def has_hevc_hardware_decode(decoders: List[str]) -> bool:
+    """Check if HEVC hardware decoding is available."""
+    hw_decoders = {"hevc_videotoolbox", "hevc_cuvid", "hevc_qsv", "hevc_mediacodec"}
+    return bool(hw_decoders & set(decoders))
+
+
 # ── Composite profile ────────────────────────────────────────────────
 
 def get_system_profile() -> HardwareProfile:
     """Build a complete hardware profile for the current system."""
     ffmpeg = _find_ffmpeg()
+    decoders = detect_decoders(ffmpeg)
     return HardwareProfile(
         cpu=detect_cpu(),
         memory=detect_memory(),
         gpu=detect_gpu(),
         ffmpeg_path=ffmpeg,
         ffmpeg_hwaccels=detect_ffmpeg_hwaccels(ffmpeg),
+        ffmpeg_decoders=decoders,
+        has_hevc_hw_decode=has_hevc_hardware_decode(decoders),
     )

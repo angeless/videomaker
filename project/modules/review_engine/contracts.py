@@ -161,3 +161,45 @@ class SceneSummary:
     key_objects: List[str] = field(default_factory=list)
     duration_ms: int = 0
     representative_frame_ms: int = 0
+
+
+# ── C1: Multi-track timeline data classes ────────────────────────
+
+
+@dataclass
+class Clip:
+    """A clip on a timeline track."""
+    clip_id: str = ""
+    track_id: str = ""
+    start_ms: int = 0
+    end_ms: int = 0
+    source_path: str = ""
+    source_in_ms: int = 0
+    source_out_ms: int = 0
+    label: str = ""
+    metadata: Dict = field(default_factory=dict)
+
+
+@dataclass
+class TimelineTrack:
+    """A single track in a multi-track timeline."""
+    track_id: str = ""
+    timeline_id: str = ""
+    session_id: str = ""
+    track_type: str = "video"  # "video" | "audio" | "subtitle" | "effect"
+    label: str = ""
+    sort_order: int = 0
+    muted: bool = False
+    locked: bool = False
+    volume: float = 1.0
+    clips: List[Clip] = field(default_factory=list)
+
+
+@dataclass
+class Timeline:
+    """Multi-track timeline for a review session."""
+    timeline_id: str = ""
+    session_id: str = ""
+    tracks: List[TimelineTrack] = field(default_factory=list)
+    duration_ms: int = 0
+    version: int = 1

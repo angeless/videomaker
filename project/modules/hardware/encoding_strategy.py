@@ -101,3 +101,52 @@ def suggest_max_concurrent(profile: HardwareProfile) -> int:
         base = min(ram_limit, core_limit)
 
     return max(1, min(base, 4))  # clamp 1-4
+
+
+@dataclass(frozen=True)
+class DecodingParams:
+    """FFmpeg decoding parameters for hardware-accelerated input."""
+    hwaccel: Optional[str]  # e.g. "videotoolbox", "cuda", None
+    decoder: Optional[str]  # e.g. "hevc_videotoolbox", None for auto
+    extra_args: List[str]
+    label: str
+
+
+def choose_decoder(profile: HardwareProfile, input_codec: str = "hevc") -> DecodingParams:
+    """Pick the best decoder for the input codec.
+
+    Args:
+        profile: Hardware profile from detector.
+        input_codec: Input video codec (e.g. "hevc", "h264").
+
+    Returns:
+        DecodingParams with hwaccel and decoder flags.
+    """
+    decoders = profile.ffmpeg_decoders
+    hwaccels = profile.ffmpeg_hwaccels
+
+    if input_codec == "hevc":
+        # macOS VideoToolbox HEVC decode
+        if "hevc_videotoolbox" in decoders and "videotoolbox" in hwaccels:
+            return DecodingParams(
+                hwaccel="videotoolbox",
+                decoder="hevc_videotoolbox",
+                extra_args=[],
+                label="HEVC VideoToolbox decode (hardware)",
+            )
+        # NVIDIA CUVID HEVC decode
+        if "hevc_cuvid" in decoders and "cuda" in hwaccels:
+            return DecodingParams(
+                hwaccel="cuda",
+                decoder="hevc_cuvid",
+                extra_args=[],
+                label="HEVC CUVID decode (hardware)",
+            )
+
+    # CPU fallback — let FFmpeg auto-select decoder
+    return DecodingParams(
+        hwaccel=None,
+        decoder=None,
+        extra_args=[],
+        label=f"{input_codec} CPU decode (software)",
+    )
