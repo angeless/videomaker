@@ -34,9 +34,35 @@
         <div class="tl-scroll" ref="scrollRef">
           <TimelineRuler />
           <div class="tl-tracks">
-            <TimelineTrackClips />
-            <TimelineTrackSubtitles />
-            <TimelineTrackAudio />
+            <!-- C6: Multi-track rendering (when multiTracks available) -->
+            <template v-if="multiTracks.length > 0">
+              <div v-for="track in multiTracks" :key="track.track_id" class="tl-multi-row">
+                <TimelineTrackHeader
+                  :track="track"
+                  @toggle-lock="onToggleLock"
+                  @toggle-mute="onToggleMute"
+                  @set-volume="onSetVolume"
+                />
+                <div class="tl-clip-lane">
+                  <div
+                    v-for="clip in track.clips"
+                    :key="clip.clip_id"
+                    class="tl-clip-block"
+                    :class="{ selected: selectedClipId === clip.clip_id }"
+                    :style="clipStyle(clip)"
+                    @click="selectedClipId = clip.clip_id"
+                  >
+                    {{ clip.label || clip.clip_id.slice(0, 6) }}
+                  </div>
+                </div>
+              </div>
+            </template>
+            <!-- Fallback: legacy 3-track view -->
+            <template v-else>
+              <TimelineTrackClips />
+              <TimelineTrackSubtitles />
+              <TimelineTrackAudio />
+            </template>
             <TimelinePlayhead :scrollContainer="scrollRef" />
           </div>
         </div>
@@ -56,10 +82,52 @@ import TimelineTrackClips from './TimelineTrackClips.vue'
 import TimelineTrackSubtitles from './TimelineTrackSubtitles.vue'
 import TimelineTrackAudio from './TimelineTrackAudio.vue'
 import TimelineClipInfo from './TimelineClipInfo.vue'
+import TimelineTrackHeader from './TimelineTrackHeader.vue'
 
 const store = useTimelineStore()
 const { formatDuration } = useFormatters()
 const scrollRef = ref(null)
+const multiTracks = ref([])
+const selectedClipId = ref(null)
+
+// C6: Load multi-track data from C4 API
+async function loadMultiTracks() {
+  const reviewStore = window.__reviewStore  // injected at app level
+  const sid = reviewStore?.sessionId
+  if (!sid) return
+  try {
+    const resp = await fetch(`/api/review/${sid}/timeline`)
+    if (resp.ok) {
+      const data = await resp.json()
+      if (data.success && data.tracks) {
+        multiTracks.value = data.tracks
+      }
+    }
+  } catch { /* multi-track API not available, use legacy */ }
+}
+
+function clipStyle(clip) {
+  const pxPerMs = (store.zoom || 1) * 0.1
+  return {
+    left: `${clip.start_ms * pxPerMs}px`,
+    width: `${Math.max(20, (clip.end_ms - clip.start_ms) * pxPerMs)}px`,
+  }
+}
+
+function onToggleLock(trackId) {
+  const track = multiTracks.value.find(t => t.track_id === trackId)
+  if (track) track.locked = !track.locked
+}
+
+function onToggleMute(trackId) {
+  const track = multiTracks.value.find(t => t.track_id === trackId)
+  if (track) track.muted = !track.muted
+}
+
+function onSetVolume(trackId, vol) {
+  const track = multiTracks.value.find(t => t.track_id === trackId)
+  if (track) track.volume = vol
+}
 
 function zoomIn() {
   store.setZoom(Math.min(store.zoom + 0.25, 4))

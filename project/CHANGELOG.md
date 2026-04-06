@@ -31,6 +31,10 @@
 - D4a: 渲染进度 API — 3 端点 (render/progress/cancel) + 实时进度 + 编码器信息
 - B4b: 视频流分析 UI — DiagnosticsPanel 双 Tab (画面诊断/流分析) + 场景摘要列表 + 叙事弧线 + review store 扩展
 - B5: 视频流集成测试 — 端到端链路 + VLM 降级 + API chain + 50帧性能 + 回归
+- C6: 多轨 UI — TimelineTrackHeader 组件 + TimelinePanel 多轨渲染 + 锁定/静音/音量控件
+- C7: 多轨集成测试 — 完整 CRUD + 轨道限制 + 锁定保护
+- D4b: RenderProgress.vue — 渲染进度条 + 段数/ETA/编码器显示 + 取消按钮
+- D6: GPU 渲染集成测试 — 全链路 + CPU fallback + 硬件加速 + 并行 concat + 回归
 
 ## [0.17.0] - 2026-04-04
 

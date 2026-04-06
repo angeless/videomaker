@@ -1286,15 +1286,15 @@ Feature D: GPU 渲染
 | C3 | 片段操作 | Done | 2026-04-06 | 7 UT passed |
 | C4 | Timeline API | Done | 2026-04-06 | 7 API tests passed |
 | C5 | track_builder 升级 | Done | 2026-04-06 | 4 UT passed |
-| C6 | 多轨 UI（components/timeline/） | Planned | — | — |
-| C7 | 多轨集成测试 | Planned | — | — |
+| C6 | 多轨 UI（components/timeline/） | Done | 2026-04-06 | TrackHeader + Panel ext |
+| C7 | 多轨集成测试 | Done | 2026-04-06 | 3 IT passed |
 | D1 | 硬件检测扩展 | Done | 2026-04-06 | 6 UT passed |
 | D2 | render_pipeline 硬件加速（auto_render 已 wired） | Done | 2026-04-06 | 5 UT passed |
 | D3 | RenderManager | Done | 2026-04-06 | 6 UT passed |
 | D4a | 渲染进度 API（3 端点） | Done | 2026-04-06 | 4 API tests passed |
-| D4b | 渲染进度 UI（RenderProgress.vue） | Planned | — | — |
+| D4b | 渲染进度 UI（RenderProgress.vue） | Done | 2026-04-06 | Vue component |
 | D5 | 渲染设置 UI | Done | 2026-04-06 | 3 API tests passed |
-| D6 | GPU 渲染集成测试 | Planned | — | — |
+| D6 | GPU 渲染集成测试 | Done | 2026-04-06 | 5 IT passed |
 
 ## 11. 变更日志（Change Log）
 
