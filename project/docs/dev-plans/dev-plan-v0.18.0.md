@@ -1280,7 +1280,7 @@ Feature D: GPU 渲染
 | B3 | SceneSummarizer | Done | 2026-04-06 | 5 UT passed |
 | B4a | 视频流分析 API（3 端点） | Done | 2026-04-06 | 3 API tests passed |
 | B4b | 视频流分析 UI（DiagnosticsPanel） | Done | 2026-04-06 | Vue tabs + store ext |
-| B5 | 视频流集成测试 | Planned | — | — |
+| B5 | 视频流集成测试 | Done | 2026-04-06 | 5 IT passed |
 | C1 | Timeline 数据模型 | Done | 2026-04-06 | 7 UT passed |
 | C2 | 轨道操作 | Done | 2026-04-06 | 6 UT passed |
 | C3 | 片段操作 | Done | 2026-04-06 | 7 UT passed |
