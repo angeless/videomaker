@@ -29,6 +29,7 @@
 - D5: 渲染设置 UI — 编码器选择/质量预设/分辨率/并行开关 + 硬件信息显示 + 设置持久化
 - B4a: 视频流分析 API — 3 端点 (analyze-stream/stream-analysis/scene-summaries) + JobManager 异步
 - D4a: 渲染进度 API — 3 端点 (render/progress/cancel) + 实时进度 + 编码器信息
+- B4b: 视频流分析 UI — DiagnosticsPanel 双 Tab (画面诊断/流分析) + 场景摘要列表 + 叙事弧线 + review store 扩展
 
 ## [0.17.0] - 2026-04-04
 
