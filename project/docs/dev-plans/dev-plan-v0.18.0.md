@@ -1272,8 +1272,8 @@ Feature D: GPU 渲染
 | A1 | MCP 评审操作工具组（6 工具） | Done | 2026-04-06 | 5 UT passed |
 | A2 | MCP VLM 工具组（3 工具） | Done | 2026-04-06 | 3 UT passed |
 | A3 | MCP 增强工具组 | Done | 2026-04-06 | 4 UT passed |
-| A4 | MCP 只读查询工具组 | Planned | — | — |
-| A5 | MCP 安全升级 | Planned | — | — |
+| A4 | MCP 只读查询工具组 | Done | 2026-04-06 | 4 UT passed |
+| A5 | MCP 安全升级 | Done | 2026-04-06 | 4 UT passed |
 | A6 | MCP 集成测试 | Planned | — | — |
 | B1 | FrameSampler | Done | 2026-04-06 | 5 UT passed |
 | B2 | VideoStreamAnalyzer | Planned | — | — |

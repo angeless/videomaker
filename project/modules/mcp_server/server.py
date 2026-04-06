@@ -65,6 +65,12 @@ from modules.mcp_server.tools.enhance_tools import (
     enhance_bgm,
     enhance_transition,
 )
+from modules.mcp_server.tools.review_query_tools import (
+    review_query_state,
+    review_query_comments,
+    review_query_diagnostics,
+    review_query_versions,
+)
 
 mcp = FastMCP("VideoEditor", dependencies=["fastmcp>=0.9"])
 
@@ -227,6 +233,32 @@ def enhance_bgm_tool(session_id: str, genre: str = "ambient", beat_align: bool =
 def enhance_transition_tool(session_id: str, effect: str = "cross_dissolve", duration_ms: int = 500) -> dict:
     """Add transition effect between video segments."""
     return enhance_transition(session_id, effect, duration_ms)
+
+
+# ── 4 Read-Only Query Tools (A4) ────────────────────────────────
+
+@mcp.tool()
+def review_query_state_tool(session_id: str) -> dict:
+    """Get session metadata and current version (read-only)."""
+    return review_query_state(session_id)
+
+
+@mcp.tool()
+def review_query_comments_tool(session_id: str) -> dict:
+    """Get all comments for a review session (read-only)."""
+    return review_query_comments(session_id)
+
+
+@mcp.tool()
+def review_query_diagnostics_tool(session_id: str) -> dict:
+    """Get VLM diagnostics results for a session (read-only)."""
+    return review_query_diagnostics(session_id)
+
+
+@mcp.tool()
+def review_query_versions_tool(session_id: str) -> dict:
+    """Get version history for a review session (read-only)."""
+    return review_query_versions(session_id)
 
 
 if __name__ == "__main__":

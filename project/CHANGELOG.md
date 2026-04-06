@@ -15,6 +15,8 @@
 - contracts.py 扩展: SampledFrame, StreamIssue, StreamAnalysis, SceneSummary, Clip, TimelineTrack, Timeline 数据类
 - C1: TimelineStore — 多轨时间线 SQLite 持久化 (WAL 模式, track/clip CRUD)
 - D1: 硬件检测扩展 — FFmpeg 解码器探测 + HEVC 硬解检测 + choose_decoder() 解码策略
+- A4: MCP 只读查询工具组 — 4 工具 (query_state/comments/diagnostics/versions)
+- A5: MCP 安全升级 — 工具权限分级 (READ/WRITE/DANGEROUS) + JSONL 审计日志 + 路径白名单扩展
 
 ## [0.17.0] - 2026-04-04
 
