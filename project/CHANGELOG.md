@@ -25,6 +25,7 @@
 - A6: MCP 集成测试 — 端到端验证 (review chain/VLM chain/security/tool discovery) + README 更新 (12→29 工具)
 - B3: SceneSummarizer — 场景级描述聚合 (多帧去重合并/代表帧选择/VLM 摘要/降级策略)
 - C4: Timeline API — 9 个多轨端点 (create/get/track CRUD/clip CRUD/split) + 统一错误格式 + 锁定轨道 403
+- D3: RenderManager — 分段并行渲染 (Clip→Segment 适配/ThreadPoolExecutor/FFmpeg concat/重试/清理)
 
 ## [0.17.0] - 2026-04-04
 

@@ -1290,7 +1290,7 @@ Feature D: GPU 渲染
 | C7 | 多轨集成测试 | Planned | — | — |
 | D1 | 硬件检测扩展 | Done | 2026-04-06 | 6 UT passed |
 | D2 | render_pipeline 硬件加速（auto_render 已 wired） | Done | 2026-04-06 | 5 UT passed |
-| D3 | RenderManager | Planned | — | — |
+| D3 | RenderManager | Done | 2026-04-06 | 6 UT passed |
 | D4a | 渲染进度 API（3 端点） | Planned | — | — |
 | D4b | 渲染进度 UI（RenderProgress.vue） | Planned | — | — |
 | D5 | 渲染设置 UI | Planned | — | — |
