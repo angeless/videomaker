@@ -17,6 +17,9 @@
 - D1: 硬件检测扩展 — FFmpeg 解码器探测 + HEVC 硬解检测 + choose_decoder() 解码策略
 - A4: MCP 只读查询工具组 — 4 工具 (query_state/comments/diagnostics/versions)
 - A5: MCP 安全升级 — 工具权限分级 (READ/WRITE/DANGEROUS) + JSONL 审计日志 + 路径白名单扩展
+- C2: TimelineOps 轨道操作 — 增删/重排/锁定/静音/音量 + 类型限制
+- C3: TimelineOps 片段操作 — 移动/裁剪/分割/跨轨移动/重叠检测 + LockedTrackError
+- D2: render_pipeline 硬件加速 — 自适应编码器选择 + HEVC 硬解 + CRF→码率自动切换
 
 ## [0.17.0] - 2026-04-04
 

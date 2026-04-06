@@ -1282,14 +1282,14 @@ Feature D: GPU 渲染
 | B4b | 视频流分析 UI（DiagnosticsPanel） | Planned | — | — |
 | B5 | 视频流集成测试 | Planned | — | — |
 | C1 | Timeline 数据模型 | Done | 2026-04-06 | 7 UT passed |
-| C2 | 轨道操作 | Planned | — | — |
-| C3 | 片段操作 | Planned | — | — |
+| C2 | 轨道操作 | Done | 2026-04-06 | 6 UT passed |
+| C3 | 片段操作 | Done | 2026-04-06 | 7 UT passed |
 | C4 | Timeline API | Planned | — | — |
 | C5 | track_builder 升级 | Planned | — | — |
 | C6 | 多轨 UI（components/timeline/） | Planned | — | — |
 | C7 | 多轨集成测试 | Planned | — | — |
 | D1 | 硬件检测扩展 | Done | 2026-04-06 | 6 UT passed |
-| D2 | render_pipeline 硬件加速（auto_render 已 wired） | Planned | — | — |
+| D2 | render_pipeline 硬件加速（auto_render 已 wired） | Done | 2026-04-06 | 5 UT passed |
 | D3 | RenderManager | Planned | — | — |
 | D4a | 渲染进度 API（3 端点） | Planned | — | — |
 | D4b | 渲染进度 UI（RenderProgress.vue） | Planned | — | — |
