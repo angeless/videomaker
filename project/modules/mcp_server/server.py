@@ -72,7 +72,7 @@ from modules.mcp_server.tools.review_query_tools import (
     review_query_versions,
 )
 
-mcp = FastMCP("VideoEditor", dependencies=["fastmcp>=0.9"])
+mcp = FastMCP("VideoEditor")
 
 
 # ── 7 Workflow Tools ──────────────────────────────────────────────

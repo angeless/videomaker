@@ -42,6 +42,10 @@ export const useReviewStore = defineStore('review', () => {
   const zoomLevel = ref(1)
   const panOffset = ref({ x: 0, y: 0 })
 
+  // ── B4b: Stream Analysis ──
+  const streamAnalysis = ref(null)   // StreamAnalysis from B4a API
+  const sceneSummaries = ref({})     // Dict[scene_idx, SceneSummary]
+
   // ── Timeline ──
   const timelineScale = ref(1)  // px per second
 
@@ -309,6 +313,7 @@ export const useReviewStore = defineStore('review', () => {
     loopIn, loopOut, isLooping,
     mode, safeZone, zoomLevel, panOffset,
     timelineScale, thumbnailData, waveformData, drawingData,
+    streamAnalysis, sceneSummaries,
     // Computed
     filteredComments, pendingComments, currentTimeS, durationS, nearbyComments,
     // Session

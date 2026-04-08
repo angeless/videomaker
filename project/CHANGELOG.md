@@ -4,7 +4,7 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/) 规范。
 
-## [0.18.0] - (Unreleased)
+## [0.18.0] - 2026-04-06
 
 ### 新增 (Added)
 - X0: 异步 Job 管理器 — job_system/job_manager.py (submit/progress/cancel/cleanup，线程安全)
@@ -22,6 +22,19 @@
 - D2: render_pipeline 硬件加速 — 自适应编码器选择 + HEVC 硬解 + CRF→码率自动切换
 - B2: VideoStreamAnalyzer — 跨帧时序分析 (委托 check_continuity + VLM 增强转场/叙事)
 - C5: track_builder 动态多轨输出 — extra_audio_tracks + extra_video_tracks 扩展
+- A6: MCP 集成测试 — 端到端验证 (review chain/VLM chain/security/tool discovery) + README 更新 (12→29 工具)
+- B3: SceneSummarizer — 场景级描述聚合 (多帧去重合并/代表帧选择/VLM 摘要/降级策略)
+- C4: Timeline API — 9 个多轨端点 (create/get/track CRUD/clip CRUD/split) + 统一错误格式 + 锁定轨道 403
+- D3: RenderManager — 分段并行渲染 (Clip→Segment 适配/ThreadPoolExecutor/FFmpeg concat/重试/清理)
+- D5: 渲染设置 UI — 编码器选择/质量预设/分辨率/并行开关 + 硬件信息显示 + 设置持久化
+- B4a: 视频流分析 API — 3 端点 (analyze-stream/stream-analysis/scene-summaries) + JobManager 异步
+- D4a: 渲染进度 API — 3 端点 (render/progress/cancel) + 实时进度 + 编码器信息
+- B4b: 视频流分析 UI — DiagnosticsPanel 双 Tab (画面诊断/流分析) + 场景摘要列表 + 叙事弧线 + review store 扩展
+- B5: 视频流集成测试 — 端到端链路 + VLM 降级 + API chain + 50帧性能 + 回归
+- C6: 多轨 UI — TimelineTrackHeader 组件 + TimelinePanel 多轨渲染 + 锁定/静音/音量控件
+- C7: 多轨集成测试 — 完整 CRUD + 轨道限制 + 锁定保护
+- D4b: RenderProgress.vue — 渲染进度条 + 段数/ETA/编码器显示 + 取消按钮
+- D6: GPU 渲染集成测试 — 全链路 + CPU fallback + 硬件加速 + 并行 concat + 回归
 
 ## [0.17.0] - 2026-04-04
 

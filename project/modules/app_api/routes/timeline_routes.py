@@ -1,12 +1,35 @@
-"""Timeline API route: compile project script + materials into a timeline view."""
+"""Timeline API route: compile project script + materials into a timeline view.
+
+Legacy endpoints (GET /api/timeline, etc.) use project_dir_getter.
+Multi-track endpoints (C4: /api/review/{id}/timeline/*) use TimelineStore + TimelineOps.
+"""
 
 from __future__ import annotations
 
 import json
+import os
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from flask import Blueprint, jsonify, request
+
+
+def _error_response(message: str, error_code: str, status: int = 400):
+    """Standardized error format per coding-standards §4.3."""
+    return jsonify({
+        "success": False,
+        "error": error_code,
+        "message": message,
+        "code": status,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "trace_id": uuid.uuid4().hex[:16],
+    }), status
+
+
+def _ok(data: dict, status: int = 200):
+    return jsonify({"success": True, **data}), status
 
 
 def create_timeline_blueprint(
@@ -449,5 +472,213 @@ def create_timeline_blueprint(
         if audio_save_warning:
             resp["audio_save_warning"] = audio_save_warning
         return jsonify(resp)
+
+    # ── C4: Multi-track timeline CRUD (9 endpoints) ──────────────
+
+    def _get_store():
+        """Lazy-load TimelineStore.
+
+        Reads db_path from env VIDEOEDITOR_TIMELINE_DB, falling back to
+        project_dir/data/review.db if a project is open.
+        """
+        from modules.review_engine.timeline_store import TimelineStore
+        db_path = os.environ.get("VIDEOEDITOR_TIMELINE_DB")
+        if not db_path:
+            pdir = project_dir_getter()
+            if pdir:
+                db_path = str(pdir / "data" / "review.db")
+            else:
+                db_path = "data/review.db"
+        return TimelineStore(db_path)
+
+    def _get_ops():
+        """Lazy-load TimelineOps."""
+        from modules.review_engine.timeline_ops import TimelineOps
+        return TimelineOps(_get_store())
+
+    @bp.route("/api/review/<session_id>/timeline", methods=["POST"])
+    def api_multitrack_create(session_id: str):
+        """Create or ensure a multi-track timeline for a review session.
+
+        Uses session_id as timeline_id (1:1 mapping). Idempotent —
+        returns existing timeline_id if tracks already exist.
+        """
+        store = _get_store()
+        existing = store.get_timeline(session_id)
+        if existing is not None:
+            return _ok({"timeline_id": existing.timeline_id}, 200)
+        timeline_id = store.create_timeline(session_id)
+        return _ok({"timeline_id": timeline_id}, 201)
+
+    @bp.route("/api/review/<session_id>/timeline", methods=["GET"])
+    def api_multitrack_get(session_id: str):
+        """Get the full multi-track timeline (nested: tracks → clips)."""
+        store = _get_store()
+        timeline = store.get_timeline(session_id)
+        if timeline is None:
+            return _error_response(
+                f"No timeline for session {session_id}",
+                "TIMELINE_NOT_FOUND", 404,
+            )
+        # Serialize to nested dict
+        tracks_out = []
+        for t in timeline.tracks:
+            clips_out = [
+                {
+                    "clip_id": c.clip_id,
+                    "track_id": c.track_id,
+                    "start_ms": c.start_ms,
+                    "end_ms": c.end_ms,
+                    "source_path": c.source_path,
+                    "source_in_ms": c.source_in_ms,
+                    "source_out_ms": c.source_out_ms,
+                    "label": c.label,
+                }
+                for c in t.clips
+            ]
+            tracks_out.append({
+                "track_id": t.track_id,
+                "track_type": t.track_type,
+                "label": t.label,
+                "sort_order": t.sort_order,
+                "muted": t.muted,
+                "locked": t.locked,
+                "volume": t.volume,
+                "clips": clips_out,
+            })
+        return _ok({
+            "timeline_id": timeline.timeline_id,
+            "session_id": session_id,
+            "duration_ms": timeline.duration_ms,
+            "tracks": tracks_out,
+        })
+
+    @bp.route("/api/review/<session_id>/timeline/tracks", methods=["POST"])
+    def api_multitrack_add_track(session_id: str):
+        """Add a track to the timeline (auto-creates timeline if needed)."""
+        store = _get_store()
+        ops = _get_ops()
+        timeline = store.get_timeline(session_id)
+        timeline_id = timeline.timeline_id if timeline else store.create_timeline(session_id)
+        body = request.get_json(silent=True) or {}
+        track_type = str(body.get("track_type", "")).strip()
+        label = str(body.get("label", "")).strip()
+        if not track_type:
+            return _error_response("track_type is required", "MISSING_PARAM")
+        try:
+            track_id = ops.add_track(timeline_id, session_id, track_type, label)
+        except ValueError as e:
+            return _error_response(str(e), "TRACK_LIMIT_EXCEEDED")
+        return _ok({"track_id": track_id}, 201)
+
+    @bp.route("/api/review/<session_id>/timeline/tracks/<track_id>", methods=["PATCH"])
+    def api_multitrack_update_track(session_id: str, track_id: str):
+        """Update a track's properties (label, muted, locked, volume)."""
+        store = _get_store()
+        body = request.get_json(silent=True) or {}
+        allowed_keys = {"label", "sort_order", "muted", "locked", "volume"}
+        updates = {k: v for k, v in body.items() if k in allowed_keys}
+        if not updates:
+            return _error_response("No valid fields to update", "NO_UPDATES")
+        ok = store.update_track(track_id, **updates)
+        if not ok:
+            return _error_response(f"Track {track_id} not found", "TRACK_NOT_FOUND", 404)
+        return _ok({"updated": True})
+
+    @bp.route("/api/review/<session_id>/timeline/tracks/<track_id>", methods=["DELETE"])
+    def api_multitrack_delete_track(session_id: str, track_id: str):
+        """Delete a track and all its clips. Fails if locked."""
+        from modules.review_engine.exceptions import LockedTrackError
+        ops = _get_ops()
+        try:
+            removed = ops.remove_track(track_id, session_id)
+        except LockedTrackError:
+            return _error_response(
+                f"Track {track_id} is locked", "TRACK_LOCKED", 403,
+            )
+        if not removed:
+            return _error_response(f"Track {track_id} not found", "TRACK_NOT_FOUND", 404)
+        return _ok({"deleted": True})
+
+    @bp.route("/api/review/<session_id>/timeline/clips", methods=["POST"])
+    def api_multitrack_add_clip(session_id: str):
+        """Add a clip to a track."""
+        from modules.review_engine.exceptions import LockedTrackError
+        store = _get_store()
+        body = request.get_json(silent=True) or {}
+        track_id = str(body.get("track_id", "")).strip()
+        start_ms = body.get("start_ms")
+        end_ms = body.get("end_ms")
+
+        if not track_id or start_ms is None or end_ms is None:
+            return _error_response("track_id, start_ms, end_ms are required", "MISSING_PARAM")
+        try:
+            start_ms = int(start_ms)
+            end_ms = int(end_ms)
+        except (ValueError, TypeError):
+            return _error_response("start_ms/end_ms must be integers", "INVALID_PARAM")
+
+        # Check track is not locked
+        tracks = store.get_tracks(session_id)
+        track = next((t for t in tracks if t.track_id == track_id), None)
+        if track is None:
+            return _error_response(f"Track {track_id} not found", "TRACK_NOT_FOUND", 404)
+        if track.locked:
+            return _error_response(f"Track {track_id} is locked", "TRACK_LOCKED", 403)
+
+        clip_id = store.add_clip(
+            track_id=track_id,
+            start_ms=start_ms,
+            end_ms=end_ms,
+            source_path=str(body.get("source_path", "")),
+            source_in_ms=int(body.get("source_in_ms", 0)),
+            source_out_ms=int(body.get("source_out_ms", 0)),
+            label=str(body.get("label", "")),
+        )
+        return _ok({"clip_id": clip_id}, 201)
+
+    @bp.route("/api/review/<session_id>/timeline/clips/<clip_id>", methods=["PATCH"])
+    def api_multitrack_update_clip(session_id: str, clip_id: str):
+        """Update a clip's properties."""
+        store = _get_store()
+        body = request.get_json(silent=True) or {}
+        allowed = {"start_ms", "end_ms", "source_path", "source_in_ms", "source_out_ms", "label", "track_id"}
+        updates = {k: v for k, v in body.items() if k in allowed}
+        if not updates:
+            return _error_response("No valid fields to update", "NO_UPDATES")
+        ok = store.update_clip(clip_id, **updates)
+        if not ok:
+            return _error_response(f"Clip {clip_id} not found", "CLIP_NOT_FOUND", 404)
+        return _ok({"updated": True})
+
+    @bp.route("/api/review/<session_id>/timeline/clips/<clip_id>", methods=["DELETE"])
+    def api_multitrack_delete_clip(session_id: str, clip_id: str):
+        """Delete a clip."""
+        store = _get_store()
+        removed = store.remove_clip(clip_id)
+        if not removed:
+            return _error_response(f"Clip {clip_id} not found", "CLIP_NOT_FOUND", 404)
+        return _ok({"deleted": True})
+
+    @bp.route("/api/review/<session_id>/timeline/clips/<clip_id>/split", methods=["POST"])
+    def api_multitrack_split_clip(session_id: str, clip_id: str):
+        """Split a clip at a given timestamp. Returns IDs of the two new clips."""
+        from modules.review_engine.exceptions import LockedTrackError
+        ops = _get_ops()
+        body = request.get_json(silent=True) or {}
+        at_ms = body.get("at_ms")
+        if at_ms is None:
+            return _error_response("at_ms is required", "MISSING_PARAM")
+        try:
+            at_ms = int(at_ms)
+        except (ValueError, TypeError):
+            return _error_response("at_ms must be an integer", "INVALID_PARAM")
+        try:
+            left_id, right_id = ops.split_clip(clip_id, at_ms, session_id)
+        except LockedTrackError:
+            return _error_response("Clip is on a locked track", "TRACK_LOCKED", 403)
+        except ValueError as e:
+            return _error_response(str(e), "SPLIT_ERROR")
+        return _ok({"left_clip_id": left_id, "right_clip_id": right_id})
 
     return bp

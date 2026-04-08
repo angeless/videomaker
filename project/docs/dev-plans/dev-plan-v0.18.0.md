@@ -1274,27 +1274,27 @@ Feature D: GPU 渲染
 | A3 | MCP 增强工具组 | Done | 2026-04-06 | 4 UT passed |
 | A4 | MCP 只读查询工具组 | Done | 2026-04-06 | 4 UT passed |
 | A5 | MCP 安全升级 | Done | 2026-04-06 | 4 UT passed |
-| A6 | MCP 集成测试 | Planned | — | — |
+| A6 | MCP 集成测试 | Done | 2026-04-06 | 5 IT (3 passed + 2 skipped on Py3.9) |
 | B1 | FrameSampler | Done | 2026-04-06 | 5 UT passed |
 | B2 | VideoStreamAnalyzer | Done | 2026-04-06 | 5 UT passed |
-| B3 | SceneSummarizer | Planned | — | — |
-| B4a | 视频流分析 API（3 端点） | Planned | — | — |
-| B4b | 视频流分析 UI（DiagnosticsPanel） | Planned | — | — |
-| B5 | 视频流集成测试 | Planned | — | — |
+| B3 | SceneSummarizer | Done | 2026-04-06 | 5 UT passed |
+| B4a | 视频流分析 API（3 端点） | Done | 2026-04-06 | 3 API tests passed |
+| B4b | 视频流分析 UI（DiagnosticsPanel） | Done | 2026-04-06 | Vue tabs + store ext |
+| B5 | 视频流集成测试 | Done | 2026-04-06 | 5 IT passed |
 | C1 | Timeline 数据模型 | Done | 2026-04-06 | 7 UT passed |
 | C2 | 轨道操作 | Done | 2026-04-06 | 6 UT passed |
 | C3 | 片段操作 | Done | 2026-04-06 | 7 UT passed |
-| C4 | Timeline API | Planned | — | — |
+| C4 | Timeline API | Done | 2026-04-06 | 7 API tests passed |
 | C5 | track_builder 升级 | Done | 2026-04-06 | 4 UT passed |
-| C6 | 多轨 UI（components/timeline/） | Planned | — | — |
-| C7 | 多轨集成测试 | Planned | — | — |
+| C6 | 多轨 UI（components/timeline/） | Done | 2026-04-06 | TrackHeader + Panel ext |
+| C7 | 多轨集成测试 | Done | 2026-04-06 | 3 IT passed |
 | D1 | 硬件检测扩展 | Done | 2026-04-06 | 6 UT passed |
 | D2 | render_pipeline 硬件加速（auto_render 已 wired） | Done | 2026-04-06 | 5 UT passed |
-| D3 | RenderManager | Planned | — | — |
-| D4a | 渲染进度 API（3 端点） | Planned | — | — |
-| D4b | 渲染进度 UI（RenderProgress.vue） | Planned | — | — |
-| D5 | 渲染设置 UI | Planned | — | — |
-| D6 | GPU 渲染集成测试 | Planned | — | — |
+| D3 | RenderManager | Done | 2026-04-06 | 6 UT passed |
+| D4a | 渲染进度 API（3 端点） | Done | 2026-04-06 | 4 API tests passed |
+| D4b | 渲染进度 UI（RenderProgress.vue） | Done | 2026-04-06 | Vue component |
+| D5 | 渲染设置 UI | Done | 2026-04-06 | 3 API tests passed |
+| D6 | GPU 渲染集成测试 | Done | 2026-04-06 | 5 IT passed |
 
 ## 11. 变更日志（Change Log）
 
