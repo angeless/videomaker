@@ -3,7 +3,7 @@
 > 更新于 2026-04-14
 
 ## 当前版本：v0.18.0 — 四大基础设施升级 ✅ 完成
-## 当前状态：四轮交叉审查修复完成 — commit 291cce5（共修复43个问题）
+## 当前状态：五轮交叉审查修复完成 — commit 39d5728（共修复54个问题）
 
 ## 版本完成记录
 
@@ -16,9 +16,9 @@
 | v0.18.0 | MCP + VLM 流 + 多轨 + GPU 渲染 | 27 | `docs/dev-plans/dev-plan-v0.18.0.md` | **Done** |
 
 ## 上次停在
-- 分支：`main`，commit 291cce5
-- 四轮独立交叉审查完成，43个问题全部修复（10 P1 + 10 业务/UX + 11 + 12）
-- 测试：1623 passed, 5 skipped（+7 新增回归测试）
+- 分支：`main`，commit 39d5728
+- 五轮独立交叉审查完成，54个问题全部修复（10 P1 + 10 业务/UX + 12 + 6 + 11 + 11）
+- 测试：1626 passed, 5 skipped（+10 新增回归测试）
 
 ## 下一步
 - 规划 v0.19.0（参考已知遗留问题列表）
@@ -30,5 +30,5 @@
 - RenderManager._concat_segments() stream normalization（异构源需重编码）
 - API response envelope 不一致（部分旧路由仍用 {ok/error} 格式）
 - /vlm/diagnose 同步 vs analyze-stream 异步语义不一致
-- POST /timeline/clips 绕过 `_assert_no_overlap`（需 TimelineOps add_clip wrapper）
 - VLM 多图片 prompt（transition 当前只送单帧，理想是并排双帧）
+- VLM 错误（429/timeout/auth）当前静默 logger.debug，应升级到用户可见
