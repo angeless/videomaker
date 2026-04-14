@@ -7,6 +7,7 @@ GET  /api/review/{id}/render/download — Download rendered file
 """
 
 import os
+import threading
 import time
 import uuid
 from datetime import datetime, timezone
@@ -36,32 +37,48 @@ def create_render_blueprint(*, timeline_store_getter, job_manager_getter, review
     """
     bp = Blueprint("render_api", __name__)
 
-    # In-memory render state per session
+    # In-memory render state per session. Mutated from THREE thread contexts:
+    #   1. HTTP request handlers (Flask worker threads)
+    #   2. Render worker threads (via _do_render's success/failure branches)
+    #   3. The cancel handler
+    # Without a lock, last-writer-wins races can produce divergent state
+    # (e.g. worker writes status="done" while cancel handler writes "cancelled"),
+    # leaving the file on disk with status="cancelled" — download endpoint then
+    # rejects the very file it could serve. RLock allows nested acquisition
+    # so helper functions can be called from already-locked sections.
     _render_state = {}  # session_id → {job_id, start_time, encoder, output_path, status, segments_total}
+    _state_lock = threading.RLock()
 
-    # How long to keep terminal render state around (for /progress and /download)
-    # before garbage-collecting. After this window the next POST can start fresh.
-    _STATE_TTL_S = 24 * 3600
+    # Differentiated TTLs: failed/cancelled state is short-lived (24h is enough
+    # to investigate); successful renders linger longer so users can come back
+    # tomorrow and click Download. Independent of disk file lifetime.
+    _FAILED_TTL_S = 24 * 3600       # 1 day
+    _DONE_TTL_S = 30 * 24 * 3600    # 30 days
 
     def _is_active(state):
-        return state and state.get("status") in ("rendering", "pending")
+        # Note: only "rendering" is ever written to state.status by any code
+        # path; "pending" was a forward-compat hedge that turned out unused.
+        return state is not None and state.get("status") == "rendering"
 
     def _gc_render_state():
-        """Drop terminal render state entries older than TTL.
+        """Drop terminal render state entries past their TTL.
 
-        Called opportunistically on each POST /render. Keeps the in-memory
-        dict from growing unboundedly on long-running servers and prevents
-        terminal state from ghost-blocking future renders beyond the TTL.
+        Called from BOTH POST /render and GET /progress so that even
+        long-idle servers (no new renders) reclaim memory eventually.
+        Caller need not hold the lock — this method acquires it.
         """
         now = time.time()
         to_delete = []
-        for sid, st in _render_state.items():
-            if st.get("status") in ("done", "failed", "cancelled") and (
-                now - st.get("start_time", now) > _STATE_TTL_S
-            ):
-                to_delete.append(sid)
-        for sid in to_delete:
-            _render_state.pop(sid, None)
+        with _state_lock:
+            for sid, st in _render_state.items():
+                status = st.get("status")
+                age = now - st.get("start_time", now)
+                if status == "done" and age > _DONE_TTL_S:
+                    to_delete.append(sid)
+                elif status in ("failed", "cancelled") and age > _FAILED_TTL_S:
+                    to_delete.append(sid)
+            for sid in to_delete:
+                _render_state.pop(sid, None)
 
     @bp.route("/api/review/<session_id>/render", methods=["POST"])
     def api_render_trigger(session_id: str):
@@ -74,12 +91,13 @@ def create_render_blueprint(*, timeline_store_getter, job_manager_getter, review
         # Prevent concurrent renders on the same session — the prior job would
         # be orphaned (still running, still writing to disk) while the new one
         # replaces its state entry, making it unreachable via /progress /cancel.
-        prior = _render_state.get(session_id)
-        if _is_active(prior):
-            return _error_response(
-                f"Render already in progress for this session (job_id={prior.get('job_id')})",
-                "RENDER_IN_PROGRESS", 409,
-            )
+        with _state_lock:
+            prior = _render_state.get(session_id)
+            if _is_active(prior):
+                return _error_response(
+                    f"Render already in progress for this session (job_id={prior.get('job_id')})",
+                    "RENDER_IN_PROGRESS", 409,
+                )
 
         store = timeline_store_getter()
         timeline = store.get_timeline(session_id)
@@ -143,18 +161,24 @@ def create_render_blueprint(*, timeline_store_getter, job_manager_getter, review
             # CRITICAL: must update state on BOTH success and failure, otherwise
             # a raised exception leaves status="rendering" forever and the 409
             # concurrency guard permanently locks out new renders on this session.
+            # Lock around state mutations to avoid races with cancel handler.
             try:
                 result_path = manager.render_timeline(clips_list, out_path, progress_callback=_progress)
-                state = _render_state.get(sid)
-                if state is not None:
-                    state["status"] = "done"
-                    state["output_path"] = result_path
+                with _state_lock:
+                    state = _render_state.get(sid)
+                    if state is not None:
+                        # Don't clobber a "cancelled" status that arrived during
+                        # the final encoding pass — the user's intent wins.
+                        if state.get("status") != "cancelled":
+                            state["status"] = "done"
+                            state["output_path"] = result_path
                 return result_path
             except Exception as exc:
-                state = _render_state.get(sid)
-                if state is not None:
-                    state["status"] = "failed"
-                    state["error"] = str(exc)
+                with _state_lock:
+                    state = _render_state.get(sid)
+                    if state is not None and state.get("status") != "cancelled":
+                        state["status"] = "failed"
+                        state["error"] = str(exc)
                 raise
 
         # Get encoder label
@@ -172,63 +196,83 @@ def create_render_blueprint(*, timeline_store_getter, job_manager_getter, review
         # (if render completes extremely fast, setting state after submit could
         # overwrite the worker's status="done" with status="rendering").
         start_time = time.time()
-        _render_state[session_id] = {
-            "job_id": "",  # set after submit
-            "start_time": start_time,
-            "encoder": encoder_label,
-            "output_path": output_path,
-            "status": "rendering",
-            "segments_total": len(clips),
-        }
+        with _state_lock:
+            _render_state[session_id] = {
+                "job_id": "",  # set after submit
+                "start_time": start_time,
+                "encoder": encoder_label,
+                "output_path": output_path,
+                "status": "rendering",
+                "segments_total": len(clips),
+            }
         job_id = jm.submit("render", _do_render, jm, clips, output_path, session_id)
-        _render_state[session_id]["job_id"] = job_id
+        with _state_lock:
+            # Re-fetch in case the worker already mutated state — never overwrite
+            # a terminal status that's already been set.
+            entry = _render_state.get(session_id)
+            if entry is not None and entry.get("status") == "rendering":
+                entry["job_id"] = job_id
 
         return _ok({"job_id": job_id}, 202)
 
     @bp.route("/api/review/<session_id>/render/progress", methods=["GET"])
     def api_render_progress(session_id: str):
         """Query real-time render progress."""
-        state = _render_state.get(session_id)
-        if not state:
-            return _error_response("No render in progress", "NOT_FOUND", 404)
+        # GC opportunistically here too — long-idle servers (no new POSTs) need
+        # their terminal entries reclaimed eventually to honour the TTL claim.
+        _gc_render_state()
+        with _state_lock:
+            state = _render_state.get(session_id)
+            if not state:
+                return _error_response("No render in progress", "NOT_FOUND", 404)
+            # Snapshot fields under lock; release before doing JM call which
+            # internally acquires its own lock.
+            job_id = state.get("job_id") or ""
+            state_status = state["status"]
+            start_time = state["start_time"]
+            segments_total = state["segments_total"]
+            encoder = state["encoder"]
+            cached_output = state.get("output_path", "")
 
         jm = job_manager_getter()
         # Guard the micro-window between state init and jm.submit() completing:
         # if job_id is empty, jm.get_status("") would return "not_found" which
         # leaks through as the status. Fall back to the state's own status.
-        job_id = state.get("job_id") or ""
         if jm and job_id:
             job_status = jm.get_status(job_id)
         else:
             job_status = {}
         pct = job_status.get("progress_pct", 0.0)
-        status = job_status.get("status", state["status"])
+        status = job_status.get("status", state_status)
         # jm.get_status returns "not_found" after cleanup_expired; prefer the
         # state's own status in that degenerate case so the client gets truth.
         if status == "not_found":
-            status = state["status"]
+            status = state_status
         # Reconcile: if JM reports terminal status but _render_state wasn't
         # updated (e.g. _do_render raised before writing state, or worker was
         # cancelled before start), push the terminal status back into state so
         # the 409 concurrency guard doesn't permanently lock this session.
-        if status in ("failed", "cancelled") and state["status"] == "rendering":
-            state["status"] = status
-            if status == "failed" and job_status.get("error"):
-                state["error"] = job_status["error"]
-        elapsed = time.time() - state["start_time"]
+        if status in ("failed", "cancelled") and state_status == "rendering":
+            with _state_lock:
+                state = _render_state.get(session_id)
+                if state is not None and state.get("status") == "rendering":
+                    state["status"] = status
+                    if status == "failed" and job_status.get("error"):
+                        state["error"] = job_status["error"]
+        elapsed = time.time() - start_time
         eta = (elapsed / pct * (100 - pct)) if pct > 0 else 0
 
         result = {
             "status": status,
-            "segments_total": state["segments_total"],
-            "segments_done": int(state["segments_total"] * pct / 100),
+            "segments_total": segments_total,
+            "segments_done": int(segments_total * pct / 100),
             "percent": round(pct, 1),
-            "encoder": state["encoder"],
+            "encoder": encoder,
             "elapsed_s": round(elapsed, 1),
             "eta_s": round(eta, 1),
         }
         if status == "done":
-            result["output_path"] = state.get("output_path", "")
+            result["output_path"] = cached_output
         if status == "failed":
             result["error"] = job_status.get("error", "unknown error")
         return _ok(result)
@@ -236,32 +280,39 @@ def create_render_blueprint(*, timeline_store_getter, job_manager_getter, review
     @bp.route("/api/review/<session_id>/render/cancel", methods=["POST"])
     def api_render_cancel(session_id: str):
         """Cancel an in-progress render."""
-        state = _render_state.get(session_id)
-        if not state:
-            return _error_response("No render in progress", "NOT_FOUND", 404)
+        with _state_lock:
+            state = _render_state.get(session_id)
+            if not state:
+                return _error_response("No render in progress", "NOT_FOUND", 404)
+            job_id = state.get("job_id", "")
 
         jm = job_manager_getter()
         if jm is None:
             return _error_response("Job manager not available", "JOB_UNAVAILABLE", 500)
 
-        cancelled = jm.cancel(state["job_id"])
+        cancelled = jm.cancel(job_id)
         if cancelled:
-            state["status"] = "cancelled"
+            with _state_lock:
+                state = _render_state.get(session_id)
+                if state is not None:
+                    state["status"] = "cancelled"
             return _ok({"cancelled": True})
         return _error_response(
             "Cannot cancel — render may have already completed",
-            "CANCEL_FAILED",
+            "CANCEL_FAILED", 409,
         )
 
     @bp.route("/api/review/<session_id>/render/download", methods=["GET"])
     def api_render_download(session_id: str):
         """Download the rendered output file."""
-        state = _render_state.get(session_id)
-        if not state:
-            return _error_response("No render found for this session", "NOT_FOUND", 404)
-        if state.get("status") != "done":
+        with _state_lock:
+            state = _render_state.get(session_id)
+            if not state:
+                return _error_response("No render found for this session", "NOT_FOUND", 404)
+            status = state.get("status")
+            output_path = state.get("output_path", "")
+        if status != "done":
             return _error_response("Render not yet complete", "NOT_READY", 409)
-        output_path = state.get("output_path", "")
         if not output_path or not os.path.isfile(output_path):
             return _error_response("Rendered file not found on disk", "FILE_MISSING", 404)
         # Double-check the resolved path is a .mp4 — defence in depth.

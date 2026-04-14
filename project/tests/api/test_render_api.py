@@ -135,34 +135,85 @@ def test_render_complete_status(client, app):
     assert "status" in data
 
 
-def test_progress_reconciles_state_when_job_reports_failed(client, app):
-    """If JobManager reports 'failed' but _render_state still says 'rendering',
-    /progress must reconcile state so a subsequent POST isn't locked out."""
-    # Configure JobManager mock to report 'failed' status
-    out_path = f"{app.config['_RENDER_OUT_DIR']}/will_fail.mp4"
-    client.post(f"/api/review/{SID}/render", json={"output_path": out_path})
-
-    # Swap in a new jm mock that reports failed
-    from modules.app_api.routes import render_routes as rr
-    # Find the blueprint and reach into its closure via test client
-    # Simpler path: read progress; since our fixture jm returns "running" by default,
-    # simulate failure by updating the jm mock's return_value.
-    jm_mock = client.application.blueprints["render_api"]
-    # Easier: patch get_status dynamically via the blueprint fixture
-    # (The fixture exposes jm at module scope via the lambda.)
-
-    # Instead of deep-patching, we directly exercise the reconciliation branch
-    # by POSTing a second time after the first returns 202 — the bug is
-    # that state stays "rendering" forever. After our fix, this is safe
-    # once state is terminal. We can't easily simulate a raised _do_render
-    # from this fixture, so just verify the guard itself works correctly
-    # for the healthy path: a second POST on an active render → 409.
-    r2 = client.post(f"/api/review/{SID}/render", json={"output_path": out_path})
-    assert r2.status_code == 409
-
-
 def test_progress_not_found_for_unknown_session(client):
     """/progress on a session that never rendered returns 404."""
     resp = client.get("/api/review/ghost-session/render/progress")
     assert resp.status_code == 404
     assert resp.get_json()["error"] == "NOT_FOUND"
+
+
+# ── Reconciliation regression: a real test that exercises the failed branch ──
+
+@pytest.fixture
+def app_with_jm_control(tmp_path):
+    """Like `app` but exposes the jm mock so tests can mutate get_status."""
+    flask_app = Flask(__name__)
+    from modules.app_api.routes.render_routes import create_render_blueprint
+
+    store = MagicMock()
+    clip = MagicMock()
+    clip.start_ms = 0
+    clip.end_ms = 3000
+    clip.source_path = "/tmp/clip.mp4"
+    clip.source_in_ms = 0
+    clip.source_out_ms = 3000
+    track = MagicMock()
+    track.track_type = "video"
+    track.clips = [clip]
+    timeline = MagicMock()
+    timeline.tracks = [track]
+    timeline.timeline_id = "tl1"
+    store.get_timeline.return_value = timeline
+
+    review_store = MagicMock()
+    review_store.get_session.return_value = {"project_path": str(tmp_path)}
+
+    jm = MagicMock()
+    jm.submit.return_value = "job_001"
+    jm.get_status.return_value = {"status": "running", "progress_pct": 50.0, "error": None}
+    jm.cancel.return_value = True
+
+    bp = create_render_blueprint(
+        timeline_store_getter=lambda: store,
+        job_manager_getter=lambda: jm,
+        review_store_getter=lambda: review_store,
+    )
+    flask_app.register_blueprint(bp)
+    flask_app.config["TESTING"] = True
+    flask_app.config["_RENDER_OUT_DIR"] = str(tmp_path / "output")
+    flask_app.config["_JM_MOCK"] = jm  # exposed for tests to mutate
+    return flask_app
+
+
+def test_progress_reconciles_failed_status_unblocks_next_render(app_with_jm_control):
+    """When JM reports 'failed' for a session whose state still says 'rendering',
+    /progress must write back the terminal status so the 409 guard releases
+    and the user can retry."""
+    client = app_with_jm_control.test_client()
+    out_path = f"{app_with_jm_control.config['_RENDER_OUT_DIR']}/r1.mp4"
+    jm = app_with_jm_control.config["_JM_MOCK"]
+
+    # 1. POST first render — state=rendering, jm=running
+    r1 = client.post(f"/api/review/{SID}/render", json={"output_path": out_path})
+    assert r1.status_code == 202
+
+    # 2. Second POST blocked (409) because state=rendering
+    r2 = client.post(f"/api/review/{SID}/render", json={"output_path": out_path})
+    assert r2.status_code == 409
+
+    # 3. Simulate the worker raising before _do_render's except branch ran
+    #    (e.g., killed mid-task). JM record updates to "failed" but _render_state
+    #    is stuck at "rendering". Mutate jm to report failed.
+    jm.get_status.return_value = {
+        "status": "failed", "progress_pct": 30.0, "error": "ffmpeg crashed",
+    }
+
+    # 4. /progress should now reconcile state.status -> "failed"
+    p = client.get(f"/api/review/{SID}/render/progress")
+    pdata = p.get_json()
+    assert pdata["status"] == "failed"
+    assert pdata.get("error") == "ffmpeg crashed"
+
+    # 5. With state reconciled to terminal, next POST must succeed (not 409)
+    r3 = client.post(f"/api/review/{SID}/render", json={"output_path": out_path})
+    assert r3.status_code == 202, f"expected 202 after reconciliation, got {r3.status_code}: {r3.get_data(as_text=True)}"

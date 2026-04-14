@@ -110,6 +110,55 @@ class TimelineOps:
 
     # ── C3: Clip operations ──────────────────────────────────────
 
+    def add_clip(
+        self,
+        track_id: str,
+        session_id: str,
+        start_ms: int,
+        end_ms: int,
+        source_path: str = "",
+        source_in_ms: int = 0,
+        source_out_ms: Optional[int] = None,
+        label: str = "",
+    ) -> str:
+        """Add a clip to a track, enforcing locked-track + overlap invariants.
+
+        Routes that previously called `store.add_clip` directly bypassed both
+        checks — see `move_clip` for the precedent that callers expect to be
+        protected. For video tracks, raises OverlapError if the inserted span
+        would collide with an existing clip on the same track.
+
+        Returns the new clip_id.
+        """
+        # Find the target track to determine type and locked state
+        target_track = None
+        for t in self._store.get_tracks(session_id):
+            if t.track_id == track_id:
+                target_track = t
+                break
+        if target_track is None:
+            raise ValueError(f"Track {track_id} not found")
+        if target_track.locked:
+            raise LockedTrackError(f"Track {track_id} is locked")
+
+        # Half-open [start, end) overlap check, video tracks only — audio,
+        # subtitle, effect tracks legitimately allow overlapping clips.
+        if target_track.track_type == "video":
+            self._assert_no_overlap(track_id, "", start_ms, end_ms)
+
+        if source_out_ms is None:
+            source_out_ms = source_in_ms + (end_ms - start_ms)
+
+        return self._store.add_clip(
+            track_id=track_id,
+            start_ms=start_ms,
+            end_ms=end_ms,
+            source_path=source_path,
+            source_in_ms=source_in_ms,
+            source_out_ms=source_out_ms,
+            label=label,
+        )
+
     def move_clip(self, clip_id: str, new_start_ms: int, session_id: str) -> None:
         """Move a clip to a new start position."""
         self._assert_clip_not_on_locked_track(clip_id, session_id)

@@ -96,6 +96,38 @@ def test_move_clip_rejects_overlap_on_video_track(ops):
     assert clips[1].start_ms == 10000
 
 
+def test_add_clip_rejects_overlap_on_video_track(ops):
+    """add_clip on a video track must raise OverlapError when ranges collide."""
+    from modules.review_engine.exceptions import OverlapError
+    o, store, tid = _setup(ops)
+    track_id = o.add_track(tid, "s1", "video")
+    o.add_clip(track_id, "s1", start_ms=0, end_ms=5000, source_path="/v/a.mp4")
+    # Second clip overlaps [0, 5000) → must reject
+    with pytest.raises(OverlapError):
+        o.add_clip(track_id, "s1", start_ms=3000, end_ms=8000, source_path="/v/b.mp4")
+    # Only the first clip should be present
+    assert len(store.get_clips(track_id)) == 1
+
+
+def test_add_clip_allows_overlap_on_audio_track(ops):
+    """Audio tracks legitimately allow stacked clips (e.g. layered ambience)."""
+    o, store, tid = _setup(ops)
+    track_id = o.add_track(tid, "s1", "audio")
+    o.add_clip(track_id, "s1", start_ms=0, end_ms=5000)
+    # Overlap is allowed on audio — should not raise
+    o.add_clip(track_id, "s1", start_ms=2000, end_ms=7000)
+    assert len(store.get_clips(track_id)) == 2
+
+
+def test_add_clip_rejects_locked_track(ops):
+    """add_clip on a locked track must raise LockedTrackError."""
+    o, store, tid = _setup(ops)
+    track_id = o.add_track(tid, "s1", "video")
+    store.update_track(track_id, locked=True)
+    with pytest.raises(LockedTrackError):
+        o.add_clip(track_id, "s1", start_ms=0, end_ms=5000)
+
+
 def test_trim_clip(ops):
     o, store, tid = _setup(ops)
     track_id = o.add_track(tid, "s1", "video")

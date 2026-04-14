@@ -602,9 +602,9 @@ def create_timeline_blueprint(
 
     @bp.route("/api/review/<session_id>/timeline/clips", methods=["POST"])
     def api_multitrack_add_clip(session_id: str):
-        """Add a clip to a track."""
-        from modules.review_engine.exceptions import LockedTrackError
-        store = _get_store()
+        """Add a clip to a track. Enforces locked-track + video-overlap invariants."""
+        from modules.review_engine.exceptions import LockedTrackError, OverlapError
+        ops = _get_ops()
         body = request.get_json(silent=True) or {}
         track_id = str(body.get("track_id", "")).strip()
         start_ms = body.get("start_ms")
@@ -618,30 +618,30 @@ def create_timeline_blueprint(
         except (ValueError, TypeError):
             return _error_response("start_ms/end_ms must be integers", "INVALID_PARAM")
 
-        # Check track is not locked
-        tracks = store.get_tracks(session_id)
-        track = next((t for t in tracks if t.track_id == track_id), None)
-        if track is None:
-            return _error_response(f"Track {track_id} not found", "TRACK_NOT_FOUND", 404)
-        if track.locked:
-            return _error_response(f"Track {track_id} is locked", "TRACK_LOCKED", 403)
-
         # Default source_out_ms to clip duration so render segments are not zero-length
         source_in_ms = int(body.get("source_in_ms", 0))
         source_out_ms = body.get("source_out_ms")
-        if source_out_ms is None:
-            source_out_ms = source_in_ms + (end_ms - start_ms)
-        else:
+        if source_out_ms is not None:
             source_out_ms = int(source_out_ms)
-        clip_id = store.add_clip(
-            track_id=track_id,
-            start_ms=start_ms,
-            end_ms=end_ms,
-            source_path=str(body.get("source_path", "")),
-            source_in_ms=source_in_ms,
-            source_out_ms=source_out_ms,
-            label=str(body.get("label", "")),
-        )
+
+        try:
+            clip_id = ops.add_clip(
+                track_id=track_id,
+                session_id=session_id,
+                start_ms=start_ms,
+                end_ms=end_ms,
+                source_path=str(body.get("source_path", "")),
+                source_in_ms=source_in_ms,
+                source_out_ms=source_out_ms,
+                label=str(body.get("label", "")),
+            )
+        except ValueError as exc:
+            # Track-not-found is the only ValueError raised here
+            return _error_response(str(exc), "TRACK_NOT_FOUND", 404)
+        except LockedTrackError:
+            return _error_response(f"Track {track_id} is locked", "TRACK_LOCKED", 403)
+        except OverlapError as exc:
+            return _error_response(str(exc), "CLIP_OVERLAP", 409)
         return _ok({"clip_id": clip_id}, 201)
 
     @bp.route("/api/review/<session_id>/timeline/clips/<clip_id>", methods=["PATCH"])

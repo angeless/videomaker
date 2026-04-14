@@ -183,8 +183,32 @@ def create_vlm_blueprint(*, review_store_getter, vlm_adapter_getter):
         })
 
     # ── B4a: Video stream analysis API (3 endpoints) ──────────────
+    #
+    # The cache is mutated from a worker thread (_run_analysis writes the
+    # result dict) and read from HTTP request threads (the two GET endpoints).
+    # Without a lock, a reader could observe a half-built dict during write.
+    # Without a size bound, every analyze-stream POST permanently grows memory.
+    import threading as _threading
+    from collections import OrderedDict as _OrderedDict
 
-    _stream_analysis_cache = {}  # session_id → StreamAnalysis dict
+    _stream_analysis_cache: "_OrderedDict[str, dict]" = _OrderedDict()
+    _stream_cache_lock = _threading.Lock()
+    _STREAM_CACHE_MAX = 100  # bound LRU; on overflow drop oldest
+
+    def _cache_put(sid: str, value: dict) -> None:
+        with _stream_cache_lock:
+            if sid in _stream_analysis_cache:
+                _stream_analysis_cache.move_to_end(sid)
+            _stream_analysis_cache[sid] = value
+            while len(_stream_analysis_cache) > _STREAM_CACHE_MAX:
+                _stream_analysis_cache.popitem(last=False)  # pop oldest
+
+    def _cache_get(sid: str):
+        with _stream_cache_lock:
+            value = _stream_analysis_cache.get(sid)
+            if value is not None:
+                _stream_analysis_cache.move_to_end(sid)  # mark as recently used
+            return value
 
     @bp.route("/api/review/<session_id>/vlm/analyze-stream", methods=["POST"])
     def api_analyze_stream(session_id: str):
@@ -234,7 +258,7 @@ def create_vlm_blueprint(*, review_store_getter, vlm_adapter_getter):
                 idx: {"summary": s.summary, "key_objects": s.key_objects, "duration_ms": s.duration_ms}
                 for idx, s in summaries.items()
             }
-            _stream_analysis_cache[sid] = {"analysis": result, "summaries": summary_result}
+            _cache_put(sid, {"analysis": result, "summaries": summary_result})
             return result
 
         jm = bp._job_manager
@@ -255,7 +279,7 @@ def create_vlm_blueprint(*, review_store_getter, vlm_adapter_getter):
     @bp.route("/api/review/<session_id>/vlm/stream-analysis", methods=["GET"])
     def api_get_stream_analysis(session_id: str):
         """Get video stream analysis result."""
-        cached = _stream_analysis_cache.get(session_id)
+        cached = _cache_get(session_id)
         if not cached:
             return _error_response(
                 "No stream analysis available. Trigger with POST analyze-stream first.",
@@ -266,7 +290,7 @@ def create_vlm_blueprint(*, review_store_getter, vlm_adapter_getter):
     @bp.route("/api/review/<session_id>/vlm/scene-summaries", methods=["GET"])
     def api_get_scene_summaries(session_id: str):
         """Get scene summaries from stream analysis."""
-        cached = _stream_analysis_cache.get(session_id)
+        cached = _cache_get(session_id)
         if not cached:
             return _error_response(
                 "No scene summaries available. Trigger with POST analyze-stream first.",

@@ -421,6 +421,7 @@ function _scheduleClear(setter, ms) {
 }
 
 async function saveVlmSettings() {
+  vlmTestResult.value = ''
   const data = await apiStore.api('POST', '/api/settings/ai', {
     provider: vlmProvider.value,
     openai_api_key: vlmOpenaiKey.value,
@@ -428,8 +429,12 @@ async function saveVlmSettings() {
   })
   if (!data || data.error || data.ok === false) {
     vlmTestResult.value = `保存失败：${(data && data.error) || '未知错误'}`
-    _scheduleClear(() => { vlmTestResult.value = '' }, 3000)
+  } else {
+    // Success feedback — without this, users had no signal that Save worked
+    // (no toast, no button-state change), making them re-click and re-submit.
+    vlmTestResult.value = '✓ 已保存'
   }
+  _scheduleClear(() => { vlmTestResult.value = '' }, 3000)
 }
 
 async function testVlmConnection() {

@@ -54,6 +54,8 @@ const error = ref('')
 const downloading = ref(false)
 let pollTimer = null
 let _downloadAbort = null
+let _revokeTimer = null
+let _activeBlobUrl = null
 
 const statusLabel = computed(() => {
   const map = { idle: '等待中', rendering: '渲染中…', done: '完成', failed: '失败', cancelled: '已取消' }
@@ -115,6 +117,18 @@ async function cancelRender() {
   }
 }
 
+// Parse a backend error envelope into a friendly message. Backend uses
+// {success: false, error: "<CODE>", message: "<human text>"}; falls back
+// to the raw text (truncated) if not JSON.
+function _friendlyDownloadError(rawText, status) {
+  try {
+    const j = JSON.parse(rawText)
+    const msg = j.message || j.error
+    if (msg) return `下载失败 (HTTP ${status}): ${msg}`
+  } catch { /* not JSON */ }
+  return `下载失败 (HTTP ${status}): ${(rawText || '').slice(0, 120)}`
+}
+
 // Download via fetch+blob so auth headers are sent (browser <a download> can't).
 async function downloadRender() {
   if (!_sessionId.value || downloading.value) return
@@ -130,11 +144,12 @@ async function downloadRender() {
     )
     if (!resp.ok) {
       const msg = await resp.text().catch(() => '')
-      error.value = `下载失败 (HTTP ${resp.status}): ${msg.slice(0, 120)}`
+      error.value = _friendlyDownloadError(msg, resp.status)
       return
     }
     const blob = await resp.blob()
     const url = URL.createObjectURL(blob)
+    _activeBlobUrl = url
     const a = document.createElement('a')
     a.href = url
     a.download = (outputPath.value.split('/').pop()) || 'render.mp4'
@@ -143,8 +158,14 @@ async function downloadRender() {
     document.body.removeChild(a)
     // Safari and some older WebKit builds start the download asynchronously;
     // revoking the blob URL immediately can cancel it. Delay the revoke so
-    // the browser has time to commit to the download.
-    setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    // the browser has time to commit. Track the timer so unmount can revoke
+    // immediately and free the blob memory.
+    if (_revokeTimer) clearTimeout(_revokeTimer)
+    _revokeTimer = setTimeout(() => {
+      URL.revokeObjectURL(url)
+      _revokeTimer = null
+      if (_activeBlobUrl === url) _activeBlobUrl = null
+    }, 60_000)
   } catch (e) {
     if (e?.name !== 'AbortError') {
       error.value = `下载失败: ${e?.message || '网络错误'}`
@@ -159,6 +180,17 @@ onUnmounted(() => {
   if (pollTimer) clearInterval(pollTimer)
   // Abort any in-flight download so we don't buffer gigabytes after unmount.
   if (_downloadAbort) _downloadAbort.abort()
+  // Revoke any pending blob URL immediately rather than waiting for the
+  // 60s timer — by the time unmount fires, the browser has already
+  // committed to the download (it's been at least one event-loop tick).
+  if (_revokeTimer) {
+    clearTimeout(_revokeTimer)
+    _revokeTimer = null
+  }
+  if (_activeBlobUrl) {
+    URL.revokeObjectURL(_activeBlobUrl)
+    _activeBlobUrl = null
+  }
 })
 
 defineExpose({ startRender })
