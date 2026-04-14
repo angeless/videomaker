@@ -191,6 +191,16 @@ def create_vlm_blueprint(*, review_store_getter, vlm_adapter_getter):
     import threading as _threading
     from collections import OrderedDict as _OrderedDict
 
+    # Lazy singleton for JobManager — eagerly initialized at blueprint
+    # creation time to avoid the lazy-init race where two concurrent first
+    # POSTs could both pass `if not hasattr(bp, "_job_manager")` and create
+    # two pool instances, leaking threads from the loser.
+    try:
+        from modules.job_system.job_manager import JobManager as _JobManager
+        bp._job_manager = _JobManager(max_workers=2)
+    except ImportError:
+        bp._job_manager = None
+
     _stream_analysis_cache: "_OrderedDict[str, dict]" = _OrderedDict()
     _stream_cache_lock = _threading.Lock()
     _STREAM_CACHE_MAX = 100  # bound LRU; on overflow drop oldest
@@ -217,9 +227,7 @@ def create_vlm_blueprint(*, review_store_getter, vlm_adapter_getter):
         if err:
             return err
 
-        try:
-            from modules.job_system.job_manager import JobManager
-        except ImportError:
+        if bp._job_manager is None:
             return _error_response("Job system not available", "JOB_SYSTEM_UNAVAILABLE", 500)
 
         body = request.get_json(silent=True) or {}
@@ -227,27 +235,35 @@ def create_vlm_blueprint(*, review_store_getter, vlm_adapter_getter):
         if not video_path:
             return _error_response("video_path is required", "MISSING_PARAM")
 
-        # Lazy singleton for job manager
-        if not hasattr(bp, "_job_manager"):
-            bp._job_manager = JobManager(max_workers=2)
+        def _run_analysis(jm, vid_path, sid, adapter):
+            """Background stream analysis task.
 
-        def _run_analysis(jm, jid, vid_path, sid, adapter):
-            """Background stream analysis task."""
+            Reads its own job_id from the worker thread (set by JobManager
+            in _run_job before calling the function). Previously this
+            function received `jid=None` which silently no-op'd every
+            update_progress call → clients always saw 0% progress.
+            """
+            import threading as _t
+            jid = getattr(_t.current_thread(), '_job_id', '')
+
             from modules.review_engine.frame_sampler import FrameSampler
             from modules.review_engine.video_stream_analyzer import VideoStreamAnalyzer
             from modules.review_engine.scene_summarizer import SceneSummarizer
 
             sampler = FrameSampler()
             frames = sampler.sample(vid_path)
-            jm.update_progress(jid, 30.0)
+            if jid:
+                jm.update_progress(jid, 30.0)
 
             analyzer = VideoStreamAnalyzer(vlm_adapter=adapter)
             analysis = analyzer.analyze(frames)
-            jm.update_progress(jid, 70.0)
+            if jid:
+                jm.update_progress(jid, 70.0)
 
             summarizer = SceneSummarizer(vlm_adapter=adapter)
             summaries = summarizer.summarize(analysis, frames)
-            jm.update_progress(jid, 100.0)
+            if jid:
+                jm.update_progress(jid, 100.0)
 
             result = {
                 "issues": [{"type": i.issue_type, "severity": i.severity, "description": i.description} for i in analysis.issues],
@@ -265,14 +281,8 @@ def create_vlm_blueprint(*, review_store_getter, vlm_adapter_getter):
         adapter = _get_adapter()
         job_id = jm.submit(
             "stream_analysis",
-            _run_analysis, jm, None, video_path, session_id, adapter,
+            _run_analysis, jm, video_path, session_id, adapter,
         )
-        # Patch the job_id into the submitted args
-        with jm._lock:
-            record = jm._jobs.get(job_id)
-        if record:
-            # Store job_id for progress self-updates
-            pass
 
         return _ok({"job_id": job_id}, 202)
 

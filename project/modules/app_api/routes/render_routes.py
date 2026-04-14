@@ -167,16 +167,20 @@ def create_render_blueprint(*, timeline_store_getter, job_manager_getter, review
                 with _state_lock:
                     state = _render_state.get(sid)
                     if state is not None:
-                        # Don't clobber a "cancelled" status that arrived during
-                        # the final encoding pass — the user's intent wins.
-                        if state.get("status") != "cancelled":
+                        # Never overwrite a terminal status set elsewhere:
+                        # "cancelled" — user clicked cancel during final encode
+                        # "failed"    — /progress reconciliation already wrote
+                        #               this from a transient JM error report
+                        # Only "rendering" → "done" is a legitimate transition.
+                        if state.get("status") == "rendering":
                             state["status"] = "done"
                             state["output_path"] = result_path
                 return result_path
             except Exception as exc:
                 with _state_lock:
                     state = _render_state.get(sid)
-                    if state is not None and state.get("status") != "cancelled":
+                    # Same guard: don't trample cancelled/done.
+                    if state is not None and state.get("status") == "rendering":
                         state["status"] = "failed"
                         state["error"] = str(exc)
                 raise
@@ -260,7 +264,16 @@ def create_render_blueprint(*, timeline_store_getter, job_manager_getter, review
                     if status == "failed" and job_status.get("error"):
                         state["error"] = job_status["error"]
         elapsed = time.time() - start_time
-        eta = (elapsed / pct * (100 - pct)) if pct > 0 else 0
+        # eta is meaningless once the render has reached a terminal state;
+        # zero it out so frontends that conditionally render "estimated time
+        # remaining" don't display nonsense like "30s remaining" on a
+        # failed/cancelled render.
+        if status in ("done", "failed", "cancelled"):
+            eta = 0
+            if status == "done":
+                pct = 100.0
+        else:
+            eta = (elapsed / pct * (100 - pct)) if pct > 0 else 0
 
         result = {
             "status": status,

@@ -102,6 +102,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useReviewStore } from '../stores/review.js'
+import { useApiStore } from '../stores/api.js'
 import { useKeyboardShortcuts } from '../composables/useKeyboardShortcuts.js'
 import ReviewPlayer from '../components/review/ReviewPlayer.vue'
 import PlayerControls from '../components/review/PlayerControls.vue'
@@ -119,6 +120,7 @@ import DiagnosticsPanel from '../components/review/DiagnosticsPanel.vue'
 import RenderProgress from '../components/review/RenderProgress.vue'
 
 const store = useReviewStore()
+const apiStore = useApiStore()
 const route = useRoute()
 const playerRef = ref(null)
 const timelineRef = ref(null)
@@ -257,21 +259,17 @@ async function onAnnotationComplete({ strokes, frameDataUrl, timestamp_ms }) {
   commentInputRef.value?.setAiHintLoading(true)
   try {
     const frameB64 = frameDataUrl.split(',')[1]
-    const resp = await fetch(`/api/review/${store.sessionId}/vlm/describe`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        frame_base64: frameB64,
-        strokes,
-        timestamp_ms,
-      }),
-    })
-    const data = await resp.json()
-    if (data.success && data.description) {
+    // Route through apiStore so X-VideoEditor-Token + CSRF are attached;
+    // raw fetch was 401-ing in token-required mode and the silent catch
+    // hid the failure from users.
+    const data = await apiStore.api(
+      'POST',
+      `/api/review/${store.sessionId}/vlm/describe`,
+      { frame_base64: frameB64, strokes, timestamp_ms },
+    )
+    if (data && !data.error && data.success && data.description) {
       commentInputRef.value?.setAiHint(data.description)
     }
-  } catch (e) {
-    // VLM unavailable — silently skip
   } finally {
     commentInputRef.value?.setAiHintLoading(false)
   }

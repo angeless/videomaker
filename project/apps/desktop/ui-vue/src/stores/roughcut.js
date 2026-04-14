@@ -4,8 +4,10 @@
  */
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { useApiStore } from './api.js'
 
 export const useRoughcutStore = defineStore('roughcut', () => {
+  const apiStore = useApiStore()
   // ── Session state ──
   const sessionId = ref(null)
   const videoPath = ref('')
@@ -38,19 +40,21 @@ export const useRoughcutStore = defineStore('roughcut', () => {
   const selectedScenes = computed(() => scenes.value.filter(s => s.selected))
 
   // ── API helpers ──
-  async function _fetch(url, options = {}) {
-    try {
-      const res = await fetch(url, {
-        headers: { 'Content-Type': 'application/json' },
-        ...options,
-      })
-      const data = await res.json()
-      if (!data.success) throw new Error(data.message || 'API error')
-      return data
-    } catch (e) {
-      errorMessage.value = e.message
-      throw e
+  // Routes through apiStore to attach X-VideoEditor-Token + CSRF (raw fetch
+  // would 401/403 in token-required mode). Signature mirrors apiStore.api.
+  async function _fetch(method, url, body) {
+    const data = await apiStore.api(method, url, body)
+    if (!data || data.error) {
+      const msg = (data && data.error) || 'API error'
+      errorMessage.value = msg
+      throw new Error(msg)
     }
+    if (data.success === false) {
+      const msg = data.message || 'API error'
+      errorMessage.value = msg
+      throw new Error(msg)
+    }
+    return data
   }
 
   // ── Actions ──
@@ -58,9 +62,9 @@ export const useRoughcutStore = defineStore('roughcut', () => {
     status.value = 'loading'
     errorMessage.value = ''
     try {
-      const data = await _fetch('/api/roughcut/init', {
-        method: 'POST',
-        body: JSON.stringify({ project_path: projectPath, video_path: videoFilePath }),
+      const data = await _fetch('POST', '/api/roughcut/init', {
+        project_path: projectPath,
+        video_path: videoFilePath,
       })
       sessionId.value = data.session_id
       videoPath.value = videoFilePath
@@ -78,7 +82,7 @@ export const useRoughcutStore = defineStore('roughcut', () => {
     if (!sessionId.value) return
     status.value = 'loading'
     try {
-      const data = await _fetch(`/api/roughcut/${sessionId.value}/transcript`)
+      const data = await _fetch('GET', `/api/roughcut/${sessionId.value}/transcript`)
       transcript.value = data.transcript
       status.value = 'ready'
     } catch (e) {
@@ -88,7 +92,7 @@ export const useRoughcutStore = defineStore('roughcut', () => {
 
   async function loadFillers() {
     if (!sessionId.value) return
-    const data = await _fetch(`/api/roughcut/${sessionId.value}/fillers`)
+    const data = await _fetch('GET', `/api/roughcut/${sessionId.value}/fillers`)
     fillers.value = data.fillers || []
   }
 
@@ -96,7 +100,7 @@ export const useRoughcutStore = defineStore('roughcut', () => {
     if (!sessionId.value) return
     status.value = 'loading'
     try {
-      const data = await _fetch(`/api/roughcut/${sessionId.value}/scenes`)
+      const data = await _fetch('GET', `/api/roughcut/${sessionId.value}/scenes`)
       scenes.value = (data.scenes || []).map(s => ({ ...s, selected: s.selected ?? true }))
       status.value = 'ready'
     } catch (e) {
@@ -106,7 +110,7 @@ export const useRoughcutStore = defineStore('roughcut', () => {
 
   async function loadStats() {
     if (!sessionId.value) return
-    const data = await _fetch(`/api/roughcut/${sessionId.value}/stats`)
+    const data = await _fetch('GET', `/api/roughcut/${sessionId.value}/stats`)
     stats.value = {
       totalComments: data.total_comments,
       totalVersions: data.total_versions,
@@ -135,9 +139,8 @@ export const useRoughcutStore = defineStore('roughcut', () => {
 
   async function submitEdits(operations) {
     if (!sessionId.value) return
-    const data = await _fetch(`/api/roughcut/${sessionId.value}/transcript/edit`, {
-      method: 'POST',
-      body: JSON.stringify({ operations }),
+    const data = await _fetch('POST', `/api/roughcut/${sessionId.value}/transcript/edit`, {
+      operations,
     })
     currentVersion.value = data.version
     return data
@@ -145,9 +148,9 @@ export const useRoughcutStore = defineStore('roughcut', () => {
 
   async function batchRemoveFillers(fillerTypes = []) {
     if (!sessionId.value) return
-    const data = await _fetch(`/api/roughcut/${sessionId.value}/fillers/batch`, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'remove', filler_types: fillerTypes }),
+    const data = await _fetch('POST', `/api/roughcut/${sessionId.value}/fillers/batch`, {
+      action: 'remove',
+      filler_types: fillerTypes,
     })
     return data
   }
@@ -169,9 +172,8 @@ export const useRoughcutStore = defineStore('roughcut', () => {
   async function submitSceneSelection() {
     if (!sessionId.value) return
     const selected = scenes.value.filter(s => s.selected).map(s => s.scene_idx)
-    const data = await _fetch(`/api/roughcut/${sessionId.value}/scenes/select`, {
-      method: 'POST',
-      body: JSON.stringify({ selected }),
+    const data = await _fetch('POST', `/api/roughcut/${sessionId.value}/scenes/select`, {
+      selected,
     })
     currentVersion.value = data.version
     return data
@@ -182,10 +184,7 @@ export const useRoughcutStore = defineStore('roughcut', () => {
     if (!sessionId.value) return
     status.value = 'rendering'
     try {
-      const data = await _fetch(`/api/roughcut/${sessionId.value}/generate`, {
-        method: 'POST',
-        body: JSON.stringify({}),
-      })
+      const data = await _fetch('POST', `/api/roughcut/${sessionId.value}/generate`, {})
       status.value = 'ready'
       return data
     } catch (e) {

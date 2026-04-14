@@ -132,6 +132,18 @@ function _friendlyDownloadError(rawText, status) {
 // Download via fetch+blob so auth headers are sent (browser <a download> can't).
 async function downloadRender() {
   if (!_sessionId.value || downloading.value) return
+  // Revoke any previous download's blob URL immediately rather than waiting
+  // for its 60s timer. Otherwise a user clicking 下载 twice would orphan the
+  // first blob (its closure-captured timer would eventually revoke it, but
+  // we'd hold up to 2GB of blob memory until then).
+  if (_revokeTimer) {
+    clearTimeout(_revokeTimer)
+    _revokeTimer = null
+  }
+  if (_activeBlobUrl) {
+    URL.revokeObjectURL(_activeBlobUrl)
+    _activeBlobUrl = null
+  }
   downloading.value = true
   // AbortController lets us cancel a 2GB in-flight blob read on unmount/close.
   _downloadAbort = new AbortController()

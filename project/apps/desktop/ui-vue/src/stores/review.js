@@ -4,8 +4,10 @@
  */
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { useApiStore } from './api.js'
 
 export const useReviewStore = defineStore('review', () => {
+  const apiStore = useApiStore()
   // ── Session state ──
   const sessionId = ref(null)
   const session = ref(null)        // full session object from API
@@ -89,19 +91,26 @@ export const useReviewStore = defineStore('review', () => {
   })
 
   // ── API helpers ──
-  async function _fetch(url, options = {}) {
-    try {
-      const res = await fetch(url, {
-        headers: { 'Content-Type': 'application/json' },
-        ...options,
-      })
-      const data = await res.json()
-      if (!data.success) throw new Error(data.message || 'API error')
-      return data
-    } catch (e) {
-      errorMessage.value = e.message
-      throw e
+  // Signature deliberately matches apiStore.api(method, url, body) so callers
+  // can use the same idiom across stores. Routes through apiStore so auth
+  // (X-VideoEditor-Token + CSRF) and friendlyErrorMessage processing happen
+  // automatically. Bare `fetch()` here previously broke under the local-token
+  // auth gate AND made ExportDialog/EnhancePanel completely non-functional
+  // because they were calling `_fetch('GET', url)` with the old (url, options)
+  // signature — the method string was being treated as the URL.
+  async function _fetch(method, url, body) {
+    const data = await apiStore.api(method, url, body)
+    if (!data || data.error) {
+      const msg = (data && data.error) || 'API error'
+      errorMessage.value = msg
+      throw new Error(msg)
     }
+    if (data.success === false) {
+      const msg = data.message || 'API error'
+      errorMessage.value = msg
+      throw new Error(msg)
+    }
+    return data
   }
 
   // ── Session actions ──
@@ -109,14 +118,11 @@ export const useReviewStore = defineStore('review', () => {
     status.value = 'loading'
     errorMessage.value = ''
     try {
-      const data = await _fetch('/api/review/init', {
-        method: 'POST',
-        body: JSON.stringify({
-          project_path: projectPath,
-          video_path: videoPath,
-          video_type: videoType,
-          speech_ratio: speechRatio,
-        }),
+      const data = await _fetch('POST', '/api/review/init', {
+        project_path: projectPath,
+        video_path: videoPath,
+        video_type: videoType,
+        speech_ratio: speechRatio,
       })
       sessionId.value = data.session_id
       await loadState()
@@ -143,7 +149,7 @@ export const useReviewStore = defineStore('review', () => {
 
   async function loadState() {
     if (!sessionId.value) return
-    const data = await _fetch(`/api/review/${sessionId.value}/state`)
+    const data = await _fetch('GET', `/api/review/${sessionId.value}/state`)
     session.value = data.session
     currentVersion.value = data.session.current_version
   }
@@ -154,41 +160,33 @@ export const useReviewStore = defineStore('review', () => {
     const url = version != null
       ? `/api/review/${sessionId.value}/comments?version=${version}`
       : `/api/review/${sessionId.value}/comments`
-    const data = await _fetch(url)
+    const data = await _fetch('GET', url)
     comments.value = data.comments || []
   }
 
   async function addComment({ timeStartMs, timeEndMs, commentType, text, drawingData: drawing, visualContext: vc }) {
     if (!sessionId.value) return
-    const data = await _fetch(`/api/review/${sessionId.value}/comments`, {
-      method: 'POST',
-      body: JSON.stringify({
-        version: currentVersion.value,
-        time_start_ms: timeStartMs,
-        time_end_ms: timeEndMs || null,
-        comment_type: commentType,
-        text,
-        drawing_data: drawing || null,
-        visual_context: vc || null,
-      }),
+    const data = await _fetch('POST', `/api/review/${sessionId.value}/comments`, {
+      version: currentVersion.value,
+      time_start_ms: timeStartMs,
+      time_end_ms: timeEndMs || null,
+      comment_type: commentType,
+      text,
+      drawing_data: drawing || null,
+      visual_context: vc || null,
     })
     await loadComments()
     return data
   }
 
   async function updateComment(commentId, fields) {
-    const data = await _fetch(`/api/review/comments/${commentId}`, {
-      method: 'PATCH',
-      body: JSON.stringify(fields),
-    })
+    const data = await _fetch('PATCH', `/api/review/comments/${commentId}`, fields)
     await loadComments()
     return data
   }
 
   async function deleteComment(commentId) {
-    const data = await _fetch(`/api/review/comments/${commentId}`, {
-      method: 'DELETE',
-    })
+    const data = await _fetch('DELETE', `/api/review/comments/${commentId}`)
     await loadComments()
     return data
   }
@@ -203,7 +201,7 @@ export const useReviewStore = defineStore('review', () => {
   // ── Version actions ──
   async function loadVersions() {
     if (!sessionId.value) return
-    const data = await _fetch(`/api/review/${sessionId.value}/versions`)
+    const data = await _fetch('GET', `/api/review/${sessionId.value}/versions`)
     versions.value = data.versions || []
   }
 
@@ -214,9 +212,7 @@ export const useReviewStore = defineStore('review', () => {
 
   async function rollbackTo(versionNumber) {
     if (!sessionId.value) return
-    const data = await _fetch(`/api/review/${sessionId.value}/rollback/${versionNumber}`, {
-      method: 'POST',
-    })
+    const data = await _fetch('POST', `/api/review/${sessionId.value}/rollback/${versionNumber}`)
     currentVersion.value = data.new_version
     await Promise.all([loadVersions(), loadComments()])
     return data
@@ -320,6 +316,8 @@ export const useReviewStore = defineStore('review', () => {
     initSession, loadFromSession, loadState,
     // Comments
     loadComments, addComment, updateComment, deleteComment, resolveComment,
+    // Generic API helper exposed for components (ExportDialog, EnhancePanel)
+    _fetch,
     // Versions
     loadVersions, switchVersion, rollbackTo,
     // Playback
