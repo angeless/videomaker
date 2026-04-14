@@ -219,53 +219,53 @@ RenderManager.render_timeline(timeline, config)
 
 | 任务ID | 任务名称 | 优先级 | 依赖 | 状态 |
 |--------|---------|--------|------|------|
-| A1 | MCP 评审操作工具组 — init + comment + reedit（6 工具） | P0 | — | Planned |
-| A2 | MCP VLM 工具组 — describe + diagnose + status（3 工具） | P1 | — | Planned |
-| A3 | MCP 增强工具组 — audio/tts/bgm/transition（4 工具） | P1 | — | Planned |
-| A4 | MCP 只读查询工具组 — session state + diagnostics | P1 | A1 | Planned |
-| A5 | MCP 安全升级 — 工具权限分级 + 审计日志 | P0 | A1-A3 | Planned |
-| A6 | MCP 集成测试 + Claude Desktop 验证 | P0 | ALL-A | Planned |
+| A1 | MCP 评审操作工具组 — init + comment + reedit（6 工具） | P0 | — | Done |
+| A2 | MCP VLM 工具组 — describe + diagnose + status（3 工具） | P1 | — | Done |
+| A3 | MCP 增强工具组 — audio/tts/bgm/transition（4 工具） | P1 | — | Done |
+| A4 | MCP 只读查询工具组 — session state + diagnostics | P1 | A1 | Done |
+| A5 | MCP 安全升级 — 工具权限分级 + 审计日志 | P0 | A1-A3 | Done |
+| A6 | MCP 集成测试 + Claude Desktop 验证 | P0 | ALL-A | Done |
 
 ### Feature B: VLM 视频流分析
 
 | 任务ID | 任务名称 | 优先级 | 依赖 | 状态 |
 |--------|---------|--------|------|------|
-| B1 | FrameSampler — 关键帧采样策略 | P0 | — | Planned |
-| B2 | VideoStreamAnalyzer — 跨帧时序分析 | P0 | B1 | Planned |
-| B3 | SceneSummarizer — 场景级描述聚合 | P0 | B2 | Planned |
-| B4a | 视频流分析 API — 3 个后端端点 | P1 | B1-B3, X0 | Planned |
-| B4b | 视频流分析 UI — DiagnosticsPanel + Store 扩展 | P1 | B4a | Planned |
-| B5 | 视频流分析集成测试 | P0 | B1-B4b | Planned |
+| B1 | FrameSampler — 关键帧采样策略 | P0 | — | Done |
+| B2 | VideoStreamAnalyzer — 跨帧时序分析 | P0 | B1 | Done |
+| B3 | SceneSummarizer — 场景级描述聚合 | P0 | B2 | Done |
+| B4a | 视频流分析 API — 3 个后端端点 | P1 | B1-B3, X0 | Done |
+| B4b | 视频流分析 UI — DiagnosticsPanel + Store 扩展 | P1 | B4a | Done |
+| B5 | 视频流分析集成测试 | P0 | B1-B4b | Done |
 
 ### Feature C: 多轨时间线
 
 | 任务ID | 任务名称 | 优先级 | 依赖 | 状态 |
 |--------|---------|--------|------|------|
-| C1 | Timeline 数据模型 + TimelineStore | P0 | — | Planned |
-| C2 | TimelineOps — 轨道操作（增删/重排/锁定/静音） | P0 | C1 | Planned |
-| C3 | TimelineOps — 片段操作（移动/裁剪/分割/跨轨） | P0 | C1 | Planned |
-| C4 | Timeline API 端点 | P0 | C1-C3 | Planned |
-| C5 | track_builder 升级 — 动态 Track[] 输出 | P1 | C1 | Planned |
-| C6 | 多轨 UI — 扩展 components/timeline/ 体系 | P1 | C4 | Planned |
-| C7 | 多轨时间线集成测试 | P0 | C1-C6 | Planned |
+| C1 | Timeline 数据模型 + TimelineStore | P0 | — | Done |
+| C2 | TimelineOps — 轨道操作（增删/重排/锁定/静音） | P0 | C1 | Done |
+| C3 | TimelineOps — 片段操作（移动/裁剪/分割/跨轨） | P0 | C1 | Done |
+| C4 | Timeline API 端点 | P0 | C1-C3 | Done |
+| C5 | track_builder 升级 — 动态 Track[] 输出 | P1 | C1 | Done |
+| C6 | 多轨 UI — 扩展 components/timeline/ 体系 | P1 | C4 | Done |
+| C7 | 多轨时间线集成测试 | P0 | C1-C6 | Done |
 
 ### Feature D: GPU 渲染管线
 
 | 任务ID | 任务名称 | 优先级 | 依赖 | 状态 |
 |--------|---------|--------|------|------|
-| D1 | 硬件检测扩展 — 解码能力探测 + HEVC 支持 | P0 | — | Planned |
-| D2 | render_pipeline 接入硬件加速（auto_render 已 wired） | P0 | D1 | Planned |
-| D3 | RenderManager — 分段并行渲染调度 | P0 | D2 | Planned |
-| D4a | 渲染进度 API — 3 个后端端点 | P1 | D3, X0 | Planned |
-| D4b | 渲染进度 UI — RenderProgress.vue 前端进度条 | P1 | D4a | Planned |
-| D5 | 渲染设置 UI — 编码器选择 + 质量/速度 | P2 | D2 | Planned |
-| D6 | GPU 渲染集成测试 + 性能基准 | P0 | D1-D4b | Planned |
+| D1 | 硬件检测扩展 — 解码能力探测 + HEVC 支持 | P0 | — | Done |
+| D2 | render_pipeline 接入硬件加速（auto_render 已 wired） | P0 | D1 | Done |
+| D3 | RenderManager — 分段并行渲染调度 | P0 | D2 | Done |
+| D4a | 渲染进度 API — 3 个后端端点 | P1 | D3, X0 | Done |
+| D4b | 渲染进度 UI — RenderProgress.vue 前端进度条 | P1 | D4a | Done |
+| D5 | 渲染设置 UI — 编码器选择 + 质量/速度 | P2 | D2 | Done |
+| D6 | GPU 渲染集成测试 + 性能基准 | P0 | D1-D4b | Done |
 
 ### 共享基础设施
 
 | 任务ID | 任务名称 | 优先级 | 依赖 | 状态 |
 |--------|---------|--------|------|------|
-| X0 | 异步任务管理器 — Job 注册/进度/取消 | P0 | — | Planned |
+| X0 | 异步任务管理器 — Job 注册/进度/取消 | P0 | — | Done |
 
 > ⚠️ 审计新增（H1）：B4a 和 D4a 都需要 `202 + job_id` 异步模式，但项目中当前
 > 无任何异步 Job 基础设施。X0 作为共享前置任务，提供统一的 Job 注册/进度查询/取消机制。
