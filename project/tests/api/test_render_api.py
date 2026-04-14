@@ -87,6 +87,18 @@ def test_trigger_render_rejects_path_traversal(client):
     assert resp.get_json()["error"] == "PATH_NOT_ALLOWED"
 
 
+def test_trigger_render_blocks_concurrent_render_on_same_session(client, app):
+    """A second render POST while one is rendering must 409, not orphan the first."""
+    out_path = f"{app.config['_RENDER_OUT_DIR']}/first.mp4"
+    r1 = client.post(f"/api/review/{SID}/render", json={"output_path": out_path})
+    assert r1.status_code == 202
+
+    out_path2 = f"{app.config['_RENDER_OUT_DIR']}/second.mp4"
+    r2 = client.post(f"/api/review/{SID}/render", json={"output_path": out_path2})
+    assert r2.status_code == 409
+    assert r2.get_json()["error"] == "RENDER_IN_PROGRESS"
+
+
 def test_render_progress(client):
     """GET /api/review/{id}/render/progress returns live progress."""
     # First trigger a render

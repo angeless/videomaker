@@ -111,7 +111,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useReviewStore } from '../../stores/review.js'
 import { useApiStore } from '../../stores/api.js'
 
@@ -127,14 +127,17 @@ const streamLoading = ref(false)
 const streamProgress = ref('0%')
 const streamError = ref('')
 
+// Set to false on unmount so in-flight poll loops exit instead of writing to
+// a disposed component (harmless in Pinia but leaks HTTP requests).
+let _mounted = true
+
 const streamIssues = computed(() => store.streamAnalysis?.issues || [])
 
 async function checkVlmStatus() {
-  try {
-    const resp = await fetch('/api/vlm/status')
-    const data = await resp.json()
+  const data = await apiStore.api('GET', '/api/vlm/status')
+  if (data && !data.error) {
     vlmAvailable.value = data.available === true
-  } catch {
+  } else {
     vlmAvailable.value = false
   }
 }
@@ -155,15 +158,19 @@ async function runDiagnosis() {
     }
     if (!frameB64) { diagnostics.value = []; return }
 
-    const resp = await fetch(`/api/review/${store.sessionId}/vlm/diagnose`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ frame_base64: frameB64 }),
-    })
-    const data = await resp.json()
-    diagnostics.value = data.diagnostics || []
-  } catch { diagnostics.value = [] }
-  finally { isRunning.value = false }
+    const data = await apiStore.api(
+      'POST',
+      `/api/review/${store.sessionId}/vlm/diagnose`,
+      { frame_base64: frameB64 },
+    )
+    if (data && !data.error) {
+      diagnostics.value = data.diagnostics || []
+    } else {
+      diagnostics.value = []
+    }
+  } finally {
+    isRunning.value = false
+  }
 }
 
 async function runStreamAnalysis() {
@@ -190,11 +197,13 @@ async function runStreamAnalysis() {
     return
   }
 
-  // Poll for results (max 2 min)
+  // Poll for results (max 2 min); bail out early on unmount.
   let completed = false
   for (let i = 0; i < MAX_POLLS; i++) {
     await new Promise(r => setTimeout(r, 2000))
+    if (!_mounted) return
     const analysis = await apiStore.api('GET', `/api/review/${store.sessionId}/vlm/stream-analysis`)
+    if (!_mounted) return
     if (analysis && !analysis.error && (analysis.issues || analysis.narrative_arc)) {
       store.streamAnalysis = analysis
       const sumData = await apiStore.api('GET', `/api/review/${store.sessionId}/vlm/scene-summaries`)
@@ -217,6 +226,7 @@ function seekTo(diagnostic) {
 }
 
 onMounted(checkVlmStatus)
+onBeforeUnmount(() => { _mounted = false })
 </script>
 
 <style scoped>

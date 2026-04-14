@@ -77,19 +77,31 @@ mcp = FastMCP("VideoEditor")
 
 
 def _summarize_args(args: tuple) -> str:
-    """Redact large/sensitive fields before writing to the audit log."""
+    """Redact all strings/bytes/dicts/lists before writing to the audit log.
+
+    Audit logs should record WHAT was called (tool name + arg shapes), never
+    the actual content, which may include API keys, frame_base64 payloads,
+    user comments, or other sensitive/PII data. Only primitive numeric/bool
+    values are logged literally.
+    """
     parts = []
     for a in args:
-        if isinstance(a, str) and len(a) > 80:
+        if isinstance(a, str):
             parts.append(f"<str:{len(a)}>")
         elif isinstance(a, (bytes, bytearray)):
             parts.append(f"<bytes:{len(a)}>")
         elif isinstance(a, dict):
-            parts.append(f"<dict:keys={sorted(a.keys())[:5]}>")
+            # Log only shape (key count), not key names — keys can be PII.
+            parts.append(f"<dict:len={len(a)}>")
         elif isinstance(a, (list, tuple)):
             parts.append(f"<{type(a).__name__}:len={len(a)}>")
+        elif isinstance(a, bool) or isinstance(a, (int, float)):
+            # Numeric primitives are safe (e.g. timestamps, counts).
+            parts.append(repr(a))
+        elif a is None:
+            parts.append("None")
         else:
-            parts.append(repr(a)[:50])
+            parts.append(f"<{type(a).__name__}>")
     return "(" + ", ".join(parts) + ")"
 
 

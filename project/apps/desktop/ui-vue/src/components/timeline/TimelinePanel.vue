@@ -138,26 +138,38 @@ async function onToggleMute(trackId) {
 
 // Debounce volume slider: updates local state immediately for responsive UI,
 // but batches PATCH requests so rapid drags don't flood the server.
+// Each trackId has: { timer, lastServerVolume } — lastServerVolume lets us
+// actually roll back to the value the server last acknowledged (not the
+// optimistic value the user just set, which was already overwritten).
 const _volumeTimers = new Map()
 const VOLUME_DEBOUNCE_MS = 200
 
 function onSetVolume(trackId, vol) {
   const track = multiTracks.value.find(t => t.track_id === trackId)
   if (!track) return
+
+  // Snapshot the last server-acknowledged volume before optimistic update.
+  // If we already have a pending debounced PATCH, keep that snapshot —
+  // dragging through multiple values shouldn't lose the pre-drag truth.
+  const existing = _volumeTimers.get(trackId)
+  const prevVolume = existing ? existing.prevVolume : track.volume
+  if (existing) clearTimeout(existing.timer)
+
   track.volume = vol  // optimistic update for immediate feedback
-  if (_volumeTimers.has(trackId)) clearTimeout(_volumeTimers.get(trackId))
-  _volumeTimers.set(trackId, setTimeout(async () => {
+
+  const timer = setTimeout(async () => {
     _volumeTimers.delete(trackId)
     const data = await _patchTrack(trackId, { volume: vol })
     if (data && data.error) {
-      // Rollback on error (best-effort — user may have moved on)
-      track.volume = track.volume
+      // Rollback to the pre-drag value the server actually knows about.
+      track.volume = prevVolume
     }
-  }, VOLUME_DEBOUNCE_MS))
+  }, VOLUME_DEBOUNCE_MS)
+  _volumeTimers.set(trackId, { timer, prevVolume })
 }
 
 onBeforeUnmount(() => {
-  for (const t of _volumeTimers.values()) clearTimeout(t)
+  for (const entry of _volumeTimers.values()) clearTimeout(entry.timer)
   _volumeTimers.clear()
 })
 

@@ -373,7 +373,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useAppStore } from '../stores/app.js'
 import { useApiStore } from '../stores/api.js'
 import { useSettingsStore } from '../stores/settings.js'
@@ -412,44 +412,39 @@ function onVlmProviderChanged() {
   vlmTestResult.value = ''
 }
 
+// Centralized tracking of setTimeout handles so we can clear them on unmount.
+const _timers = new Set()
+function _scheduleClear(setter, ms) {
+  const t = setTimeout(() => { setter(); _timers.delete(t) }, ms)
+  _timers.add(t)
+  return t
+}
+
 async function saveVlmSettings() {
-  try {
-    const resp = await fetch('/api/settings/ai', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        provider: vlmProvider.value,
-        openai_api_key: vlmOpenaiKey.value,
-        anthropic_api_key: vlmClaudeKey.value,
-      }),
-    })
-    const data = await resp.json()
-    if (!data.ok) {
-      vlmTestResult.value = '保存失败'
-      setTimeout(() => { vlmTestResult.value = '' }, 3000)
-    }
-  } catch (e) {
-    vlmTestResult.value = '保存失败'
-    setTimeout(() => { vlmTestResult.value = '' }, 3000)
+  const data = await apiStore.api('POST', '/api/settings/ai', {
+    provider: vlmProvider.value,
+    openai_api_key: vlmOpenaiKey.value,
+    anthropic_api_key: vlmClaudeKey.value,
+  })
+  if (!data || data.error || data.ok === false) {
+    vlmTestResult.value = `保存失败：${(data && data.error) || '未知错误'}`
+    _scheduleClear(() => { vlmTestResult.value = '' }, 3000)
   }
 }
 
 async function testVlmConnection() {
   vlmTesting.value = true
   vlmTestResult.value = ''
-  try {
-    const resp = await fetch('/api/vlm/status')
-    const data = await resp.json()
-    if (data.available) {
-      vlmTestResult.value = `✓ ${data.provider} 可用`
-    } else {
-      vlmTestResult.value = '✗ 不可用'
-    }
-  } catch (e) {
-    vlmTestResult.value = '✗ 连接失败'
+  const data = await apiStore.api('GET', '/api/vlm/status')
+  if (data && !data.error && data.available) {
+    vlmTestResult.value = `✓ ${data.provider} 可用`
+  } else if (data && data.error) {
+    vlmTestResult.value = `✗ 连接失败：${data.error}`
+  } else {
+    vlmTestResult.value = '✗ 不可用'
   }
   vlmTesting.value = false
-  setTimeout(() => { vlmTestResult.value = '' }, 5000)
+  _scheduleClear(() => { vlmTestResult.value = '' }, 5000)
 }
 
 async function testAiConnection() {
@@ -457,12 +452,12 @@ async function testAiConnection() {
   aiTestResult.value = ''
   const data = await apiStore.api('POST', '/api/settings/ai/test', {})
   aiTesting.value = false
-  if (data.ok) {
+  if (data && data.ok) {
     aiTestResult.value = '✓ 连接成功'
   } else {
-    aiTestResult.value = `连接失败：${data.error || '未知错误'}`
+    aiTestResult.value = `连接失败：${(data && data.error) || '未知错误'}`
   }
-  setTimeout(() => { aiTestResult.value = '' }, 5000)
+  _scheduleClear(() => { aiTestResult.value = '' }, 5000)
 }
 
 async function loadYouTubeStatus() {
@@ -653,8 +648,6 @@ async function loadRenderSettings() {
   renderLoading.value = false
 }
 
-let _renderSuccessTimer = null
-
 async function saveRenderSettings() {
   renderSaving.value = true
   renderSaveError.value = ''
@@ -667,8 +660,7 @@ async function saveRenderSettings() {
     renderSaveError.value = '保存失败：服务端拒绝了请求'
   } else {
     renderSaveSuccess.value = true
-    if (_renderSuccessTimer) clearTimeout(_renderSuccessTimer)
-    _renderSuccessTimer = setTimeout(() => { renderSaveSuccess.value = false; _renderSuccessTimer = null }, 3000)
+    _scheduleClear(() => { renderSaveSuccess.value = false }, 3000)
   }
   renderSaving.value = false
 }
@@ -704,6 +696,13 @@ onMounted(async () => {
   loadRenderSettings()
   loadYouTubeStatus()
   loadWebhookConnectors()
+})
+
+onBeforeUnmount(() => {
+  // Clear all pending setTimeout handles so callbacks don't fire on an
+  // unmounted component (Vue 3 tolerates this but we avoid the warning/leak).
+  for (const t of _timers) clearTimeout(t)
+  _timers.clear()
 })
 </script>
 

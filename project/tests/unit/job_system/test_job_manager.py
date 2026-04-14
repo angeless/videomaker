@@ -111,23 +111,27 @@ def test_cancel(jm):
 
 def test_cancel_pending_future_marks_cancelled():
     """When cancel() aborts a queued-but-not-started task, status must reach 'cancelled'."""
-    # Single-worker pool with a blocker job holding the slot
+    # Single-worker pool with a blocker job holding the slot.
     jm = JobManager(max_workers=1)
+    blocker_started = threading.Event()
     release = threading.Event()
 
     def blocker():
+        blocker_started.set()
         release.wait(timeout=5)
         return "blocker_done"
 
     def never_runs():
         return "should_not_run"
 
-    blocker_id = jm.submit("test", blocker)
-    # Give the pool a moment to start blocker so the next submit stays pending
-    time.sleep(0.1)
+    # Submit blocker and wait until it ACTUALLY starts (event-based, not sleep).
+    # This removes the race where a loaded CI runner takes >100ms to dispatch.
+    jm.submit("test", blocker)
+    assert blocker_started.wait(timeout=3), "blocker never started"
+
+    # Now the worker slot is held; next submit is guaranteed to queue behind.
     pending_id = jm.submit("test", never_runs)
 
-    # The pending job is queued behind blocker — cancel should abort it
     cancelled = jm.cancel(pending_id)
     assert cancelled is True
 

@@ -37,7 +37,10 @@ def create_render_blueprint(*, timeline_store_getter, job_manager_getter, review
     bp = Blueprint("render_api", __name__)
 
     # In-memory render state per session
-    _render_state = {}  # session_id → {job_id, start_time, encoder, output_path}
+    _render_state = {}  # session_id → {job_id, start_time, encoder, output_path, status, segments_total}
+
+    def _is_active(state):
+        return state and state.get("status") in ("rendering", "pending")
 
     @bp.route("/api/review/<session_id>/render", methods=["POST"])
     def api_render_trigger(session_id: str):
@@ -45,6 +48,16 @@ def create_render_blueprint(*, timeline_store_getter, job_manager_getter, review
         jm = job_manager_getter()
         if jm is None:
             return _error_response("Job manager not available", "JOB_UNAVAILABLE", 500)
+
+        # Prevent concurrent renders on the same session — the prior job would
+        # be orphaned (still running, still writing to disk) while the new one
+        # replaces its state entry, making it unreachable via /progress /cancel.
+        prior = _render_state.get(session_id)
+        if _is_active(prior):
+            return _error_response(
+                f"Render already in progress for this session (job_id={prior.get('job_id')})",
+                "RENDER_IN_PROGRESS", 409,
+            )
 
         store = timeline_store_getter()
         timeline = store.get_timeline(session_id)
@@ -146,9 +159,20 @@ def create_render_blueprint(*, timeline_store_getter, job_manager_getter, review
             return _error_response("No render in progress", "NOT_FOUND", 404)
 
         jm = job_manager_getter()
-        job_status = jm.get_status(state["job_id"]) if jm else {}
+        # Guard the micro-window between state init and jm.submit() completing:
+        # if job_id is empty, jm.get_status("") would return "not_found" which
+        # leaks through as the status. Fall back to the state's own status.
+        job_id = state.get("job_id") or ""
+        if jm and job_id:
+            job_status = jm.get_status(job_id)
+        else:
+            job_status = {}
         pct = job_status.get("progress_pct", 0.0)
         status = job_status.get("status", state["status"])
+        # jm.get_status returns "not_found" after cleanup_expired; prefer the
+        # state's own status in that degenerate case so the client gets truth.
+        if status == "not_found":
+            status = state["status"]
         elapsed = time.time() - state["start_time"]
         eta = (elapsed / pct * (100 - pct)) if pct > 0 else 0
 

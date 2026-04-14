@@ -20,7 +20,9 @@
 
     <div v-if="status === 'done'" class="rp-done">
       渲染完成
-      <a :href="downloadUrl" class="rp-download-link" download>下载</a>
+      <button class="rp-download-link" :disabled="downloading" @click="downloadRender">
+        {{ downloading ? '下载中…' : '下载' }}
+      </button>
       <span class="rp-path">{{ outputPath }}</span>
     </div>
 
@@ -33,6 +35,9 @@
 <script setup>
 import { ref, computed, onUnmounted } from 'vue'
 import { useReviewStore } from '../../stores/review.js'
+import { useApiStore } from '../../stores/api.js'
+
+const apiStore = useApiStore()
 
 const _sessionId = ref('')
 
@@ -46,16 +51,13 @@ const eta_s = ref(0)
 const elapsed_s = ref(0)
 const outputPath = ref('')
 const error = ref('')
+const downloading = ref(false)
 let pollTimer = null
 
 const statusLabel = computed(() => {
   const map = { idle: '等待中', rendering: '渲染中…', done: '完成', failed: '失败', cancelled: '已取消' }
   return map[status.value] || status.value
 })
-
-const downloadUrl = computed(() =>
-  _sessionId.value ? `/api/review/${_sessionId.value}/render/download` : ''
-)
 
 async function startRender(sessionId) {
   _sessionId.value = sessionId
@@ -64,56 +66,79 @@ async function startRender(sessionId) {
   percent.value = 0
   error.value = ''
 
-  try {
-    const resp = await fetch(`/api/review/${sessionId}/render`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
-    })
-    const data = await resp.json()
-    if (!data.job_id) {
-      status.value = 'failed'
-      error.value = data.message || 'Failed to start render'
-      return
-    }
-
-    // Poll progress
-    pollTimer = setInterval(async () => {
-      try {
-        const pResp = await fetch(`/api/review/${sessionId}/render/progress`)
-        const pData = await pResp.json()
-        percent.value = pData.percent || 0
-        segments_done.value = pData.segments_done || 0
-        segments_total.value = pData.segments_total || 0
-        encoder.value = pData.encoder || ''
-        eta_s.value = pData.eta_s || 0
-        elapsed_s.value = pData.elapsed_s || 0
-        status.value = pData.status || 'rendering'
-
-        if (pData.status === 'done') {
-          outputPath.value = pData.output_path || ''
-          clearInterval(pollTimer)
-        } else if (pData.status === 'failed' || pData.status === 'cancelled') {
-          error.value = pData.error || ''
-          clearInterval(pollTimer)
-        }
-      } catch { /* polling error, retry next tick */ }
-    }, 1500)
-  } catch (e) {
+  // apiStore.api attaches auth+CSRF headers and never throws
+  const data = await apiStore.api('POST', `/api/review/${sessionId}/render`, {})
+  if (!data || data.error || !data.job_id) {
     status.value = 'failed'
-    error.value = e.message
+    error.value = (data && data.error) || data?.message || 'Failed to start render'
+    return
   }
+
+  // Poll progress
+  pollTimer = setInterval(async () => {
+    const pData = await apiStore.api('GET', `/api/review/${sessionId}/render/progress`)
+    if (!pData || pData.error) return  // keep polling; transient errors are OK
+    percent.value = pData.percent || 0
+    segments_done.value = pData.segments_done || 0
+    segments_total.value = pData.segments_total || 0
+    encoder.value = pData.encoder || ''
+    eta_s.value = pData.eta_s || 0
+    elapsed_s.value = pData.elapsed_s || 0
+    status.value = pData.status || 'rendering'
+
+    if (pData.status === 'done') {
+      outputPath.value = pData.output_path || ''
+      clearInterval(pollTimer)
+      pollTimer = null
+    } else if (pData.status === 'failed' || pData.status === 'cancelled') {
+      error.value = pData.error || ''
+      clearInterval(pollTimer)
+      pollTimer = null
+    }
+  }, 1500)
 }
 
 async function cancelRender() {
-  const sessionId = useReviewStore().sessionId
+  const sessionId = _sessionId.value || useReviewStore().sessionId
   if (!sessionId) return
-  try {
-    await fetch(`/api/review/${sessionId}/render/cancel`, { method: 'POST' })
+  const data = await apiStore.api('POST', `/api/review/${sessionId}/render/cancel`, {})
+  if (data && !data.error) {
     status.value = 'cancelled'
-    clearInterval(pollTimer)
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
+  } else if (data && data.error) {
+    error.value = data.error
+  }
+}
+
+// Download via fetch+blob so auth headers are sent (browser <a download> can't).
+async function downloadRender() {
+  if (!_sessionId.value || downloading.value) return
+  downloading.value = true
+  try {
+    const headers = {}
+    if (apiStore.token) headers['X-VideoEditor-Token'] = apiStore.token
+    const resp = await fetch(
+      `/api/review/${_sessionId.value}/render/download`,
+      { method: 'GET', headers },
+    )
+    if (!resp.ok) {
+      const msg = await resp.text().catch(() => '')
+      error.value = `下载失败 (HTTP ${resp.status}): ${msg.slice(0, 120)}`
+      return
+    }
+    const blob = await resp.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = (outputPath.value.split('/').pop()) || 'render.mp4'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
   } catch (e) {
-    error.value = e.message
+    error.value = `下载失败: ${e?.message || '网络错误'}`
+  } finally {
+    downloading.value = false
   }
 }
 
@@ -150,7 +175,11 @@ defineExpose({ startRender })
 .rp-info { display: flex; gap: 12px; font-size: 0.7rem; color: #aaa; margin-bottom: 4px; }
 .rp-encoder { font-size: 0.65rem; color: #666; }
 .rp-done { font-size: 0.7rem; color: #10b981; margin-top: 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.rp-download-link { color: #3b82f6; text-decoration: underline; cursor: pointer; }
+.rp-download-link {
+  color: #3b82f6; text-decoration: underline; cursor: pointer;
+  background: none; border: none; padding: 0; font-size: inherit;
+}
+.rp-download-link:disabled { opacity: 0.5; cursor: wait; }
 .rp-path { color: #888; font-size: 0.65rem; word-break: break-all; }
 .rp-error { font-size: 0.7rem; color: #ef4444; margin-top: 6px; }
 </style>
