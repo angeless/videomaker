@@ -98,7 +98,12 @@
         </div>
       </div>
 
-      <div v-if="!streamLoading && !store.streamAnalysis" class="dp-empty">
+      <div v-if="streamError" class="dp-error">
+        流分析失败: {{ streamError }}
+        <button class="dp-retry-btn" @click="clearStreamError">重试</button>
+      </div>
+
+      <div v-else-if="!streamLoading && !store.streamAnalysis" class="dp-empty">
         点击"运行流分析"开始视频流分析
       </div>
     </div>
@@ -118,6 +123,7 @@ const vlmAvailable = ref(false)
 const hasRunOnce = ref(false)
 const streamLoading = ref(false)
 const streamProgress = ref('0%')
+const streamError = ref('')
 
 const streamIssues = computed(() => store.streamAnalysis?.issues || [])
 
@@ -158,10 +164,16 @@ async function runDiagnosis() {
   finally { isRunning.value = false }
 }
 
+function clearStreamError() {
+  streamError.value = ''
+}
+
 async function runStreamAnalysis() {
   if (streamLoading.value || !store.sessionId) return
   streamLoading.value = true
   streamProgress.value = '0%'
+  streamError.value = ''
+  const MAX_POLLS = 60
   try {
     // Trigger analysis
     const triggerResp = await fetch(`/api/review/${store.sessionId}/vlm/analyze-stream`, {
@@ -169,11 +181,20 @@ async function runStreamAnalysis() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ video_path: store.session?.video_path || '' }),
     })
+    if (!triggerResp.ok) {
+      const errData = await triggerResp.json().catch(() => ({}))
+      streamError.value = errData.message || `HTTP ${triggerResp.status}`
+      return
+    }
     const triggerData = await triggerResp.json()
-    if (!triggerData.job_id) return
+    if (!triggerData.job_id) {
+      streamError.value = '分析启动失败，服务端未返回 job_id'
+      return
+    }
 
-    // Poll for results
-    for (let i = 0; i < 60; i++) {
+    // Poll for results (max 2 min)
+    let completed = false
+    for (let i = 0; i < MAX_POLLS; i++) {
       await new Promise(r => setTimeout(r, 2000))
       try {
         const analysisResp = await fetch(`/api/review/${store.sessionId}/vlm/stream-analysis`)
@@ -186,13 +207,17 @@ async function runStreamAnalysis() {
             const sumData = await sumResp.json()
             store.sceneSummaries = sumData.summaries || {}
           }
+          completed = true
           break
         }
-      } catch { /* still processing */ }
+      } catch { /* still processing, continue polling */ }
       streamProgress.value = `${Math.min(95, (i + 1) * 5)}%`
     }
+    if (!completed) {
+      streamError.value = '分析超时（超过 120 秒），请重试'
+    }
   } catch (e) {
-    console.error('Stream analysis failed:', e)
+    streamError.value = e?.message || '网络错误，流分析失败'
   } finally {
     streamLoading.value = false
   }
@@ -294,4 +319,27 @@ onMounted(checkVlmStatus)
   letter-spacing: 0.5px;
   margin-bottom: 2px;
 }
+
+.dp-error {
+  font-size: 0.7rem;
+  color: #ef4444;
+  padding: 8px;
+  background: #2a1111;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dp-retry-btn {
+  background: none;
+  border: 1px solid #ef4444;
+  color: #ef4444;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 0.65rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.dp-retry-btn:hover { background: #3a1111; }
 </style>

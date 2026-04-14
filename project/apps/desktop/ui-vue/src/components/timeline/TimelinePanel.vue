@@ -115,19 +115,45 @@ function clipStyle(clip) {
   }
 }
 
-function onToggleLock(trackId) {
+async function onToggleLock(trackId) {
   const track = multiTracks.value.find(t => t.track_id === trackId)
-  if (track) track.locked = !track.locked
+  if (!track) return
+  const newLocked = !track.locked
+  try {
+    const resp = await fetch(`/api/review/${reviewStore.sessionId}/timeline/tracks/${trackId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ locked: newLocked }),
+    })
+    if (resp.ok) track.locked = newLocked
+  } catch { /* keep local state unchanged on error */ }
 }
 
-function onToggleMute(trackId) {
+async function onToggleMute(trackId) {
   const track = multiTracks.value.find(t => t.track_id === trackId)
-  if (track) track.muted = !track.muted
+  if (!track) return
+  const newMuted = !track.muted
+  try {
+    const resp = await fetch(`/api/review/${reviewStore.sessionId}/timeline/tracks/${trackId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ muted: newMuted }),
+    })
+    if (resp.ok) track.muted = newMuted
+  } catch { /* keep local state unchanged on error */ }
 }
 
-function onSetVolume(trackId, vol) {
+async function onSetVolume(trackId, vol) {
   const track = multiTracks.value.find(t => t.track_id === trackId)
-  if (track) track.volume = vol
+  if (!track) return
+  try {
+    const resp = await fetch(`/api/review/${reviewStore.sessionId}/timeline/tracks/${trackId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ volume: vol }),
+    })
+    if (resp.ok) track.volume = vol
+  } catch { /* keep local state unchanged on error */ }
 }
 
 function zoomIn() {
@@ -222,5 +248,47 @@ onMounted(() => {
 
 .tl-tracks {
   position: relative;
+}
+
+/* Multi-track layout */
+.tl-multi-row {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--border, #333);
+  min-height: 36px;
+}
+
+.tl-clip-lane {
+  flex: 1;
+  position: relative;
+  min-height: 36px;
+  overflow: hidden;
+}
+
+.tl-clip-block {
+  position: absolute;
+  top: 4px;
+  height: calc(100% - 8px);
+  min-width: 20px;
+  background: #3b82f6;
+  border-radius: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.65rem;
+  color: #fff;
+  padding: 0 4px;
+  line-height: 28px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.tl-clip-block.selected {
+  background: #2563eb;
+  outline: 2px solid #93c5fd;
+}
+
+.tl-clip-block:hover:not(.selected) {
+  background: #2563eb;
 }
 </style>

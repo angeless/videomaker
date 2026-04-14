@@ -557,6 +557,7 @@ app.register_blueprint(
     create_render_blueprint(
         timeline_store_getter=_get_timeline_store,
         job_manager_getter=_get_job_manager,
+        review_store_getter=_get_review_store,
     )
 )
 

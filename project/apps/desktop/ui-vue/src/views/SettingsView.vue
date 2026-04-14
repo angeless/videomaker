@@ -332,7 +332,15 @@
             <div class="form-hint">{{ renderHardwareInfo }}</div>
           </div>
 
-          <button class="btn btn-primary btn-sm" :disabled="renderSaving" @click="saveRenderSettings()">
+          <div v-if="renderLoading" class="form-hint" style="color:#888">加载中…</div>
+          <div v-if="renderSaveError" class="form-hint" style="color:#ef4444">{{ renderSaveError }}</div>
+          <div v-if="renderSaveSuccess" class="form-hint" style="color:#10b981">保存成功</div>
+
+          <button
+            class="btn btn-primary btn-sm"
+            :disabled="renderSaving || renderLoading"
+            @click="saveRenderSettings()"
+          >
             {{ renderSaving ? '保存中…' : '保存渲染设置' }}
           </button>
         </div>
@@ -614,7 +622,10 @@ async function saveQueueConfig() {
 // D5: 渲染设置
 const renderSettings = ref({ encoder: 'auto', quality_preset: 'balanced', resolution: '1080x1920', parallel_render: true })
 const renderAvailableEncoders = ref([])
+const renderLoading = ref(false)
 const renderSaving = ref(false)
+const renderSaveError = ref('')
+const renderSaveSuccess = ref(false)
 const renderHardwareInfo = ref('')
 const renderQualityLabel = computed(() => {
   const map = { high: '高质量', balanced: '平衡', fast: '快速' }
@@ -622,26 +633,46 @@ const renderQualityLabel = computed(() => {
 })
 
 async function loadRenderSettings() {
-  const data = await apiStore.api('GET', '/api/settings/render')
-  if (data && data.settings) {
-    Object.assign(renderSettings.value, data.settings)
-    renderAvailableEncoders.value = data.available_encoders || ['libx264']
-  }
-  // Load hardware info for display
+  renderLoading.value = true
   try {
-    const hw = await apiStore.api('GET', '/api/system/hardware')
-    if (hw && hw.ok) {
-      const enc = hw.encoding?.label || hw.encoding?.encoder || '未知'
-      const gpu = hw.gpu?.model || '无独立 GPU'
-      renderHardwareInfo.value = `编码器: ${enc} | GPU: ${gpu} | 并发建议: ${hw.suggested_max_concurrent}`
+    const data = await apiStore.api('GET', '/api/settings/render')
+    if (data && data.settings) {
+      Object.assign(renderSettings.value, data.settings)
+      renderAvailableEncoders.value = data.available_encoders || ['libx264']
     }
-  } catch (e) { /* hardware info is optional */ }
+    // Load hardware info for display
+    try {
+      const hw = await apiStore.api('GET', '/api/system/hardware')
+      if (hw && hw.ok) {
+        const enc = hw.encoding?.label || hw.encoding?.encoder || '未知'
+        const gpu = hw.gpu?.model || '无独立 GPU'
+        renderHardwareInfo.value = `编码器: ${enc} | GPU: ${gpu} | 并发建议: ${hw.suggested_max_concurrent}`
+      }
+    } catch { /* hardware info is optional */ }
+  } catch (e) {
+    renderSaveError.value = `加载渲染设置失败: ${e?.message || '未知错误'}`
+  } finally {
+    renderLoading.value = false
+  }
 }
 
 async function saveRenderSettings() {
   renderSaving.value = true
-  await apiStore.api('PUT', '/api/settings/render', renderSettings.value)
-  renderSaving.value = false
+  renderSaveError.value = ''
+  renderSaveSuccess.value = false
+  try {
+    const data = await apiStore.api('PUT', '/api/settings/render', renderSettings.value)
+    if (data && data.success === false) {
+      renderSaveError.value = data.message || '保存失败'
+    } else {
+      renderSaveSuccess.value = true
+      setTimeout(() => { renderSaveSuccess.value = false }, 3000)
+    }
+  } catch (e) {
+    renderSaveError.value = `保存失败: ${e?.message || '网络错误'}`
+  } finally {
+    renderSaving.value = false
+  }
 }
 
 function badgeClass(status) {

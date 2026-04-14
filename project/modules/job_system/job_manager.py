@@ -24,7 +24,7 @@ class _JobRecord:
     __slots__ = (
         "job_id", "job_type", "status", "progress_pct",
         "result", "error", "cancel_flag", "created_at", "finished_at",
-        "_lock",
+        "_lock", "future",
     )
 
     def __init__(self, job_id: str, job_type: str):
@@ -38,6 +38,7 @@ class _JobRecord:
         self.created_at = time.time()
         self.finished_at = None  # type: Optional[float]
         self._lock = threading.Lock()
+        self.future = None  # type: Optional[Any]
 
     def to_dict(self) -> Dict[str, Any]:
         with self._lock:
@@ -73,7 +74,8 @@ class JobManager:
         with self._lock:
             self._jobs[job_id] = record
 
-        self._pool.submit(self._run_job, record, fn, args)
+        future = self._pool.submit(self._run_job, record, fn, args)
+        record.future = future
         logger.info("Job submitted: %s (type=%s)", job_id, job_type)
         return job_id
 
@@ -103,7 +105,7 @@ class JobManager:
             record.progress_pct = max(0.0, min(100.0, pct))
 
     def cancel(self, job_id: str) -> bool:
-        """Request cancellation. Sets flag; task must check is_cancelled()."""
+        """Request cancellation. Cancels pending futures and sets flag for running jobs."""
         with self._lock:
             record = self._jobs.get(job_id)
         if record is None:
@@ -112,6 +114,9 @@ class JobManager:
             if record.status in ("done", "failed", "cancelled"):
                 return False
             record.cancel_flag = True
+            # Attempt to cancel the Future if still pending (not yet started)
+            if record.future is not None:
+                record.future.cancel()
         logger.info("Cancel requested: %s", job_id)
         return True
 

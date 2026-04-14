@@ -49,3 +49,8 @@ class StockMediaError(ReviewEngineError):
 class LockedTrackError(ReviewEngineError):
     """Attempted to modify a locked track or its clips."""
     pass
+
+
+class OverlapError(ReviewEngineError):
+    """Clip operation would create an overlap on a video track."""
+    pass

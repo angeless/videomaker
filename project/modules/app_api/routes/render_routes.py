@@ -1,15 +1,18 @@
-"""Render API routes — trigger / progress / cancel (D4a).
+"""Render API routes — trigger / progress / cancel / download (D4a).
 
 POST /api/review/{id}/render          — Trigger async render
 GET  /api/review/{id}/render/progress — Query render progress
 POST /api/review/{id}/render/cancel   — Cancel render
+GET  /api/review/{id}/render/download — Download rendered file
 """
 
+import os
 import time
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_file
 
 
 def _error_response(message, code, status=400):
@@ -24,7 +27,7 @@ def _ok(data, status=200):
     return jsonify({"success": True, **data}), status
 
 
-def create_render_blueprint(*, timeline_store_getter, job_manager_getter):
+def create_render_blueprint(*, timeline_store_getter, job_manager_getter, review_store_getter=None):
     """Create render API blueprint.
 
     Args:
@@ -49,7 +52,24 @@ def create_render_blueprint(*, timeline_store_getter, job_manager_getter):
             return _error_response("No timeline for session", "TIMELINE_NOT_FOUND", 404)
 
         body = request.get_json(silent=True) or {}
-        output_path = str(body.get("output_path", f"/tmp/render_{session_id}.mp4"))
+        # Derive output path from session project_path when available
+        if "output_path" in body:
+            output_path = str(body["output_path"])
+        else:
+            project_path = None
+            if review_store_getter is not None:
+                try:
+                    session_row = review_store_getter().get_session(session_id)
+                    if session_row:
+                        project_path = session_row.get("project_path")
+                except Exception:
+                    pass
+            if project_path:
+                out_dir = Path(project_path) / "output"
+            else:
+                out_dir = Path.home() / "Movies" / "VideoEditor" / "output"
+            out_dir.mkdir(parents=True, exist_ok=True)
+            output_path = str(out_dir / f"render_{session_id}.mp4")
 
         # Collect clips from all video tracks
         clips = []
@@ -153,5 +173,19 @@ def create_render_blueprint(*, timeline_store_getter, job_manager_getter):
             "Cannot cancel — render may have already completed",
             "CANCEL_FAILED",
         )
+
+    @bp.route("/api/review/<session_id>/render/download", methods=["GET"])
+    def api_render_download(session_id: str):
+        """Download the rendered output file."""
+        state = _render_state.get(session_id)
+        if not state:
+            return _error_response("No render found for this session", "NOT_FOUND", 404)
+        if state.get("status") != "done":
+            return _error_response("Render not yet complete", "NOT_READY", 409)
+        output_path = state.get("output_path", "")
+        if not output_path or not os.path.isfile(output_path):
+            return _error_response("Rendered file not found on disk", "FILE_MISSING", 404)
+        filename = Path(output_path).name
+        return send_file(output_path, as_attachment=True, download_name=filename, mimetype="video/mp4")
 
     return bp

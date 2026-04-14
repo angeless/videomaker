@@ -163,6 +163,8 @@ class FrameSampler:
 
     def _uniform_timestamps(self, duration_ms, interval_ms):
         """Uniform sampling at fixed intervals."""
+        if interval_ms <= 0:
+            interval_ms = 1000  # default 1 s to prevent infinite loop
         result = []
         ts = 0
         idx = 0

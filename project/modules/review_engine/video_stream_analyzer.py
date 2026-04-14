@@ -64,9 +64,17 @@ class VideoStreamAnalyzer:
     # ── Delegated continuity check ───────────────────────────────
 
     def _check_continuity(self, frames: List[SampledFrame]) -> List[StreamIssue]:
-        """Delegate to FrameDiagnostics.check_continuity() — NOT reimplemented."""
-        pil_frames = [f.frame for f in frames]
-        scene_indices = [f.scene_idx for f in frames]
+        """Delegate to FrameDiagnostics.check_continuity() — one representative frame per scene."""
+        # Collapse to one frame per scene to avoid redundant cross-frame comparisons
+        seen_scenes: set = set()
+        per_scene: List[SampledFrame] = []
+        for f in frames:
+            if f.scene_idx not in seen_scenes:
+                seen_scenes.add(f.scene_idx)
+                per_scene.append(f)
+
+        pil_frames = [f.frame for f in per_scene]
+        scene_indices = [f.scene_idx for f in per_scene]
 
         raw_issues = self._diag.check_continuity(pil_frames, scene_indices)
 
@@ -103,9 +111,10 @@ class VideoStreamAnalyzer:
                     "Consider smoothness, color consistency, and visual flow. "
                     "Reply with just the number."
                 )
-                # VLM call (simplified — actual implementation depends on adapter API)
+                # Pass both boundary frames to VLM for transition assessment
                 result = self._vlm.describe_region(
                     frame=frames[i].frame,
+                    next_frame=frames[i + 1].frame,
                     strokes=[],
                     prompt=prompt,
                 )

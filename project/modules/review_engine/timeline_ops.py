@@ -8,7 +8,7 @@ import logging
 import uuid
 from typing import List, Optional, Tuple
 
-from modules.review_engine.exceptions import LockedTrackError
+from modules.review_engine.exceptions import LockedTrackError, OverlapError
 from modules.review_engine.timeline_store import TimelineStore
 
 logger = logging.getLogger(__name__)
@@ -118,7 +118,10 @@ class TimelineOps:
             raise ValueError(f"Clip {clip_id} not found")
         clip, track = clips
         duration = clip.end_ms - clip.start_ms
-        self._store.update_clip(clip_id, start_ms=new_start_ms, end_ms=new_start_ms + duration)
+        new_end_ms = new_start_ms + duration
+        if track.track_type == "video":
+            self._assert_no_overlap(track.track_id, clip_id, new_start_ms, new_end_ms)
+        self._store.update_clip(clip_id, start_ms=new_start_ms, end_ms=new_end_ms)
 
     def trim_clip(self, clip_id: str, in_ms: int, out_ms: int, session_id: str) -> None:
         """Trim clip source in/out points."""
@@ -189,6 +192,8 @@ class TimelineOps:
                 f"({source_track.track_type} → {target_track.track_type})"
             )
 
+        if target_track.track_type == "video":
+            self._assert_no_overlap(target_track_id, clip_id, clip.start_ms, clip.end_ms)
         self._store.update_clip(clip_id, track_id=target_track_id)
 
     def check_overlap(self, track_id: str, session_id: str) -> List[Tuple[str, str]]:
@@ -217,3 +222,14 @@ class TimelineOps:
             _, track = result
             if track.locked:
                 raise LockedTrackError(f"Track {track.track_id} is locked")
+
+    def _assert_no_overlap(self, track_id: str, exclude_clip_id: str, start_ms: int, end_ms: int) -> None:
+        """Raise OverlapError if [start_ms, end_ms) overlaps any existing clip on the track."""
+        for existing in self._store.get_clips(track_id):
+            if existing.clip_id == exclude_clip_id:
+                continue
+            if start_ms < existing.end_ms and end_ms > existing.start_ms:
+                raise OverlapError(
+                    f"Clip would overlap with {existing.clip_id} "
+                    f"[{existing.start_ms}, {existing.end_ms}) on track {track_id}"
+                )

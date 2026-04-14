@@ -19,7 +19,9 @@
     <div class="rp-encoder">编码器: {{ encoder }}</div>
 
     <div v-if="status === 'done'" class="rp-done">
-      渲染完成: {{ outputPath }}
+      渲染完成
+      <a :href="downloadUrl" class="rp-download-link" download>下载</a>
+      <span class="rp-path">{{ outputPath }}</span>
     </div>
 
     <div v-if="error" class="rp-error">
@@ -31,6 +33,8 @@
 <script setup>
 import { ref, computed, onUnmounted } from 'vue'
 import { useReviewStore } from '../../stores/review.js'
+
+const _sessionId = ref('')
 
 const visible = ref(false)
 const status = ref('idle')
@@ -49,7 +53,12 @@ const statusLabel = computed(() => {
   return map[status.value] || status.value
 })
 
+const downloadUrl = computed(() =>
+  _sessionId.value ? `/api/review/${_sessionId.value}/render/download` : ''
+)
+
 async function startRender(sessionId) {
+  _sessionId.value = sessionId
   visible.value = true
   status.value = 'rendering'
   percent.value = 0
@@ -140,6 +149,8 @@ defineExpose({ startRender })
 
 .rp-info { display: flex; gap: 12px; font-size: 0.7rem; color: #aaa; margin-bottom: 4px; }
 .rp-encoder { font-size: 0.65rem; color: #666; }
-.rp-done { font-size: 0.7rem; color: #10b981; margin-top: 6px; }
+.rp-done { font-size: 0.7rem; color: #10b981; margin-top: 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rp-download-link { color: #3b82f6; text-decoration: underline; cursor: pointer; }
+.rp-path { color: #888; font-size: 0.65rem; word-break: break-all; }
 .rp-error { font-size: 0.7rem; color: #ef4444; margin-top: 6px; }
 </style>
