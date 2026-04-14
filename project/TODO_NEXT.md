@@ -3,7 +3,7 @@
 > 更新于 2026-04-14
 
 ## 当前版本：v0.18.0 — 四大基础设施升级 ✅ 完成
-## 当前状态：五轮交叉审查修复完成 — commit 39d5728（共修复54个问题）
+## 当前状态：六轮交叉审查修复完成 — commit 4106ced（共修复69个问题）
 
 ## 版本完成记录
 
@@ -16,9 +16,11 @@
 | v0.18.0 | MCP + VLM 流 + 多轨 + GPU 渲染 | 27 | `docs/dev-plans/dev-plan-v0.18.0.md` | **Done** |
 
 ## 上次停在
-- 分支：`main`，commit 39d5728
-- 五轮独立交叉审查完成，54个问题全部修复（10 P1 + 10 业务/UX + 12 + 6 + 11 + 11）
+- 分支：`main`，commit 4106ced
+- 六轮独立交叉审查完成，69个问题全部修复
 - 测试：1626 passed, 5 skipped（+10 新增回归测试）
+- 第六轮发现 3 个 CRITICAL：review/roughcut store _fetch 签名不匹配 + 缺 auth header
+  → Comment Export / TTS / BGM / transition / reframe 自 v0.15.0 起从未工作过
 
 ## 下一步
 - 规划 v0.19.0（参考已知遗留问题列表）
