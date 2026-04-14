@@ -109,6 +109,35 @@ def test_cancel(jm):
     assert status["status"] == "cancelled"
 
 
+def test_cancel_pending_future_marks_cancelled():
+    """When cancel() aborts a queued-but-not-started task, status must reach 'cancelled'."""
+    # Single-worker pool with a blocker job holding the slot
+    jm = JobManager(max_workers=1)
+    release = threading.Event()
+
+    def blocker():
+        release.wait(timeout=5)
+        return "blocker_done"
+
+    def never_runs():
+        return "should_not_run"
+
+    blocker_id = jm.submit("test", blocker)
+    # Give the pool a moment to start blocker so the next submit stays pending
+    time.sleep(0.1)
+    pending_id = jm.submit("test", never_runs)
+
+    # The pending job is queued behind blocker — cancel should abort it
+    cancelled = jm.cancel(pending_id)
+    assert cancelled is True
+
+    status = jm.get_status(pending_id)
+    assert status["status"] == "cancelled", f"expected 'cancelled', got {status['status']}"
+
+    release.set()
+    jm.shutdown()
+
+
 # ── T5: cleanup_expired removes old completed jobs ─────────────
 
 def test_cleanup_expired(jm):

@@ -100,7 +100,7 @@
 
       <div v-if="streamError" class="dp-error">
         流分析失败: {{ streamError }}
-        <button class="dp-retry-btn" @click="clearStreamError">重试</button>
+        <button class="dp-retry-btn" @click="runStreamAnalysis">重试</button>
       </div>
 
       <div v-else-if="!streamLoading && !store.streamAnalysis" class="dp-empty">
@@ -113,8 +113,10 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useReviewStore } from '../../stores/review.js'
+import { useApiStore } from '../../stores/api.js'
 
 const store = useReviewStore()
+const apiStore = useApiStore()
 
 const activeTab = ref('diagnostics')
 const diagnostics = ref([])
@@ -164,63 +166,50 @@ async function runDiagnosis() {
   finally { isRunning.value = false }
 }
 
-function clearStreamError() {
-  streamError.value = ''
-}
-
 async function runStreamAnalysis() {
   if (streamLoading.value || !store.sessionId) return
   streamLoading.value = true
   streamProgress.value = '0%'
   streamError.value = ''
   const MAX_POLLS = 60
-  try {
-    // Trigger analysis
-    const triggerResp = await fetch(`/api/review/${store.sessionId}/vlm/analyze-stream`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ video_path: store.session?.video_path || '' }),
-    })
-    if (!triggerResp.ok) {
-      const errData = await triggerResp.json().catch(() => ({}))
-      streamError.value = errData.message || `HTTP ${triggerResp.status}`
-      return
-    }
-    const triggerData = await triggerResp.json()
-    if (!triggerData.job_id) {
-      streamError.value = '分析启动失败，服务端未返回 job_id'
-      return
-    }
 
-    // Poll for results (max 2 min)
-    let completed = false
-    for (let i = 0; i < MAX_POLLS; i++) {
-      await new Promise(r => setTimeout(r, 2000))
-      try {
-        const analysisResp = await fetch(`/api/review/${store.sessionId}/vlm/stream-analysis`)
-        if (analysisResp.ok) {
-          const analysis = await analysisResp.json()
-          store.streamAnalysis = analysis
-          // Also load summaries
-          const sumResp = await fetch(`/api/review/${store.sessionId}/vlm/scene-summaries`)
-          if (sumResp.ok) {
-            const sumData = await sumResp.json()
-            store.sceneSummaries = sumData.summaries || {}
-          }
-          completed = true
-          break
-        }
-      } catch { /* still processing, continue polling */ }
-      streamProgress.value = `${Math.min(95, (i + 1) * 5)}%`
-    }
-    if (!completed) {
-      streamError.value = '分析超时（超过 120 秒），请重试'
-    }
-  } catch (e) {
-    streamError.value = e?.message || '网络错误，流分析失败'
-  } finally {
+  // Trigger analysis (apiStore adds auth headers automatically, never throws)
+  const triggerData = await apiStore.api(
+    'POST',
+    `/api/review/${store.sessionId}/vlm/analyze-stream`,
+    { video_path: store.session?.video_path || '' },
+  )
+  if (triggerData && triggerData.error) {
+    streamError.value = triggerData.error
     streamLoading.value = false
+    return
   }
+  if (!triggerData || !triggerData.job_id) {
+    streamError.value = '分析启动失败，服务端未返回 job_id'
+    streamLoading.value = false
+    return
+  }
+
+  // Poll for results (max 2 min)
+  let completed = false
+  for (let i = 0; i < MAX_POLLS; i++) {
+    await new Promise(r => setTimeout(r, 2000))
+    const analysis = await apiStore.api('GET', `/api/review/${store.sessionId}/vlm/stream-analysis`)
+    if (analysis && !analysis.error && (analysis.issues || analysis.narrative_arc)) {
+      store.streamAnalysis = analysis
+      const sumData = await apiStore.api('GET', `/api/review/${store.sessionId}/vlm/scene-summaries`)
+      if (sumData && !sumData.error) {
+        store.sceneSummaries = sumData.summaries || {}
+      }
+      completed = true
+      break
+    }
+    streamProgress.value = `${Math.min(95, (i + 1) * 5)}%`
+  }
+  if (!completed) {
+    streamError.value = '分析超时（超过 120 秒），请重试'
+  }
+  streamLoading.value = false
 }
 
 function seekTo(diagnostic) {

@@ -111,7 +111,11 @@ class VideoStreamAnalyzer:
                     "Consider smoothness, color consistency, and visual flow. "
                     "Reply with just the number."
                 )
-                # Pass both boundary frames to VLM for transition assessment
+                # NOTE: VideoStreamAnalyzer was designed around a VLM interface
+                # that accepts frame/next_frame kwargs. Real adapters implement
+                # describe_image(image, prompt, max_tokens). Tests use MagicMock
+                # so this path works in tests but silently no-ops in production
+                # (TypeError is swallowed). TODO(v0.19): unify VLM call protocol.
                 result = self._vlm.describe_region(
                     frame=frames[i].frame,
                     next_frame=frames[i + 1].frame,

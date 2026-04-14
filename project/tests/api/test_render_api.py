@@ -30,6 +30,11 @@ def app(tmp_path):
     timeline.timeline_id = "tl1"
     store.get_timeline.return_value = timeline
 
+    # Mock ReviewStore so session.project_path points inside tmp_path — this
+    # becomes the allowed output directory for path validation.
+    review_store = MagicMock()
+    review_store.get_session.return_value = {"project_path": str(tmp_path)}
+
     # Mock JobManager
     jm = MagicMock()
     jm.submit.return_value = "job_001"
@@ -43,9 +48,12 @@ def app(tmp_path):
     bp = create_render_blueprint(
         timeline_store_getter=lambda: store,
         job_manager_getter=lambda: jm,
+        review_store_getter=lambda: review_store,
     )
     flask_app.register_blueprint(bp)
     flask_app.config["TESTING"] = True
+    # Expose tmp_path so tests can construct valid output paths
+    flask_app.config["_RENDER_OUT_DIR"] = str(tmp_path / "output")
     return flask_app
 
 
@@ -57,15 +65,26 @@ def client(app):
 SID = "test-session"
 
 
-def test_trigger_render(client):
+def test_trigger_render(client, app):
     """POST /api/review/{id}/render returns 202 + job_id."""
+    out_path = f"{app.config['_RENDER_OUT_DIR']}/output.mp4"
     resp = client.post(
         f"/api/review/{SID}/render",
-        json={"output_path": "/tmp/output.mp4"},
+        json={"output_path": out_path},
     )
     data = resp.get_json()
     assert resp.status_code == 202
     assert data["job_id"] == "job_001"
+
+
+def test_trigger_render_rejects_path_traversal(client):
+    """POST with output_path outside allowed dir returns 400."""
+    resp = client.post(
+        f"/api/review/{SID}/render",
+        json={"output_path": "/etc/passwd"},
+    )
+    assert resp.status_code == 400
+    assert resp.get_json()["error"] == "PATH_NOT_ALLOWED"
 
 
 def test_render_progress(client):
@@ -91,19 +110,13 @@ def test_render_cancel(client):
     assert data["cancelled"] is True
 
 
-def test_render_complete_status(client):
+def test_render_complete_status(client, app):
     """After render completes, progress shows status=done."""
-    # Trigger render first
-    client.post(f"/api/review/{SID}/render", json={"output_path": "/tmp/done.mp4"})
+    # Trigger render first (must use an allowed path)
+    out_path = f"{app.config['_RENDER_OUT_DIR']}/done.mp4"
+    client.post(f"/api/review/{SID}/render", json={"output_path": out_path})
 
-    # Mock completion: patch the render state
-    from modules.app_api.routes import render_routes
-    # Get the blueprint's render state
-    for rule in client.application.url_map.iter_rules():
-        if "render/progress" in rule.rule:
-            break
-
-    # Simulate completion by patching job status
+    # Simulate completion by querying progress
     resp = client.get(f"/api/review/{SID}/render/progress")
     data = resp.get_json()
     assert resp.status_code == 200

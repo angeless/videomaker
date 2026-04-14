@@ -72,9 +72,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useTimelineStore } from '../../stores/timeline.js'
 import { useReviewStore } from '../../stores/review.js'
+import { useApiStore } from '../../stores/api.js'
 import { useFormatters } from '../../composables/useFormatters.js'
 import labels from '../../i18n/labels.js'
 import TimelineRuler from './TimelineRuler.vue'
@@ -87,24 +88,20 @@ import TimelineTrackHeader from './TimelineTrackHeader.vue'
 
 const store = useTimelineStore()
 const reviewStore = useReviewStore()
+const apiStore = useApiStore()
 const { formatDuration } = useFormatters()
 const scrollRef = ref(null)
 const multiTracks = ref([])
 const selectedClipId = ref(null)
 
-// C6: Load multi-track data from C4 API
+// C6: Load multi-track data from C4 API (via apiStore for auth headers)
 async function loadMultiTracks() {
   const sid = reviewStore.sessionId
   if (!sid) return
-  try {
-    const resp = await fetch(`/api/review/${sid}/timeline`)
-    if (resp.ok) {
-      const data = await resp.json()
-      if (data.success && data.tracks) {
-        multiTracks.value = data.tracks
-      }
-    }
-  } catch { /* multi-track API not available, use legacy */ }
+  const data = await apiStore.api('GET', `/api/review/${sid}/timeline`)
+  if (data && !data.error && data.success && data.tracks) {
+    multiTracks.value = data.tracks
+  }
 }
 
 function clipStyle(clip) {
@@ -115,46 +112,54 @@ function clipStyle(clip) {
   }
 }
 
+async function _patchTrack(trackId, patch) {
+  return apiStore.api(
+    'PATCH',
+    `/api/review/${reviewStore.sessionId}/timeline/tracks/${trackId}`,
+    patch,
+  )
+}
+
 async function onToggleLock(trackId) {
   const track = multiTracks.value.find(t => t.track_id === trackId)
   if (!track) return
   const newLocked = !track.locked
-  try {
-    const resp = await fetch(`/api/review/${reviewStore.sessionId}/timeline/tracks/${trackId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ locked: newLocked }),
-    })
-    if (resp.ok) track.locked = newLocked
-  } catch { /* keep local state unchanged on error */ }
+  const data = await _patchTrack(trackId, { locked: newLocked })
+  if (data && !data.error) track.locked = newLocked
 }
 
 async function onToggleMute(trackId) {
   const track = multiTracks.value.find(t => t.track_id === trackId)
   if (!track) return
   const newMuted = !track.muted
-  try {
-    const resp = await fetch(`/api/review/${reviewStore.sessionId}/timeline/tracks/${trackId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ muted: newMuted }),
-    })
-    if (resp.ok) track.muted = newMuted
-  } catch { /* keep local state unchanged on error */ }
+  const data = await _patchTrack(trackId, { muted: newMuted })
+  if (data && !data.error) track.muted = newMuted
 }
 
-async function onSetVolume(trackId, vol) {
+// Debounce volume slider: updates local state immediately for responsive UI,
+// but batches PATCH requests so rapid drags don't flood the server.
+const _volumeTimers = new Map()
+const VOLUME_DEBOUNCE_MS = 200
+
+function onSetVolume(trackId, vol) {
   const track = multiTracks.value.find(t => t.track_id === trackId)
   if (!track) return
-  try {
-    const resp = await fetch(`/api/review/${reviewStore.sessionId}/timeline/tracks/${trackId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ volume: vol }),
-    })
-    if (resp.ok) track.volume = vol
-  } catch { /* keep local state unchanged on error */ }
+  track.volume = vol  // optimistic update for immediate feedback
+  if (_volumeTimers.has(trackId)) clearTimeout(_volumeTimers.get(trackId))
+  _volumeTimers.set(trackId, setTimeout(async () => {
+    _volumeTimers.delete(trackId)
+    const data = await _patchTrack(trackId, { volume: vol })
+    if (data && data.error) {
+      // Rollback on error (best-effort — user may have moved on)
+      track.volume = track.volume
+    }
+  }, VOLUME_DEBOUNCE_MS))
 }
+
+onBeforeUnmount(() => {
+  for (const t of _volumeTimers.values()) clearTimeout(t)
+  _volumeTimers.clear()
+})
 
 function zoomIn() {
   store.setZoom(Math.min(store.zoom + 0.25, 4))

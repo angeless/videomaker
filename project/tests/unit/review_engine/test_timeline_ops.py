@@ -81,6 +81,21 @@ def test_move_clip(ops):
     assert clips[0].end_ms == 7000
 
 
+def test_move_clip_rejects_overlap_on_video_track(ops):
+    """Moving a video clip into an existing clip's range must raise OverlapError."""
+    from modules.review_engine.exceptions import OverlapError
+    o, store, tid = _setup(ops)
+    track_id = o.add_track(tid, "s1", "video")
+    clip_a = store.add_clip(track_id, 0, 5000, "/v/a.mp4")
+    clip_b = store.add_clip(track_id, 10000, 15000, "/v/b.mp4")
+    # Move clip_b so it would overlap clip_a (start=3000, end=8000 → overlaps [0, 5000))
+    with pytest.raises(OverlapError):
+        o.move_clip(clip_b, 3000, "s1")
+    # State must be unchanged
+    clips = sorted(store.get_clips(track_id), key=lambda c: c.start_ms)
+    assert clips[1].start_ms == 10000
+
+
 def test_trim_clip(ops):
     o, store, tid = _setup(ops)
     track_id = o.add_track(tid, "s1", "video")

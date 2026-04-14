@@ -633,46 +633,44 @@ const renderQualityLabel = computed(() => {
 })
 
 async function loadRenderSettings() {
+  // apiStore.api() never throws — it returns { error: "<friendly>" } on failure.
   renderLoading.value = true
-  try {
-    const data = await apiStore.api('GET', '/api/settings/render')
-    if (data && data.settings) {
-      Object.assign(renderSettings.value, data.settings)
-      renderAvailableEncoders.value = data.available_encoders || ['libx264']
-    }
-    // Load hardware info for display
-    try {
-      const hw = await apiStore.api('GET', '/api/system/hardware')
-      if (hw && hw.ok) {
-        const enc = hw.encoding?.label || hw.encoding?.encoder || '未知'
-        const gpu = hw.gpu?.model || '无独立 GPU'
-        renderHardwareInfo.value = `编码器: ${enc} | GPU: ${gpu} | 并发建议: ${hw.suggested_max_concurrent}`
-      }
-    } catch { /* hardware info is optional */ }
-  } catch (e) {
-    renderSaveError.value = `加载渲染设置失败: ${e?.message || '未知错误'}`
-  } finally {
-    renderLoading.value = false
+  renderSaveError.value = ''
+  const data = await apiStore.api('GET', '/api/settings/render')
+  if (data && data.error) {
+    renderSaveError.value = `加载渲染设置失败: ${data.error}`
+  } else if (data && data.settings) {
+    Object.assign(renderSettings.value, data.settings)
+    renderAvailableEncoders.value = data.available_encoders || ['libx264']
   }
+  // Load hardware info for display (non-fatal)
+  const hw = await apiStore.api('GET', '/api/system/hardware')
+  if (hw && !hw.error && hw.ok) {
+    const enc = hw.encoding?.label || hw.encoding?.encoder || '未知'
+    const gpu = hw.gpu?.model || '无独立 GPU'
+    renderHardwareInfo.value = `编码器: ${enc} | GPU: ${gpu} | 并发建议: ${hw.suggested_max_concurrent}`
+  }
+  renderLoading.value = false
 }
+
+let _renderSuccessTimer = null
 
 async function saveRenderSettings() {
   renderSaving.value = true
   renderSaveError.value = ''
   renderSaveSuccess.value = false
-  try {
-    const data = await apiStore.api('PUT', '/api/settings/render', renderSettings.value)
-    if (data && data.success === false) {
-      renderSaveError.value = data.message || '保存失败'
-    } else {
-      renderSaveSuccess.value = true
-      setTimeout(() => { renderSaveSuccess.value = false }, 3000)
-    }
-  } catch (e) {
-    renderSaveError.value = `保存失败: ${e?.message || '网络错误'}`
-  } finally {
-    renderSaving.value = false
+  const data = await apiStore.api('PUT', '/api/settings/render', renderSettings.value)
+  // Backend returns { ok: true } on success (legacy envelope) or { error: "..." } on failure
+  if (data && data.error) {
+    renderSaveError.value = `保存失败: ${data.error}`
+  } else if (data && data.ok === false) {
+    renderSaveError.value = '保存失败：服务端拒绝了请求'
+  } else {
+    renderSaveSuccess.value = true
+    if (_renderSuccessTimer) clearTimeout(_renderSuccessTimer)
+    _renderSuccessTimer = setTimeout(() => { renderSaveSuccess.value = false; _renderSuccessTimer = null }, 3000)
   }
+  renderSaving.value = false
 }
 
 function badgeClass(status) {

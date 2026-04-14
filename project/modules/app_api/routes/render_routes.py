@@ -52,23 +52,33 @@ def create_render_blueprint(*, timeline_store_getter, job_manager_getter, review
             return _error_response("No timeline for session", "TIMELINE_NOT_FOUND", 404)
 
         body = request.get_json(silent=True) or {}
-        # Derive output path from session project_path when available
+
+        # Determine the allowed output directory first (server-controlled)
+        project_path = None
+        if review_store_getter is not None:
+            try:
+                session_row = review_store_getter().get_session(session_id)
+                if session_row:
+                    project_path = session_row.get("project_path")
+            except Exception:
+                pass
+        out_dir = Path(project_path) / "output" if project_path else Path.home() / "Movies" / "VideoEditor" / "output"
+        out_dir = out_dir.resolve()
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        # If caller supplied a custom path, it MUST resolve inside out_dir (no traversal).
         if "output_path" in body:
-            output_path = str(body["output_path"])
+            candidate = Path(str(body["output_path"])).expanduser().resolve()
+            try:
+                candidate.relative_to(out_dir)
+            except ValueError:
+                return _error_response(
+                    f"output_path must be inside {out_dir}", "PATH_NOT_ALLOWED", 400
+                )
+            if candidate.suffix.lower() != ".mp4":
+                return _error_response("output_path must end with .mp4", "PATH_INVALID", 400)
+            output_path = str(candidate)
         else:
-            project_path = None
-            if review_store_getter is not None:
-                try:
-                    session_row = review_store_getter().get_session(session_id)
-                    if session_row:
-                        project_path = session_row.get("project_path")
-                except Exception:
-                    pass
-            if project_path:
-                out_dir = Path(project_path) / "output"
-            else:
-                out_dir = Path.home() / "Movies" / "VideoEditor" / "output"
-            out_dir.mkdir(parents=True, exist_ok=True)
             output_path = str(out_dir / f"render_{session_id}.mp4")
 
         # Collect clips from all video tracks
@@ -100,9 +110,6 @@ def create_render_blueprint(*, timeline_store_getter, job_manager_getter, review
             _render_state[sid]["output_path"] = result_path
             return result_path
 
-        start_time = time.time()
-        job_id = jm.submit("render", _do_render, jm, clips, output_path, session_id)
-
         # Get encoder label
         encoder_label = "libx264 (CPU)"
         try:
@@ -114,14 +121,20 @@ def create_render_blueprint(*, timeline_store_getter, job_manager_getter, review
         except Exception:
             pass
 
+        # Initialize state BEFORE submitting so the worker can't race past it
+        # (if render completes extremely fast, setting state after submit could
+        # overwrite the worker's status="done" with status="rendering").
+        start_time = time.time()
         _render_state[session_id] = {
-            "job_id": job_id,
+            "job_id": "",  # set after submit
             "start_time": start_time,
             "encoder": encoder_label,
             "output_path": output_path,
             "status": "rendering",
             "segments_total": len(clips),
         }
+        job_id = jm.submit("render", _do_render, jm, clips, output_path, session_id)
+        _render_state[session_id]["job_id"] = job_id
 
         return _ok({"job_id": job_id}, 202)
 
@@ -185,7 +198,13 @@ def create_render_blueprint(*, timeline_store_getter, job_manager_getter, review
         output_path = state.get("output_path", "")
         if not output_path or not os.path.isfile(output_path):
             return _error_response("Rendered file not found on disk", "FILE_MISSING", 404)
+        # Double-check the resolved path is a .mp4 — defence in depth.
+        if Path(output_path).suffix.lower() != ".mp4":
+            return _error_response("Invalid output format", "PATH_INVALID", 403)
         filename = Path(output_path).name
-        return send_file(output_path, as_attachment=True, download_name=filename, mimetype="video/mp4")
+        try:
+            return send_file(output_path, as_attachment=True, download_name=filename, mimetype="video/mp4")
+        except (FileNotFoundError, OSError) as exc:
+            return _error_response(f"File read error: {exc}", "FILE_READ_ERROR", 500)
 
     return bp

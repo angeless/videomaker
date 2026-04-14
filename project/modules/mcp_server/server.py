@@ -76,10 +76,27 @@ from modules.mcp_server.security import get_permission_level, log_audit
 mcp = FastMCP("VideoEditor")
 
 
+def _summarize_args(args: tuple) -> str:
+    """Redact large/sensitive fields before writing to the audit log."""
+    parts = []
+    for a in args:
+        if isinstance(a, str) and len(a) > 80:
+            parts.append(f"<str:{len(a)}>")
+        elif isinstance(a, (bytes, bytearray)):
+            parts.append(f"<bytes:{len(a)}>")
+        elif isinstance(a, dict):
+            parts.append(f"<dict:keys={sorted(a.keys())[:5]}>")
+        elif isinstance(a, (list, tuple)):
+            parts.append(f"<{type(a).__name__}:len={len(a)}>")
+        else:
+            parts.append(repr(a)[:50])
+    return "(" + ", ".join(parts) + ")"
+
+
 def _run_tool(tool_name: str, fn, *args, **kwargs) -> dict:
     """Execute a tool function with permission logging and audit trail."""
     level = get_permission_level(tool_name)
-    args_summary = repr(args)[:200]
+    args_summary = _summarize_args(args)
     logger.info("MCP tool invoked: %s (level=%s)", tool_name, level)
     try:
         result = fn(*args, **kwargs)

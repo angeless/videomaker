@@ -114,9 +114,12 @@ class JobManager:
             if record.status in ("done", "failed", "cancelled"):
                 return False
             record.cancel_flag = True
-            # Attempt to cancel the Future if still pending (not yet started)
-            if record.future is not None:
-                record.future.cancel()
+            # Attempt to cancel the Future if still pending (not yet started).
+            # If cancel() succeeds, _run_job never executes, so we must mark the
+            # record terminal here; otherwise status would be stuck at "pending".
+            if record.future is not None and record.future.cancel():
+                record.status = "cancelled"
+                record.finished_at = time.time()
         logger.info("Cancel requested: %s", job_id)
         return True
 
