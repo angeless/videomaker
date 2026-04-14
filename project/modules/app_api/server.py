@@ -61,6 +61,7 @@ from modules.app_api.routes.enhance_routes import create_enhance_blueprint
 from modules.app_api.routes.stock_routes import create_stock_blueprint
 from modules.app_api.routes.style_routes import create_style_blueprint
 from modules.app_api.routes.vlm_routes import create_vlm_blueprint
+from modules.app_api.routes.render_routes import create_render_blueprint
 from modules.workflow_engine.workflow import WorkflowState, WorkflowRunner
 from modules.library.global_media_library import GlobalMediaLibrary
 from modules.step2_topic_planning.ai_client import AIClient
@@ -475,6 +476,22 @@ app.register_blueprint(
 )
 # ── Review & Roughcut API (v0.14.0) ──
 _review_store = None
+_job_manager_instance = None
+
+def _get_job_manager():
+    global _job_manager_instance
+    if _job_manager_instance is None:
+        from modules.job_system.job_manager import JobManager
+        _job_manager_instance = JobManager(max_workers=4)
+    return _job_manager_instance
+
+def _get_timeline_store():
+    from modules.review_engine.timeline_store import TimelineStore
+    db_path = os.environ.get("VIDEOEDITOR_TIMELINE_DB")
+    if not db_path:
+        pdir = _project_dir
+        db_path = str(pdir / "data" / "review.db") if pdir else "data/review.db"
+    return TimelineStore(db_path)
 
 def _get_review_store():
     global _review_store
@@ -495,7 +512,7 @@ def _get_vlm_adapter():
         try:
             from modules.app_api.services.settings_service import load_ai_settings
             ai = load_ai_settings()
-            provider = ai.get("vlm_provider", "")
+            provider = ai.get("provider", "") or ai.get("vlm_provider", "")
         except Exception:
             pass
     return get_vlm_adapter(provider) if provider else None
@@ -533,6 +550,13 @@ app.register_blueprint(
     create_vlm_blueprint(
         review_store_getter=_get_review_store,
         vlm_adapter_getter=_get_vlm_adapter,
+    )
+)
+
+app.register_blueprint(
+    create_render_blueprint(
+        timeline_store_getter=_get_timeline_store,
+        job_manager_getter=_get_job_manager,
     )
 )
 

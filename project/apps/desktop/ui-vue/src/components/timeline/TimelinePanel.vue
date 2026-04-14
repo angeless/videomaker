@@ -74,6 +74,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useTimelineStore } from '../../stores/timeline.js'
+import { useReviewStore } from '../../stores/review.js'
 import { useFormatters } from '../../composables/useFormatters.js'
 import labels from '../../i18n/labels.js'
 import TimelineRuler from './TimelineRuler.vue'
@@ -85,6 +86,7 @@ import TimelineClipInfo from './TimelineClipInfo.vue'
 import TimelineTrackHeader from './TimelineTrackHeader.vue'
 
 const store = useTimelineStore()
+const reviewStore = useReviewStore()
 const { formatDuration } = useFormatters()
 const scrollRef = ref(null)
 const multiTracks = ref([])
@@ -92,8 +94,7 @@ const selectedClipId = ref(null)
 
 // C6: Load multi-track data from C4 API
 async function loadMultiTracks() {
-  const reviewStore = window.__reviewStore  // injected at app level
-  const sid = reviewStore?.sessionId
+  const sid = reviewStore.sessionId
   if (!sid) return
   try {
     const resp = await fetch(`/api/review/${sid}/timeline`)
@@ -141,6 +142,7 @@ onMounted(() => {
   if (!store.timelineData) {
     store.loadTimeline()
   }
+  loadMultiTracks()
 })
 </script>
 

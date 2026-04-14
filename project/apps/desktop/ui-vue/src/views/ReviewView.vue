@@ -49,10 +49,12 @@
         />
       </div>
 
-      <!-- Sidebar: comments + diagnostics -->
+      <!-- Sidebar: comments + diagnostics + render -->
       <div class="rl-sidebar">
         <CommentPanel @seek="ms => playerRef?.seek(ms)" />
         <DiagnosticsPanel />
+        <RenderProgress ref="renderProgressRef" />
+        <button class="btn btn-primary btn-sm" style="margin: 8px" @click="startRender">渲染</button>
       </div>
     </div>
 
@@ -114,6 +116,7 @@ import ThumbnailStrip from '../components/review/ThumbnailStrip.vue'
 import WaveformTrack from '../components/review/WaveformTrack.vue'
 import VersionSwitcher from '../components/review/VersionSwitcher.vue'
 import DiagnosticsPanel from '../components/review/DiagnosticsPanel.vue'
+import RenderProgress from '../components/review/RenderProgress.vue'
 
 const store = useReviewStore()
 const route = useRoute()
@@ -121,6 +124,13 @@ const playerRef = ref(null)
 const timelineRef = ref(null)
 const commentInputRef = ref(null)
 const drawingRef = ref(null)
+const renderProgressRef = ref(null)
+
+function startRender() {
+  if (store.sessionId) {
+    renderProgressRef.value?.startRender(store.sessionId)
+  }
+}
 
 const sessionName = computed(() => {
   if (!store.session?.video_path) return ''

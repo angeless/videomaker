@@ -410,9 +410,9 @@ async function saveVlmSettings() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        vlm_provider: vlmProvider.value,
-        vlm_openai_key: vlmOpenaiKey.value,
-        vlm_claude_key: vlmClaudeKey.value,
+        provider: vlmProvider.value,
+        openai_api_key: vlmOpenaiKey.value,
+        anthropic_api_key: vlmClaudeKey.value,
       }),
     })
     const data = await resp.json()

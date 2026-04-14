@@ -61,7 +61,9 @@ def create_render_blueprint(*, timeline_store_getter, job_manager_getter):
         if not clips:
             return _error_response("No video clips to render", "NO_CLIPS")
 
-        def _do_render(jm_ref, jid, clips_list, out_path, sid):
+        def _do_render(jm_ref, clips_list, out_path, sid):
+            import threading
+            jid = getattr(threading.current_thread(), '_job_id', '')
             from modules.hardware.detector import get_system_profile
             from modules.render_engine.render_manager import RenderManager
 
@@ -70,7 +72,8 @@ def create_render_blueprint(*, timeline_store_getter, job_manager_getter):
 
             def _progress(done, total):
                 pct = (done / total) * 100.0 if total > 0 else 0
-                jm_ref.update_progress(jid, pct)
+                if jid:
+                    jm_ref.update_progress(jid, pct)
 
             result_path = manager.render_timeline(clips_list, out_path, progress_callback=_progress)
             _render_state[sid]["status"] = "done"
@@ -78,7 +81,7 @@ def create_render_blueprint(*, timeline_store_getter, job_manager_getter):
             return result_path
 
         start_time = time.time()
-        job_id = jm.submit("render", _do_render, jm, "", clips, output_path, session_id)
+        job_id = jm.submit("render", _do_render, jm, clips, output_path, session_id)
 
         # Get encoder label
         encoder_label = "libx264 (CPU)"

@@ -30,6 +30,7 @@
 
 <script setup>
 import { ref, computed, onUnmounted } from 'vue'
+import { useReviewStore } from '../../stores/review.js'
 
 const visible = ref(false)
 const status = ref('idle')
@@ -96,7 +97,7 @@ async function startRender(sessionId) {
 }
 
 async function cancelRender() {
-  const sessionId = window.__reviewStore?.sessionId
+  const sessionId = useReviewStore().sessionId
   if (!sessionId) return
   try {
     await fetch(`/api/review/${sessionId}/render/cancel`, { method: 'POST' })

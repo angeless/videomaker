@@ -626,26 +626,40 @@ def create_timeline_blueprint(
         if track.locked:
             return _error_response(f"Track {track_id} is locked", "TRACK_LOCKED", 403)
 
+        # Default source_out_ms to clip duration so render segments are not zero-length
+        source_in_ms = int(body.get("source_in_ms", 0))
+        source_out_ms = body.get("source_out_ms")
+        if source_out_ms is None:
+            source_out_ms = source_in_ms + (end_ms - start_ms)
+        else:
+            source_out_ms = int(source_out_ms)
         clip_id = store.add_clip(
             track_id=track_id,
             start_ms=start_ms,
             end_ms=end_ms,
             source_path=str(body.get("source_path", "")),
-            source_in_ms=int(body.get("source_in_ms", 0)),
-            source_out_ms=int(body.get("source_out_ms", 0)),
+            source_in_ms=source_in_ms,
+            source_out_ms=source_out_ms,
             label=str(body.get("label", "")),
         )
         return _ok({"clip_id": clip_id}, 201)
 
     @bp.route("/api/review/<session_id>/timeline/clips/<clip_id>", methods=["PATCH"])
     def api_multitrack_update_clip(session_id: str, clip_id: str):
-        """Update a clip's properties."""
+        """Update a clip's properties. Fails if clip is on a locked track."""
+        from modules.review_engine.exceptions import LockedTrackError
+        ops = _get_ops()
         store = _get_store()
         body = request.get_json(silent=True) or {}
         allowed = {"start_ms", "end_ms", "source_path", "source_in_ms", "source_out_ms", "label", "track_id"}
         updates = {k: v for k, v in body.items() if k in allowed}
         if not updates:
             return _error_response("No valid fields to update", "NO_UPDATES")
+        # Enforce locked-track constraint before any mutation
+        try:
+            ops._assert_clip_not_on_locked_track(clip_id, session_id)
+        except LockedTrackError as e:
+            return _error_response(str(e), "TRACK_LOCKED", 403)
         ok = store.update_clip(clip_id, **updates)
         if not ok:
             return _error_response(f"Clip {clip_id} not found", "CLIP_NOT_FOUND", 404)
@@ -653,9 +667,13 @@ def create_timeline_blueprint(
 
     @bp.route("/api/review/<session_id>/timeline/clips/<clip_id>", methods=["DELETE"])
     def api_multitrack_delete_clip(session_id: str, clip_id: str):
-        """Delete a clip."""
-        store = _get_store()
-        removed = store.remove_clip(clip_id)
+        """Delete a clip. Fails if clip is on a locked track."""
+        from modules.review_engine.exceptions import LockedTrackError
+        ops = _get_ops()
+        try:
+            removed = ops.remove_clip(clip_id, session_id)
+        except LockedTrackError as e:
+            return _error_response(str(e), "TRACK_LOCKED", 403)
         if not removed:
             return _error_response(f"Clip {clip_id} not found", "CLIP_NOT_FOUND", 404)
         return _ok({"deleted": True})
