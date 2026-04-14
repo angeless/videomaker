@@ -128,9 +128,15 @@ def test_api_chain():
     resp = client.post("/api/review/s1/vlm/analyze-stream", json={"video_path": "/tmp/t.mp4"})
     assert resp.status_code == 202
 
-    # Result not available yet (async) — returns 404
+    # The GET may race the JobManager: async result either (a) hasn't landed
+    # yet → 404 with NOT_FOUND, or (b) already computed → 200 with analysis
+    # payload. Both are valid states; only reject other codes.
     resp2 = client.get("/api/review/s1/vlm/stream-analysis")
-    assert resp2.status_code == 404  # not yet computed (async)
+    assert resp2.status_code in (200, 404), (
+        f"expected 200 or 404, got {resp2.status_code}: {resp2.get_data(as_text=True)[:120]}"
+    )
+    if resp2.status_code == 404:
+        assert resp2.get_json()["error"] == "NOT_FOUND"
 
 
 # ── Test 4: performance ──────────────────────────────────────────────

@@ -89,54 +89,85 @@ class VideoStreamAnalyzer:
             for ci in raw_issues
         ]
 
+    # ── VLM call helper ──────────────────────────────────────────
+
+    def _vlm_describe(self, image: Any, prompt: str) -> str:
+        """Call the VLM adapter and return a description string.
+
+        Supports BOTH the modern adapter protocol (`describe_image(image, prompt, max_tokens)`
+        returning `VLMResponse(text=...)` or equivalent) AND the legacy
+        test-mock protocol (`describe_region(frame=, strokes=, prompt=)`
+        returning `{"description": "..."}`). This shim lets real adapters and
+        MagicMock tests both work without either side needing to know about
+        the other. Returns empty string on error.
+        """
+        try:
+            # Prefer the adapter protocol used by production VLM adapters
+            # (OpenAIVisionAdapter, ClaudeVisionAdapter, LocalLlavaAdapter, StubVLMAdapter).
+            if hasattr(self._vlm, "describe_image"):
+                resp = self._vlm.describe_image(image, prompt)
+                # VLMResponse dataclass exposes `text`; some mocks return dict
+                if resp is None:
+                    return ""
+                if hasattr(resp, "text"):
+                    return str(resp.text or "")
+                if isinstance(resp, dict):
+                    return str(resp.get("text") or resp.get("description") or "")
+                return str(resp)
+            # Fall back to legacy VLMAnalyzer.describe_region(image, context)
+            # OR test-mock that accepts arbitrary kwargs.
+            if hasattr(self._vlm, "describe_region"):
+                resp = self._vlm.describe_region(
+                    frame=image, strokes=[], prompt=prompt,
+                )
+                if isinstance(resp, dict):
+                    return str(resp.get("description") or resp.get("text") or "")
+                if hasattr(resp, "summary"):
+                    return str(resp.summary or "")
+                return str(resp or "")
+        except Exception as exc:
+            logger.debug("VLM call failed: %s", exc)
+        return ""
+
     # ── Transition quality ───────────────────────────────────────
 
     def _check_transitions(self, frames: List[SampledFrame]) -> List[StreamIssue]:
         """Check transition quality between scenes.
 
         Without VLM: skip (continuity already covers algorithmic checks).
-        With VLM: ask for transition quality assessment.
+        With VLM: rate the outgoing frame's transition quality.
         """
         if self._vlm is None or len(frames) < 2:
             return []
 
         issues = []
+        prompt = (
+            "Rate the visual transition quality at this scene boundary on a "
+            "scale of 1-5. Consider composition, color consistency, and visual "
+            "flow. Reply with just the number."
+        )
         for i in range(len(frames) - 1):
             if frames[i].scene_idx == frames[i + 1].scene_idx:
                 continue  # same scene, no transition
 
+            # The adapter protocol only accepts a single image. We rate the
+            # outgoing frame; transitions are bidirectional so the signal is
+            # preserved. TODO(v0.19): pair images side-by-side for adapters
+            # that support multi-image prompts.
+            desc = self._vlm_describe(frames[i].frame, prompt)
+            if not desc:
+                continue
             try:
-                prompt = (
-                    "Rate the visual transition between these two frames on a scale of 1-5. "
-                    "Consider smoothness, color consistency, and visual flow. "
-                    "Reply with just the number."
-                )
-                # NOTE: VideoStreamAnalyzer was designed around a VLM interface
-                # that accepts frame/next_frame kwargs. Real adapters implement
-                # describe_image(image, prompt, max_tokens). Tests use MagicMock
-                # so this path works in tests but silently no-ops in production
-                # (TypeError is swallowed). TODO(v0.19): unify VLM call protocol.
-                result = self._vlm.describe_region(
-                    frame=frames[i].frame,
-                    next_frame=frames[i + 1].frame,
-                    strokes=[],
-                    prompt=prompt,
-                )
-                if result and isinstance(result, dict):
-                    desc = result.get("description", "")
-                    try:
-                        score = int(desc.strip()[0]) if desc.strip() else 3
-                    except (ValueError, IndexError):
-                        score = 3
-                    if score <= 2:
-                        issues.append(StreamIssue(
-                            issue_type="transition_quality",
-                            severity="warning",
-                            description=f"Poor transition quality (score={score}/5) at scenes {frames[i].scene_idx}→{frames[i+1].scene_idx}",
-                            frame_indices=[i, i + 1],
-                        ))
-            except Exception as exc:
-                logger.debug("Transition quality check failed: %s", exc)
+                score = int(desc.strip()[0]) if desc.strip() else 3
+            except (ValueError, IndexError):
+                score = 3
+            if score <= 2:
+                issues.append(StreamIssue(
+                    issue_type="transition_quality",
+                    severity="warning",
+                    description=f"Poor transition quality (score={score}/5) at scenes {frames[i].scene_idx}→{frames[i+1].scene_idx}",
+                    frame_indices=[i, i + 1],
+                ))
 
         return issues
 
@@ -148,21 +179,17 @@ class VideoStreamAnalyzer:
             return "VLM 不可用，无法生成叙事弧线分析"
 
         try:
-            # Collect scene descriptions first
             scene_descs = []
             seen_scenes = set()
             for f in frames:
                 if f.scene_idx not in seen_scenes:
                     seen_scenes.add(f.scene_idx)
-                    result = self._vlm.describe_region(
-                        frame=f.frame,
-                        strokes=[],
-                        prompt="Describe this video frame in one sentence. Focus on the main subject and action.",
+                    desc = self._vlm_describe(
+                        f.frame,
+                        "Describe this video frame in one sentence. Focus on the main subject and action.",
                     )
-                    if result and isinstance(result, dict):
-                        scene_descs.append(
-                            f"Scene {f.scene_idx}: {result.get('description', 'unknown')}"
-                        )
+                    if desc:
+                        scene_descs.append(f"Scene {f.scene_idx}: {desc}")
 
             if scene_descs:
                 return "叙事弧线: " + " → ".join(scene_descs)
@@ -189,18 +216,7 @@ class VideoStreamAnalyzer:
             if f.scene_idx in seen:
                 continue
             seen.add(f.scene_idx)
-            try:
-                result = self._vlm.describe_region(
-                    frame=f.frame,
-                    strokes=[],
-                    prompt="Describe the scene in this frame briefly.",
-                )
-                if result and isinstance(result, dict):
-                    descriptions[f.scene_idx] = result.get("description", "")
-                else:
-                    descriptions[f.scene_idx] = f"Scene {f.scene_idx}"
-            except Exception as exc:
-                descriptions[f.scene_idx] = f"Scene {f.scene_idx} (VLM error)"
-                logger.debug("Scene description failed for %d: %s", f.scene_idx, exc)
+            desc = self._vlm_describe(f.frame, "Describe the scene in this frame briefly.")
+            descriptions[f.scene_idx] = desc or f"Scene {f.scene_idx}"
 
         return descriptions

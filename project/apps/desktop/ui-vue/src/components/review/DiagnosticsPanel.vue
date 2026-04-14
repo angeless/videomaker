@@ -207,6 +207,7 @@ async function runStreamAnalysis() {
     if (analysis && !analysis.error && (analysis.issues || analysis.narrative_arc)) {
       store.streamAnalysis = analysis
       const sumData = await apiStore.api('GET', `/api/review/${store.sessionId}/vlm/scene-summaries`)
+      if (!_mounted) return
       if (sumData && !sumData.error) {
         store.sceneSummaries = sumData.summaries || {}
       }

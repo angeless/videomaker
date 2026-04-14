@@ -492,8 +492,8 @@ async function connectYouTube() {
       ytPollTimer = null
     }
   }, 3000)
-  // Stop polling after 5 minutes
-  setTimeout(() => {
+  // Stop polling after 5 minutes — track the timeout so unmount clears it too.
+  _scheduleClear(() => {
     if (ytPollTimer) { clearInterval(ytPollTimer); ytPollTimer = null; youtubeWaiting.value = false }
   }, 300000)
 }
@@ -703,6 +703,11 @@ onBeforeUnmount(() => {
   // unmounted component (Vue 3 tolerates this but we avoid the warning/leak).
   for (const t of _timers) clearTimeout(t)
   _timers.clear()
+  // Also stop the YouTube OAuth poll setInterval if in-flight.
+  if (ytPollTimer) {
+    clearInterval(ytPollTimer)
+    ytPollTimer = null
+  }
 })
 </script>
 

@@ -39,12 +39,34 @@ def create_render_blueprint(*, timeline_store_getter, job_manager_getter, review
     # In-memory render state per session
     _render_state = {}  # session_id → {job_id, start_time, encoder, output_path, status, segments_total}
 
+    # How long to keep terminal render state around (for /progress and /download)
+    # before garbage-collecting. After this window the next POST can start fresh.
+    _STATE_TTL_S = 24 * 3600
+
     def _is_active(state):
         return state and state.get("status") in ("rendering", "pending")
+
+    def _gc_render_state():
+        """Drop terminal render state entries older than TTL.
+
+        Called opportunistically on each POST /render. Keeps the in-memory
+        dict from growing unboundedly on long-running servers and prevents
+        terminal state from ghost-blocking future renders beyond the TTL.
+        """
+        now = time.time()
+        to_delete = []
+        for sid, st in _render_state.items():
+            if st.get("status") in ("done", "failed", "cancelled") and (
+                now - st.get("start_time", now) > _STATE_TTL_S
+            ):
+                to_delete.append(sid)
+        for sid in to_delete:
+            _render_state.pop(sid, None)
 
     @bp.route("/api/review/<session_id>/render", methods=["POST"])
     def api_render_trigger(session_id: str):
         """Trigger async render. Returns 202 + job_id."""
+        _gc_render_state()
         jm = job_manager_getter()
         if jm is None:
             return _error_response("Job manager not available", "JOB_UNAVAILABLE", 500)
@@ -118,10 +140,22 @@ def create_render_blueprint(*, timeline_store_getter, job_manager_getter, review
                 if jid:
                     jm_ref.update_progress(jid, pct)
 
-            result_path = manager.render_timeline(clips_list, out_path, progress_callback=_progress)
-            _render_state[sid]["status"] = "done"
-            _render_state[sid]["output_path"] = result_path
-            return result_path
+            # CRITICAL: must update state on BOTH success and failure, otherwise
+            # a raised exception leaves status="rendering" forever and the 409
+            # concurrency guard permanently locks out new renders on this session.
+            try:
+                result_path = manager.render_timeline(clips_list, out_path, progress_callback=_progress)
+                state = _render_state.get(sid)
+                if state is not None:
+                    state["status"] = "done"
+                    state["output_path"] = result_path
+                return result_path
+            except Exception as exc:
+                state = _render_state.get(sid)
+                if state is not None:
+                    state["status"] = "failed"
+                    state["error"] = str(exc)
+                raise
 
         # Get encoder label
         encoder_label = "libx264 (CPU)"
@@ -173,6 +207,14 @@ def create_render_blueprint(*, timeline_store_getter, job_manager_getter, review
         # state's own status in that degenerate case so the client gets truth.
         if status == "not_found":
             status = state["status"]
+        # Reconcile: if JM reports terminal status but _render_state wasn't
+        # updated (e.g. _do_render raised before writing state, or worker was
+        # cancelled before start), push the terminal status back into state so
+        # the 409 concurrency guard doesn't permanently lock this session.
+        if status in ("failed", "cancelled") and state["status"] == "rendering":
+            state["status"] = status
+            if status == "failed" and job_status.get("error"):
+                state["error"] = job_status["error"]
         elapsed = time.time() - state["start_time"]
         eta = (elapsed / pct * (100 - pct)) if pct > 0 else 0
 

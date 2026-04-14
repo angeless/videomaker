@@ -53,6 +53,7 @@ const outputPath = ref('')
 const error = ref('')
 const downloading = ref(false)
 let pollTimer = null
+let _downloadAbort = null
 
 const statusLabel = computed(() => {
   const map = { idle: '等待中', rendering: '渲染中…', done: '完成', failed: '失败', cancelled: '已取消' }
@@ -99,7 +100,11 @@ async function startRender(sessionId) {
 }
 
 async function cancelRender() {
-  const sessionId = _sessionId.value || useReviewStore().sessionId
+  // Never fall back to reviewStore.sessionId — the render was started against
+  // a specific session captured at startRender() time. Using the current
+  // reviewStore.sessionId could cancel a DIFFERENT session's render if the
+  // user has navigated between sessions while this progress bar lingers.
+  const sessionId = _sessionId.value
   if (!sessionId) return
   const data = await apiStore.api('POST', `/api/review/${sessionId}/render/cancel`, {})
   if (data && !data.error) {
@@ -114,12 +119,14 @@ async function cancelRender() {
 async function downloadRender() {
   if (!_sessionId.value || downloading.value) return
   downloading.value = true
+  // AbortController lets us cancel a 2GB in-flight blob read on unmount/close.
+  _downloadAbort = new AbortController()
   try {
     const headers = {}
     if (apiStore.token) headers['X-VideoEditor-Token'] = apiStore.token
     const resp = await fetch(
       `/api/review/${_sessionId.value}/render/download`,
-      { method: 'GET', headers },
+      { method: 'GET', headers, signal: _downloadAbort.signal },
     )
     if (!resp.ok) {
       const msg = await resp.text().catch(() => '')
@@ -134,15 +141,25 @@ async function downloadRender() {
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+    // Safari and some older WebKit builds start the download asynchronously;
+    // revoking the blob URL immediately can cancel it. Delay the revoke so
+    // the browser has time to commit to the download.
+    setTimeout(() => URL.revokeObjectURL(url), 60_000)
   } catch (e) {
-    error.value = `下载失败: ${e?.message || '网络错误'}`
+    if (e?.name !== 'AbortError') {
+      error.value = `下载失败: ${e?.message || '网络错误'}`
+    }
   } finally {
+    _downloadAbort = null
     downloading.value = false
   }
 }
 
-onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
+onUnmounted(() => {
+  if (pollTimer) clearInterval(pollTimer)
+  // Abort any in-flight download so we don't buffer gigabytes after unmount.
+  if (_downloadAbort) _downloadAbort.abort()
+})
 
 defineExpose({ startRender })
 </script>
