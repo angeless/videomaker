@@ -3,7 +3,7 @@
 > 更新于 2026-04-14
 
 ## 当前版本：v0.18.0 — 四大基础设施升级 ✅ 完成
-## 当前状态：版本封板 + 质量审计修复完成 — commit 1d46bdf
+## 当前状态：全量评审修复完成 — commit 7ab433c（共修复20个问题）
 
 ## 版本完成记录
 
@@ -16,20 +16,17 @@
 | v0.18.0 | MCP + VLM 流 + 多轨 + GPU 渲染 | 27 | `docs/dev-plans/dev-plan-v0.18.0.md` | **Done** |
 
 ## 上次停在
-- 分支：`main`（已 push，commit 1d46bdf）
-- 4轮Codex审查完成，10个P1/Critical bug修复
-- 测试：1619 passed, 5 skipped
+- 分支：`main`，commit 7ab433c
+- 4轮Codex审查全量修复完成（共20个问题，含10个P1 + 10个业务/UX/UIUX）
+- 测试：1616 passed, 5 skipped
 
 ## 下一步
 - 规划 v0.19.0（参考已知遗留问题列表）
-- 考虑方向：v0.19.0（质量修复+渲染下载+MCP安全）或 v1.0（生产化）
+- 考虑方向：v0.19.0（质量修复+生产化）或 v1.0
 
 ## 已知遗留（待 v0.19.0）
-- MCP permission/audit hooks 未接入执行路径（CRITICAL）
-- JobManager.cancel() 不拦截已排队任务（缺 Future.cancel()）
-- VLM continuity 传全量帧而非每场景一帧
-- FrameSampler 不验证 interval_ms（0→死循环）
-- Render 输出到 /tmp，无法在应用内下载
-- VLM/stream 失败状态被吞掉，用户无反馈
-- 3 pre-existing test failures in test_fingerprint_relink.py
+- 3 pre-existing test failures in test_fingerprint_relink.py（pre-existing）
 - VLM settings→adapter env var bridge（v0.17 遗留）
+- RenderManager._concat_segments() stream normalization（异构源需重编码）
+- API response envelope 不一致（部分旧路由仍用 {ok/error} 格式）
+- /vlm/diagnose 同步 vs analyze-stream 异步语义不一致
