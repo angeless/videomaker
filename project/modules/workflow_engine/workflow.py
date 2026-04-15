@@ -1797,9 +1797,20 @@ timeout_audio_sec: {rc.get('timeout_audio_sec', 480)}
         )
         if path and Path(path).exists():
             return path
-        guess = Path(self.state.videos_dir) / vdata.get("filename", "")
-        if guess.exists():
-            return str(guess)
+        # Path-traversal guard: workflow.json is user-editable, so a tampered
+        # filename like "../../../etc/passwd" would escape videos_dir and
+        # flow into downstream steps (ffprobe/ffmpeg) that read the path.
+        # Use relative_to to reject any resolved path outside the base.
+        filename = vdata.get("filename", "")
+        if filename:
+            videos_base = Path(self.state.videos_dir).resolve()
+            guess = (Path(self.state.videos_dir) / filename).resolve()
+            try:
+                guess.relative_to(videos_base)
+            except ValueError:
+                return None  # traversal attempt — refuse to resolve
+            if guess.exists():
+                return str(guess)
         return None
 
     def parse_review(self, step_n: int) -> Tuple[bool, Dict]:

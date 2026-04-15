@@ -138,7 +138,11 @@ def test_content_publish_run_youtube_api_success(monkeypatch, tmp_path):
             return _FakeResp(
                 status=200,
                 body="",
-                headers={"Location": "https://upload.youtube.local/session/abc"},
+                # Use the real YouTube upload domain — the new SSRF guard in
+                # _publish_youtube_via_api resolves DNS to reject internal
+                # hosts, and ".local" (Bonjour/mDNS) fails resolution.
+                # urlopen itself is still mocked below, so no actual network.
+                headers={"Location": "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&upload_id=abc"},
             )
         return _FakeResp(
             status=200,

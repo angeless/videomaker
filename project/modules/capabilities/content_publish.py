@@ -16,6 +16,8 @@ from urllib import error as urlerror
 from urllib import request as urlrequest
 import uuid
 
+from modules.app_api.param_utils import is_safe_outbound_url
+
 
 @dataclass(frozen=True)
 class PublishPlatformProfile:
@@ -296,6 +298,12 @@ def _publish_via_webhook(
     endpoint = str(connector.get("endpoint", "") or "").strip()
     if not endpoint:
         raise ValueError("connector.endpoint 不能为空")
+    # SSRF guard — endpoint is user-configurable (via publish settings or
+    # an imported config file). Without this check, the server could be
+    # weaponized to probe internal services or cloud-metadata endpoints.
+    _safe, _reason = is_safe_outbound_url(endpoint)
+    if not _safe:
+        raise ValueError(f"connector.endpoint 校验失败: {_reason}")
     method = str(connector.get("method", "POST") or "POST").strip().upper() or "POST"
     body = {
         "platform_id": step.get("platform_id"),
@@ -462,6 +470,13 @@ def _publish_youtube_via_api(
 
     if not upload_url:
         raise RuntimeError("YouTube 未返回可用的上传地址（Location）")
+    # Re-validate the Location header: a compromised/malicious upstream or
+    # proxy could redirect the resumable upload to an internal host and
+    # exfiltrate the video. Only allow Google-owned hosts to host the
+    # actual upload.
+    _safe_loc, _reason_loc = is_safe_outbound_url(upload_url)
+    if not _safe_loc:
+        raise RuntimeError(f"YouTube 返回的上传地址不合法: {_reason_loc}")
 
     upload_headers = _youtube_auth_headers(connector, content_type=media_type)
     upload_headers["Content-Length"] = str(size)

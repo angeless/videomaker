@@ -128,6 +128,16 @@ class AIClient:
     ):
         self.max_tokens = max_tokens
         self.temperature = temperature
+        # Validate base_url scheme early — a typo like "evil.com" (no scheme)
+        # or "file:///..." would otherwise silently flow into the OpenAI SDK
+        # and cause confusing failures. Only http/https are legitimate.
+        if base_url:
+            from urllib.parse import urlparse
+            _bu_scheme = urlparse(str(base_url)).scheme
+            if _bu_scheme not in ("http", "https"):
+                raise ValueError(
+                    f"base_url 必须是 http:// 或 https:// 开头 (got scheme={_bu_scheme!r})"
+                )
         self.base_url = base_url
 
         self.provider = self._normalize_provider(provider or self._detect_provider())
@@ -269,5 +279,8 @@ class AIClient:
         )
 
     def __repr__(self) -> str:
-        key_hint = (self.api_key or "")[:8] + "..." if self.api_key else "无"
+        # Never include key prefix — modern key formats like sk-ant-api03-...
+        # and sk-proj-... have 8-char prefixes that identify the account tier
+        # or project scope. repr() can leak to logs / exception traces.
+        key_hint = "set" if self.api_key else "unset"
         return f"<AIClient provider={self.provider} model={self.model} key={key_hint}>"

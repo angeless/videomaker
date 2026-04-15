@@ -386,11 +386,19 @@ class FFmpegRenderer:
             输出视频路径
         """
         # 创建 concat 列表文件
+        # Escape single quotes per FFmpeg concat demuxer syntax — '\'' terminates
+        # the quoted literal, inserts an escaped quote, then reopens. Without
+        # this, a filename containing ' could break out of the quoted filename
+        # and inject demuxer directives. Callers today only pass server-generated
+        # paths, but this is defense-in-depth for future callers.
+        def _escape_concat(p: str) -> str:
+            return p.replace("'", r"'\''")
+
         with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
             for video in video_list:
                 # 使用绝对路径并处理特殊字符
                 abs_path = str(Path(video).resolve())
-                f.write(f"file '{abs_path}'\n")
+                f.write(f"file '{_escape_concat(abs_path)}'\n")
             concat_file = f.name
         
         try:
