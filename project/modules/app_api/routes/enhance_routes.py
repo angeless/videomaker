@@ -1,6 +1,22 @@
 """Enhance API routes — audio/tts/bgm/transition/reframe.
 
 All enhancement operations are async (202 + job_id).
+
+⚠️ KNOWN INCOMPLETE (audit-finding round 8): These endpoints currently
+return 202 + job_id but DO NOT actually schedule any background worker.
+The job entry sits at status="queued" forever — clients polling
+/api/job/<id> will never see it transition to "running"/"done".
+
+The frontend EnhancePanel.vue calls these endpoints; it now surfaces an
+error if the response indicates failure, but a successful 202 looks like
+the operation was accepted even though no work happens.
+
+Either:
+  - Wire each endpoint via run_in_bg/job_manager.submit to a real handler
+  - OR delete the endpoints + corresponding UI tabs
+
+Left as-is for v0.18.0 because removing the UI surface is a product
+decision; tracked for v0.19.0.
 """
 
 import logging

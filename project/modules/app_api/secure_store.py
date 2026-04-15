@@ -117,6 +117,11 @@ class KeychainSecretStore(SecretStore):
         secret = str(value or "").strip()
         if not key or not secret:
             return False
+        # Pipe secret via stdin instead of passing it as a CLI argument.
+        # Previously the secret was on argv (visible to `ps auxw` during the
+        # subprocess lifetime — a local-user side-channel even if brief).
+        # `security add-generic-password -w` (without value) prompts twice
+        # on stdin: once for the password, once to confirm.
         proc = self._run(
             [
                 "security",
@@ -126,9 +131,9 @@ class KeychainSecretStore(SecretStore):
                 key,
                 "-s",
                 self._service_name,
-                "-w",
-                secret,
+                "-w",  # NO trailing value — read from stdin
             ],
+            input_text=f"{secret}\n{secret}\n",
         )
         return proc.returncode == 0
 

@@ -412,7 +412,11 @@ def create_legacy_project_blueprint(
         if project_dir is None:
             abort(404)
         target = (project_dir / rel).resolve()
-        if not str(target).startswith(str(project_dir.resolve())):
+        # str.startswith bypass: a sibling dir like `<project>_evil` would
+        # match the prefix. Use Path.relative_to (raises ValueError on escape).
+        try:
+            target.relative_to(project_dir.resolve())
+        except ValueError:
             abort(403)
         if not target.exists():
             abort(404)
@@ -438,9 +442,15 @@ def create_legacy_project_blueprint(
         videos_dir = state.get("videos_dir") or state.get("project_dir")
         if videos_dir:
             allowed_roots.append(Path(str(videos_dir)).resolve())
-        if not allowed_roots or not any(
-            str(p).startswith(str(root)) for root in allowed_roots
-        ):
+        # str.startswith bypass: see api_files comment. Use Path.relative_to.
+        def _path_inside(p: Path, root: Path) -> bool:
+            try:
+                p.relative_to(root)
+                return True
+            except ValueError:
+                return False
+
+        if not allowed_roots or not any(_path_inside(p, root) for root in allowed_roots):
             return jsonify({"ok": False, "error": "路径不在允许范围内"}), 403
         if not p.exists():
             return jsonify({"ok": False, "error": "路径不存在"}), 404

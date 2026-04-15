@@ -1,9 +1,22 @@
 """Security middleware extracted from server.py."""
 
+import hmac
 import time
 from typing import Dict, List, Optional
 
 from flask import jsonify, request
+
+
+def _safe_str_eq(a: str, b: str) -> bool:
+    """Constant-time string comparison.
+
+    Plain `a != b` short-circuits on the first differing byte. Over enough
+    failed authentication attempts (rate-limited but not blocked) a local
+    process or browser extension can statistically infer the token byte by
+    byte from response timing. `hmac.compare_digest` runs in time
+    proportional to the shorter input only — no early exit on mismatch.
+    """
+    return hmac.compare_digest(str(a or ""), str(b or ""))
 
 
 # ── Module-level state (injected via init()) ──
@@ -137,7 +150,7 @@ def _guard_local_api_token():
         provided_csrf = str(request.headers.get("X-VideoEditor-CSRF", "") or "").strip()
         if not provided_csrf:
             provided_csrf = str(request.args.get("_csrf", "") or "").strip()
-        if provided_csrf != csrf_token:
+        if not _safe_str_eq(provided_csrf, csrf_token):
             _audit_security_event(
                 "security_csrf_fail",
                 detail={"method": request.method, "path": path},
@@ -158,7 +171,7 @@ def _guard_local_api_token():
     provided = str(request.headers.get("X-VideoEditor-Token", "") or "").strip()
     if not provided:
         provided = str(request.args.get("_vt", "") or "").strip()
-    if provided != api_token:
+    if not _safe_str_eq(provided, api_token):
         ip = str(request.remote_addr or "unknown")
         _audit_security_event(
             "security_token_fail",

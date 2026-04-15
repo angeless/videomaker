@@ -59,6 +59,21 @@ def _get_paragraph_text(para: Paragraph) -> str:
     return "".join(w.text for w in para.words)
 
 
+# Module-level cached model — loading SentenceTransformer is ~450 MB and
+# multi-second. Previously every call to _compute_similarity_batch loaded
+# fresh, killing latency on review sessions that triggered retake detection.
+_CACHED_MODEL = None
+_MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
+
+
+def _get_model():
+    """Lazy + cached singleton for the sentence transformer model."""
+    global _CACHED_MODEL
+    if _CACHED_MODEL is None:
+        _CACHED_MODEL = SentenceTransformer(_MODEL_NAME)
+    return _CACHED_MODEL
+
+
 def _compute_similarity_batch(texts: List[str]) -> Optional[list]:
     """Compute pairwise cosine similarity for consecutive texts.
 
@@ -68,7 +83,7 @@ def _compute_similarity_batch(texts: List[str]) -> Optional[list]:
         return None
 
     try:
-        model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+        model = _get_model()
         embeddings = model.encode(texts, convert_to_tensor=True)
 
         results = []

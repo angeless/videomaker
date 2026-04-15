@@ -119,17 +119,27 @@ def _xfade_transition(
 def _concat_cut(ffmpeg: str, seg_a: str, seg_b: str, output: str) -> str:
     """Simple concatenation (no transition)."""
     import tempfile
-    list_file = os.path.join(tempfile.gettempdir(), "concat_list.txt")
-    with open(list_file, "w") as f:
-        f.write(f"file '{seg_a}'\nfile '{seg_b}'\n")
-
-    cmd = [
-        ffmpeg, "-y",
-        "-f", "concat", "-safe", "0", "-i", list_file,
-        "-c", "copy", output,
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=FFMPEG_TIMEOUT_S)
-    os.unlink(list_file)
+    # Per-call tempfile to avoid race when multiple transitions run in parallel.
+    # The previous fixed-name path (`<tmp>/concat_list.txt`) caused two
+    # concurrent callers to overwrite each other's pair list — the slower
+    # caller would either render the wrong concat or hit FileNotFoundError
+    # when the faster caller's os.unlink ran first.
+    fd, list_file = tempfile.mkstemp(prefix="concat_list_", suffix=".txt")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(f"file '{seg_a}'\nfile '{seg_b}'\n")
+        cmd = [
+            ffmpeg, "-y",
+            "-f", "concat", "-safe", "0", "-i", list_file,
+            "-c", "copy", output,
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=FFMPEG_TIMEOUT_S)
+    finally:
+        # Best-effort cleanup; never let an unlink failure mask the real result
+        try:
+            os.unlink(list_file)
+        except OSError:
+            pass
     if result.returncode != 0:
         raise RenderError(f"Concat cut failed: {result.stderr[-300:]}")
     return output

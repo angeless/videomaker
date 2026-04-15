@@ -36,7 +36,13 @@ def create_ui_blueprint(*, app_ui_dir_getter: Callable[[], Path]) -> Blueprint:
     def serve_static(filename):
         ui_dir = app_ui_dir_getter()
         target = (ui_dir / filename).resolve()
-        if not str(target).startswith(str(ui_dir.resolve())):
+        # str.startswith bypass: root=/Users/alice/proj would also match
+        # /Users/alice/proj_evil/secret.txt because that string also starts
+        # with the prefix. Check with sep-suffix or Path.is_relative_to.
+        ui_dir_resolved = ui_dir.resolve()
+        try:
+            target.relative_to(ui_dir_resolved)
+        except ValueError:
             abort(403)
         if not target.exists():
             abort(404)
