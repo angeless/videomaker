@@ -197,6 +197,18 @@ def create_system_blueprint(
         return jsonify({"ok": True, "max_running": val})
 
     # ── D5: Render settings ────────────────────────────────────────
+    #
+    # ⚠️ KNOWN INCOMPLETE (audit-finding round 9): The GET/PUT render
+    # settings endpoints below persist to data/render_settings.json but
+    # NO RENDERER actually reads that file. The UI in SettingsView.vue
+    # (renderSettings panel) appears to work, but the saved encoder /
+    # quality_preset / resolution / parallel_render values have no effect
+    # on actual renders — render_routes._do_render always calls RenderManager
+    # with hardware-detected defaults.
+    #
+    # To make these settings live: RenderManager / render_routes should
+    # read _load_render_settings() at render-trigger time and pass values
+    # into choose_encoder() / manager parameters. Tracked for v0.19.0.
 
     def _load_render_settings() -> dict:
         """Load render settings from JSON file."""

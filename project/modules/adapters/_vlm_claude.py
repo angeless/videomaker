@@ -22,6 +22,8 @@ API_URL = "https://api.anthropic.com/v1/messages"
 TIMEOUT_S = 30
 MAX_IMAGE_PX = 2048
 MAX_RETRIES = 1
+# See _vlm_openai.MAX_RESPONSE_BYTES — same cap for the Claude API.
+MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 
 
 class ClaudeVisionAdapter:
@@ -108,7 +110,12 @@ class ClaudeVisionAdapter:
             },
         )
         with urlopen(req, timeout=TIMEOUT_S) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+            raw = resp.read(MAX_RESPONSE_BYTES + 1)
+            if len(raw) > MAX_RESPONSE_BYTES:
+                raise ValueError(
+                    f"VLM response exceeds {MAX_RESPONSE_BYTES} byte cap"
+                )
+            return json.loads(raw.decode("utf-8"))
 
     @staticmethod
     def _image_to_base64(image: Any) -> Optional[str]:

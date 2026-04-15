@@ -11,12 +11,60 @@ from typing import Any, Callable, Dict, Optional
 
 from flask import Blueprint, jsonify, request
 
+import threading
+from html import escape as _html_escape
+
 from modules.app_api.param_utils import parse_str_param, safe_error_response
 
 logger = logging.getLogger(__name__)
 
-# In-memory OAuth state store (short-lived, cleared after use)
+# In-memory OAuth state store (short-lived, cleared after use).
+# Mutated from Flask worker threads on /authorize (insert + stale cleanup)
+# AND concurrently on /callback (pop). Without the lock two concurrent
+# callbacks with the same state (or an /authorize cleanup pass racing
+# with a /callback pop) can raise KeyError → 500 to the user, or worse
+# leak OAuth tokens if the state dict corruption exposes pending entries.
 _oauth_pending: Dict[str, dict] = {}
+_oauth_pending_lock = threading.Lock()
+
+
+def _is_safe_outbound_url(url: str) -> tuple[bool, str]:
+    """SSRF guard: reject URLs pointing at loopback / link-local / private
+    networks. Used for user-supplied webhook URLs where the server will make
+    an outbound HTTP request — prevents the server being weaponized as a
+    probe into the local network (e.g. AWS metadata 169.254.169.254, local
+    Ollama, internal admin panels, etc.).
+
+    Returns (ok, reason) where reason is empty on success.
+    """
+    import ipaddress
+    import socket
+    from urllib.parse import urlparse
+
+    try:
+        parsed = urlparse(url)
+    except Exception as exc:
+        return False, f"URL 格式无效: {exc}"
+    if parsed.scheme not in ("http", "https"):
+        return False, f"仅支持 http/https (got {parsed.scheme})"
+    host = parsed.hostname
+    if not host:
+        return False, "URL 缺少主机名"
+    # Resolve all A/AAAA records; block if ANY is private/loopback/link-local.
+    # (Otherwise a DNS-rebind attack could flip the record between check
+    # and fetch; we're best-effort here since urllib does its own resolution.)
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror as exc:
+        return False, f"DNS 解析失败: {exc}"
+    for info in infos:
+        try:
+            ip = ipaddress.ip_address(info[4][0])
+        except (ValueError, IndexError):
+            continue
+        if ip.is_loopback or ip.is_link_local or ip.is_private or ip.is_multicast or ip.is_reserved:
+            return False, f"禁止连接内网/回环地址: {ip}"
+    return True, ""
 
 
 def create_settings_blueprint(
@@ -200,13 +248,15 @@ def create_settings_blueprint(
             redirect_uri = f"http://localhost:{port}/api/settings/oauth/youtube/callback"
 
         state = secrets.token_urlsafe(32)
-        _oauth_pending[state] = {"created_at": time.time(), "redirect_uri": redirect_uri}
-
-        # Clean up stale pending states (older than 10 minutes)
+        # Lock the insert + stale cleanup pair so concurrent /authorize
+        # requests don't race on dict mutation (was causing occasional
+        # KeyError 500 under two-tab OAuth flows).
         cutoff = time.time() - 600
-        stale = [k for k, v in _oauth_pending.items() if v.get("created_at", 0) < cutoff]
-        for k in stale:
-            _oauth_pending.pop(k, None)
+        with _oauth_pending_lock:
+            _oauth_pending[state] = {"created_at": time.time(), "redirect_uri": redirect_uri}
+            stale = [k for k, v in _oauth_pending.items() if v.get("created_at", 0) < cutoff]
+            for k in stale:
+                _oauth_pending.pop(k, None)
 
         client_id = _resolve_google_client_id()
         if not client_id:
@@ -250,12 +300,20 @@ def create_settings_blueprint(
         )
 
         if error:
-            return html_wrap("授权失败", f"<h2>授权失败</h2><p>{error}</p><p>请关闭此页面并重试。</p>"), 400
+            # XSS prevention: error is attacker-controlled URL param reflected
+            # back as HTML. `<img src=x onerror=fetch(...)>` would execute as
+            # script on the app origin. Escape before interpolation.
+            return html_wrap("授权失败", f"<h2>授权失败</h2><p>{_html_escape(error)}</p><p>请关闭此页面并重试。</p>"), 400
 
-        if not state or state not in _oauth_pending:
+        # Race-safe state check — use pop(state, None) inside the lock to
+        # atomically validate+consume. Previously two concurrent callbacks
+        # with the same state could both pass `state not in _oauth_pending`
+        # then race on `.pop(state)` where the loser hit KeyError (500).
+        with _oauth_pending_lock:
+            pending = _oauth_pending.pop(state, None) if state else None
+        if pending is None:
             return html_wrap("授权失败", "<h2>授权失败</h2><p>无效请求（state 不匹配）</p><p>请关闭此页面并重新发起授权。</p>"), 400
 
-        pending = _oauth_pending.pop(state)
         redirect_uri = pending.get("redirect_uri", "")
 
         if not code:
@@ -286,7 +344,9 @@ def create_settings_blueprint(
                 token_resp = json.loads(resp.read().decode("utf-8"))
         except Exception as exc:
             logger.error("YouTube OAuth token exchange failed: %s", exc)
-            return html_wrap("授权失败", f"<h2>Token 交换失败</h2><p>{exc}</p>"), 500
+            # Escape: urllib HTTPError __str__ can contain attacker-influenced
+            # URL fragments (e.g. from upstream redirect chains).
+            return html_wrap("授权失败", f"<h2>Token 交换失败</h2><p>{_html_escape(str(exc))}</p>"), 500
 
         access_token = token_resp.get("access_token", "")
         refresh_token = token_resp.get("refresh_token", "")
@@ -328,10 +388,14 @@ def create_settings_blueprint(
         except Exception:
             pass
 
+        # Escape channel_name — users can rename their YouTube channel to
+        # arbitrary Unicode/HTML; even though this is THEIR own channel
+        # (self-XSS), a malicious channel handoff scenario could weaponize it.
+        safe_channel = _html_escape(channel_name) if channel_name else "(未知频道)"
         return html_wrap(
             "授权成功",
             f"<h2>授权成功！</h2>"
-            f"<p>已连接频道：<strong>{channel_name or '(未知频道)'}</strong></p>"
+            f"<p>已连接频道：<strong>{safe_channel}</strong></p>"
             f"<p>请返回应用继续操作。此页面可安全关闭。</p>",
         )
 
@@ -455,6 +519,13 @@ def create_settings_blueprint(
         url = str(connector.get("endpoint", connector.get("url", "")) or "").strip()
         if not url:
             return jsonify({"error": "连接器缺少 URL"}), 400
+
+        # SSRF guard — see _is_safe_outbound_url. This is a server-side
+        # fetch with user-configurable URL; without this check the server
+        # could be used to probe local/cloud-metadata services.
+        safe, reason = _is_safe_outbound_url(url)
+        if not safe:
+            return jsonify({"error": f"URL 校验失败: {reason}"}), 400
 
         headers = connector.get("headers", {})
         if not isinstance(headers, dict):

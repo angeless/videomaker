@@ -23,6 +23,11 @@ API_URL = "https://api.openai.com/v1/chat/completions"
 TIMEOUT_S = 30
 MAX_IMAGE_PX = 2048
 MAX_RETRIES = 1
+# Cap VLM response body size to prevent OOM if upstream returns multi-GB
+# payload (e.g. API-key-compromise redirect, proxy misconfig, or a malicious
+# endpoint set via VIDEOEDITOR_OPENAI_API_BASE env poisoning). 4 MB is
+# plenty for a typical JSON response (usually <50 KB).
+MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 
 
 class OpenAIVisionAdapter:
@@ -106,7 +111,13 @@ class OpenAIVisionAdapter:
             },
         )
         with urlopen(req, timeout=TIMEOUT_S) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+            raw = resp.read(MAX_RESPONSE_BYTES + 1)
+            if len(raw) > MAX_RESPONSE_BYTES:
+                raise ValueError(
+                    f"VLM response exceeds {MAX_RESPONSE_BYTES} byte cap "
+                    f"(possible misconfigured API endpoint)"
+                )
+            return json.loads(raw.decode("utf-8"))
 
     @staticmethod
     def _image_to_base64(image: Any) -> Optional[str]:
