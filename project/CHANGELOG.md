@@ -4,7 +4,54 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/) 规范。
 
-## [0.18.0] - 2026-04-06
+## [0.18.0] - 2026-04-06 (七轮交叉审计修复 — 2026-04-14)
+
+### 修复 (Fixed) — 七轮独立交叉审计期间发现并修复
+
+**自 v0.15.0 起的死代码（用户从未能用上的功能）：**
+- 评论导出（`ExportDialog`）— `_fetch('GET', url)` 调用与 store `_fetch(url, options)` 签名不匹配，请求被发到 `/.../GET` 始终 404
+- 增强面板（`EnhancePanel` — TTS / BGM / 转场 / 重新构图）— 同上签名错配
+- VLM 标注 AI 提示（`ReviewView.vue::onAnnotationComplete`）— 裸 `fetch()` 缺 auth header，本地 token 模式下 401 被静默吞掉
+
+**核心业务逻辑：**
+- 渲染状态永久锁死 — `_do_render` 异常时 `_render_state.status` 卡在 "rendering" 永不释放
+- 渲染状态线程安全 — `_render_state` 在 HTTP/worker/cancel 三处并发改写无锁，新增 `RLock` 保护
+- VLM 流分析进度永远 0% — `_run_analysis` 收到 `jid=None`，`update_progress(None)` 静默 no-op
+- VLM JobManager 懒初始化 TOCTOU 竞争 — 改为锁保护的真正懒初始化
+- 渲染并发请求孤立第一个任务 — 添加 409 `RENDER_IN_PROGRESS` 守卫
+- 多轨 clip 添加绕过重叠检测 — 新增 `TimelineOps.add_clip()` 入口统一校验
+- VLM 协议在生产环境从未真正调用 — `describe_region` 仅 MagicMock 存在；新 shim 自动适配真实 adapter 的 `describe_image`
+- FrameSampler `interval_ms=0` 死循环 — 加守卫默认 1000ms
+- JobManager `cancel()` 不能中止排队中的任务 — 存储 Future 并调用 `future.cancel()`
+
+**安全：**
+- Render 输出路径接受任意 `output_path`（可写 `/etc/passwd`） — 强制路径必须在 server 控制的输出目录内 + `.mp4` 后缀
+- MCP 审计日志泄漏 frame_base64 / 短 API key — 全面脱敏，dict 只记 `len` 不记 keys
+- locked-track DELETE/PATCH 绕过 — 通过 `TimelineOps` 路由
+
+**前端 auth 漏洞：**
+- `review.js` / `roughcut.js` `_fetch` 缺 `X-VideoEditor-Token` + CSRF — 重构走 `apiStore.api`
+- `libraryGovernance.js` CSV/Markdown 导出缺 auth — 修补
+- `RenderProgress.vue` 下载链接 `<a href download>` 不发 token — 改 fetch+blob+auth
+
+**UX：**
+- 渲染输出到 `/tmp` 无法在应用内下载 — 改输出到 `<project>/output/` + 新 `/render/download` 端点
+- VLM stream 失败被吞掉 — `streamError` 显示 + 120s 超时 + 重试按钮
+- 渲染设置无加载/错误/成功状态 — 三态反馈
+- VLM 设置保存无成功反馈 — `✓ 已保存`
+- ExportDialog / EnhancePanel 失败无 toast — 新增 catch + UI 错误显示
+- `RenderProgress.vue` Safari blob 下载被立即 revoke 取消 — 60s 延迟 revoke + AbortController
+- 多次下载 blob URL 内存泄漏 — 新下载前 revoke 旧 blob
+- 音量滑块拖动洪水 50-200 PATCH — 200ms 防抖 + 真正的回滚
+- VLM continuity 传全帧而非每场景一帧
+
+**并发与生命周期：**
+- `_stream_analysis_cache` 无锁 + 无界增长 — Lock + LRU(100)
+- `_session_data` (roughcut) 无锁 — RLock + `_cache_get` / `_cache_update` 助手
+- 渲染状态终端 TTL — done 30 天 / failed/cancelled 24h
+- VLM JobManager 测试夹具线程泄漏 — 改回锁保护懒初始化
+
+**测试：** 1616 → 1626 passed（+10 回归测试覆盖以上修复）
 
 ### 新增 (Added)
 - X0: 异步 Job 管理器 — job_system/job_manager.py (submit/progress/cancel/cleanup，线程安全)

@@ -13,6 +13,7 @@ const format = ref('json')
 const exporting = ref(false)
 const exported = ref(false)
 const exportData = ref('')
+const exportError = ref('')
 
 const formats = [
   { value: 'json', label: 'JSON', desc: '完整评论数据' },
@@ -22,6 +23,7 @@ const formats = [
 
 async function doExport() {
   exporting.value = true
+  exportError.value = ''
   try {
     const resp = await store._fetch(
       'GET',
@@ -30,7 +32,14 @@ async function doExport() {
     if (resp && resp.data) {
       exportData.value = typeof resp.data === 'string' ? resp.data : JSON.stringify(resp.data, null, 2)
       exported.value = true
+    } else {
+      // Backend returned 200 but with no data field — treat as soft failure
+      exportError.value = '导出返回为空数据'
     }
+  } catch (e) {
+    // _fetch throws on HTTP error / data.success===false. Without this catch
+    // the spinner would just stop with no user-visible feedback.
+    exportError.value = `导出失败：${e?.message || '未知错误'}`
   } finally {
     exporting.value = false
   }
@@ -66,6 +75,8 @@ function copyToClipboard() {
         <button class="btn btn-primary" :disabled="exporting" @click="doExport">
           {{ exporting ? '导出中…' : '导出' }}
         </button>
+
+        <div v-if="exportError" class="export-error">{{ exportError }}</div>
       </div>
 
       <div v-else class="dialog-body">
@@ -111,4 +122,8 @@ function copyToClipboard() {
 }
 .export-preview pre { font-size: 11px; margin: 0; white-space: pre-wrap; }
 .export-actions { display: flex; gap: 8px; }
+.export-error {
+  margin-top: 8px; padding: 8px; border-radius: 4px;
+  background: rgba(239, 68, 68, 0.1); color: #ef4444; font-size: 12px;
+}
 </style>

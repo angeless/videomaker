@@ -5,6 +5,7 @@ Implements R20-R22 of dev-plan-v0.14.0.
 
 import json
 import logging
+import threading
 import uuid
 from collections import OrderedDict
 from datetime import datetime, timezone
@@ -46,13 +47,34 @@ def create_roughcut_blueprint(
 
     # In-memory session data cache (transcript docs, scenes, edits).
     # Bounded to prevent memory leaks in long-running desktop sessions.
+    # Mutated from Flask worker threads — needs lock to avoid races between
+    # `_cache_set`'s popitem(last=False) and concurrent .get() in another
+    # handler. Same fix pattern as render_routes._render_state and the LRU
+    # cache in vlm_routes.
     _MAX_CACHED_SESSIONS = 20
     _session_data: OrderedDict = OrderedDict()
+    _session_data_lock = threading.RLock()
 
     def _cache_set(key: str, value: dict):
-        _session_data[key] = value
-        if len(_session_data) > _MAX_CACHED_SESSIONS:
-            _session_data.popitem(last=False)  # evict oldest
+        with _session_data_lock:
+            _session_data[key] = value
+            if len(_session_data) > _MAX_CACHED_SESSIONS:
+                _session_data.popitem(last=False)  # evict oldest
+
+    def _cache_get(key: str) -> dict:
+        """Thread-safe read returning a *copy* of the cached entry (or {}).
+        Returning a copy ensures the caller can mutate without holding the
+        lock and without affecting other readers."""
+        with _session_data_lock:
+            return dict(_session_data.get(key, {}))
+
+    def _cache_update(key: str, **fields):
+        """Thread-safe partial update — `_session_data.setdefault(k, {})[f]=v`
+        was racy because two writers could both setdefault and clobber each
+        other's pre-existing fields."""
+        with _session_data_lock:
+            entry = _session_data.setdefault(key, {})
+            entry.update(fields)
 
     # ── R20: init + detect-type + stats ──
 
@@ -120,7 +142,7 @@ def create_roughcut_blueprint(
         if not session:
             return _error_response("Session not found", "SESSION_NOT_FOUND", 404)
 
-        cached = _session_data.get(session_id, {})
+        cached = _cache_get(session_id)
         comments = store.list_comments(session_id)
         versions = store.list_versions(session_id)
 
@@ -143,7 +165,7 @@ def create_roughcut_blueprint(
         if not session:
             return _error_response("Session not found", "SESSION_NOT_FOUND", 404)
 
-        cached = _session_data.get(session_id, {})
+        cached = _cache_get(session_id)
         doc = cached.get("transcript_doc")
 
         if not doc:
@@ -151,7 +173,7 @@ def create_roughcut_blueprint(
             try:
                 from modules.review_engine.transcript_editor import transcribe_to_doc
                 doc = transcribe_to_doc(session["video_path"])
-                _session_data.setdefault(session_id, {})["transcript_doc"] = doc
+                _cache_update(session_id, transcript_doc=doc)
             except Exception as e:
                 return _error_response(
                     f"Transcription failed: {e}", "TRANSCRIPTION_FAILED", 500,
@@ -190,7 +212,7 @@ def create_roughcut_blueprint(
         if not session:
             return _error_response("Session not found", "SESSION_NOT_FOUND", 404)
 
-        cached = _session_data.get(session_id, {})
+        cached = _cache_get(session_id)
         doc = cached.get("transcript_doc")
 
         if not doc:
@@ -222,7 +244,7 @@ def create_roughcut_blueprint(
         action = data.get("action", "remove")  # "remove" or "keep"
         filler_types = data.get("filler_types", [])
 
-        cached = _session_data.get(session_id, {})
+        cached = _cache_get(session_id)
         doc = cached.get("transcript_doc")
         if not doc:
             return _error_response("No transcript available", "NO_TRANSCRIPT", 400)
@@ -253,7 +275,7 @@ def create_roughcut_blueprint(
         data = request.get_json(silent=True) or {}
         operations = data.get("operations", [])
 
-        cached = _session_data.get(session_id, {})
+        cached = _cache_get(session_id)
         doc = cached.get("transcript_doc")
         if not doc:
             return _error_response("No transcript available", "NO_TRANSCRIPT", 400)
@@ -313,14 +335,14 @@ def create_roughcut_blueprint(
         if not session:
             return _error_response("Session not found", "SESSION_NOT_FOUND", 404)
 
-        cached = _session_data.get(session_id, {})
+        cached = _cache_get(session_id)
         scenes = cached.get("scenes")
 
         if not scenes:
             try:
                 from modules.review_engine.scene_segmenter import segment_scenes
                 scenes = segment_scenes(session["video_path"])
-                _session_data.setdefault(session_id, {})["scenes"] = scenes
+                _cache_update(session_id, scenes=scenes)
             except Exception as e:
                 return _error_response(
                     f"Scene segmentation failed: {e}", "SEGMENTATION_FAILED", 500,
@@ -350,7 +372,7 @@ def create_roughcut_blueprint(
         data = request.get_json(silent=True) or {}
         selected_indices = data.get("selected", [])
 
-        cached = _session_data.get(session_id, {})
+        cached = _cache_get(session_id)
         scenes = cached.get("scenes", [])
         if not scenes:
             return _error_response("No scenes available", "NO_SCENES", 400)

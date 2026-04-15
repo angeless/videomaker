@@ -191,15 +191,27 @@ def create_vlm_blueprint(*, review_store_getter, vlm_adapter_getter):
     import threading as _threading
     from collections import OrderedDict as _OrderedDict
 
-    # Lazy singleton for JobManager — eagerly initialized at blueprint
-    # creation time to avoid the lazy-init race where two concurrent first
-    # POSTs could both pass `if not hasattr(bp, "_job_manager")` and create
-    # two pool instances, leaking threads from the loser.
-    try:
-        from modules.job_system.job_manager import JobManager as _JobManager
-        bp._job_manager = _JobManager(max_workers=2)
-    except ImportError:
-        bp._job_manager = None
+    # Lazy-but-race-safe JobManager singleton. The previous lazy-init pattern
+    # (`if not hasattr(bp, "_job_manager"): bp._job_manager = JobManager(...)`)
+    # had a TOCTOU race where two concurrent first POSTs could create two pool
+    # instances. The previous fix did eager init at blueprint creation, which
+    # leaked 2 worker threads PER blueprint instance — fine in production
+    # (one app, one blueprint) but problematic in tests where many fixtures
+    # build fresh blueprints. This lock+lazy combo is race-safe AND test-clean.
+    bp._job_manager = None
+    bp._job_manager_init_lock = _threading.Lock()
+
+    def _get_job_manager():
+        if bp._job_manager is not None:
+            return bp._job_manager
+        with bp._job_manager_init_lock:
+            if bp._job_manager is None:
+                try:
+                    from modules.job_system.job_manager import JobManager as _JobManager
+                    bp._job_manager = _JobManager(max_workers=2)
+                except ImportError:
+                    return None
+        return bp._job_manager
 
     _stream_analysis_cache: "_OrderedDict[str, dict]" = _OrderedDict()
     _stream_cache_lock = _threading.Lock()
@@ -227,7 +239,8 @@ def create_vlm_blueprint(*, review_store_getter, vlm_adapter_getter):
         if err:
             return err
 
-        if bp._job_manager is None:
+        jm = _get_job_manager()
+        if jm is None:
             return _error_response("Job system not available", "JOB_SYSTEM_UNAVAILABLE", 500)
 
         body = request.get_json(silent=True) or {}
@@ -277,7 +290,6 @@ def create_vlm_blueprint(*, review_store_getter, vlm_adapter_getter):
             _cache_put(sid, {"analysis": result, "summaries": summary_result})
             return result
 
-        jm = bp._job_manager
         adapter = _get_adapter()
         job_id = jm.submit(
             "stream_analysis",

@@ -58,9 +58,13 @@ const platforms = [
 ]
 
 const enhancing = ref(false)
+const enhanceError = ref('')
+const enhanceSuccess = ref('')
 
 async function applyEnhance() {
   enhancing.value = true
+  enhanceError.value = ''
+  enhanceSuccess.value = ''
   try {
     const sessionId = store.sessionId
     const base = '/api/review/enhance'
@@ -85,6 +89,13 @@ async function applyEnhance() {
     }
 
     await store._fetch('POST', endpoint, body)
+    // _fetch throws on failure, so reaching here means success.
+    enhanceSuccess.value = '✓ 已应用增强'
+    setTimeout(() => { enhanceSuccess.value = '' }, 3000)
+  } catch (e) {
+    // Without this catch, the spinner would just stop with no user-visible
+    // signal — exactly the M1 finding from the round-7 audit.
+    enhanceError.value = `应用失败：${e?.message || '未知错误'}`
   } finally {
     enhancing.value = false
   }
@@ -147,6 +158,9 @@ async function applyEnhance() {
     <button class="btn btn-primary btn-apply" :disabled="enhancing" @click="applyEnhance">
       {{ enhancing ? '处理中…' : '应用增强' }}
     </button>
+
+    <div v-if="enhanceError" class="enhance-feedback enhance-feedback--error">{{ enhanceError }}</div>
+    <div v-else-if="enhanceSuccess" class="enhance-feedback enhance-feedback--success">{{ enhanceSuccess }}</div>
   </div>
 </template>
 
@@ -167,4 +181,9 @@ async function applyEnhance() {
   background: var(--bg-input, #1e293b); color: var(--text); border-radius: 4px;
 }
 .btn-apply { margin-top: 12px; width: 100%; }
+.enhance-feedback {
+  margin-top: 8px; padding: 8px; border-radius: 4px; font-size: 12px;
+}
+.enhance-feedback--error { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+.enhance-feedback--success { background: rgba(16, 185, 129, 0.1); color: #10b981; }
 </style>

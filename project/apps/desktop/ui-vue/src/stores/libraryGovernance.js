@@ -360,15 +360,31 @@ export const useLibraryGovernanceStore = defineStore('libraryGovernance', () => 
 
   async function exportMissingItems(jobId, format = 'json') {
     if (format === 'csv') {
-      const resp = await fetch(`/api/library/project-relink/${jobId}/export-missing?format=csv`)
-      if (!resp.ok) { toast.show('导出失败', 'danger'); return }
+      // Raw fetch needed for binary blob — but auth headers must be attached
+      // explicitly (apiStore.api auto-parses JSON, not suitable here).
+      const headers = {}
+      if (api.token) headers['X-VideoEditor-Token'] = api.token
+      const resp = await fetch(
+        `/api/library/project-relink/${jobId}/export-missing?format=csv`,
+        { method: 'GET', headers },
+      )
+      if (!resp.ok) {
+        const errText = await resp.text().catch(() => '')
+        let msg = `导出失败 (HTTP ${resp.status})`
+        try { msg = JSON.parse(errText).message || msg } catch {}
+        toast.show(msg, 'danger')
+        return
+      }
       const blob = await resp.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
       a.download = `missing_items_${jobId}.csv`
+      document.body.appendChild(a)
       a.click()
-      URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      // Delay revoke for Safari/WebKit that start downloads asynchronously.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
     } else {
       const data = await api.api('GET', `/api/library/project-relink/${jobId}/export-missing?format=json`)
       if (data.error) { toast.show(data.error, 'danger'); return }
@@ -572,15 +588,28 @@ export const useLibraryGovernanceStore = defineStore('libraryGovernance', () => 
 
   async function exportHandoverReport(jobId, format = 'json') {
     if (format === 'markdown') {
-      const resp = await fetch(`/api/library/project-relink/${jobId}/export-handover?format=markdown`)
-      if (!resp.ok) { toast.show('导出失败', 'danger'); return }
+      const headers = {}
+      if (api.token) headers['X-VideoEditor-Token'] = api.token
+      const resp = await fetch(
+        `/api/library/project-relink/${jobId}/export-handover?format=markdown`,
+        { method: 'GET', headers },
+      )
+      if (!resp.ok) {
+        const errText = await resp.text().catch(() => '')
+        let msg = `导出失败 (HTTP ${resp.status})`
+        try { msg = JSON.parse(errText).message || msg } catch {}
+        toast.show(msg, 'danger')
+        return
+      }
       const blob = await resp.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
       a.download = `handover_report_${jobId}.md`
+      document.body.appendChild(a)
       a.click()
-      URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
     } else {
       const data = await api.api('GET', `/api/library/project-relink/${jobId}/export-handover?format=json`)
       if (data.error) { toast.show(data.error, 'danger'); return }
