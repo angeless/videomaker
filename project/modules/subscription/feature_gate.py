@@ -91,8 +91,28 @@ class FeatureGate:
         all_f = _FREE_FEATURES | _PRO_ONLY_FEATURES
         return {f: self.is_allowed(f) for f in sorted(all_f)}
 
-    def set_tier(self, tier: Tier) -> None:
-        """Update tier (persists to settings if path is set)."""
+    def set_tier(self, tier: Tier, *, reason: str = "") -> None:
+        """Update tier (persists to settings if path is set).
+
+        ⚠️  DESKTOP-LOCAL GATE — NOT A SECURITY BOUNDARY.
+
+        This tier is stored in app_settings.json which the user owns and
+        can edit by hand. `set_tier(Tier.PRO)` has no cryptographic or
+        server-side receipt validation. For a local desktop app where
+        the user is also the owner of the data, this is the intended
+        design — we gate features for UX clarity, not licensing defense.
+
+        Callers should pass ``reason`` so the upgrade/downgrade is
+        traceable in logs. The warning log below is intentional: if this
+        is ever called from an unexpected path (e.g. an MCP tool or an
+        imported project config), the log line surfaces the event for
+        the user/operator to notice.
+        """
+        _log.warning(
+            "[subscription] tier → %s (reason=%s); if you didn't initiate "
+            "this, check app_settings.json for tampering",
+            tier.value, reason or "unspecified",
+        )
         self._tier = tier
         self._override = None
         if self._settings_path:
@@ -120,9 +140,12 @@ class FeatureGate:
             if not isinstance(data.get("subscription"), dict):
                 data["subscription"] = {}
             data["subscription"]["tier"] = tier.value
-            self._settings_path.write_text(
-                json.dumps(data, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-        except Exception:
+            # Atomic write — non-atomic read-modify-write could corrupt
+            # app_settings.json on crash (wiping the user's API-key refs
+            # stored in the same file). Round-12 P0 finding.
+            from modules.app_api.param_utils import atomic_write_json
+            atomic_write_json(self._settings_path, data)
+        except (OSError, json.JSONDecodeError):
+            # Only catch expected I/O and JSON errors; unexpected errors
+            # should propagate rather than be masked as "save failed".
             _log.warning("Failed to save tier to settings", exc_info=True)

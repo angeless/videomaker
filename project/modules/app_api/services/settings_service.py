@@ -131,8 +131,11 @@ def _read_settings() -> Dict:
 
 
 def _write_settings(data: Dict):
-    p = _settings_path()
-    p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    # Atomic write — a crash between truncate and write here used to wipe
+    # ALL settings including openai_api_key_ref / anthropic_api_key_ref
+    # pointers (round-12 P0 finding). Now writes via temp + fsync + rename.
+    from modules.app_api.param_utils import atomic_write_json
+    atomic_write_json(_settings_path(), data)
 
 
 def _normalize_production_view(raw: Any) -> str:

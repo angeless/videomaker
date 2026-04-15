@@ -168,7 +168,8 @@ class CapabilityIdempotencyStore:
             "updated_at": datetime.now().isoformat(timespec="seconds"),
             "records": items,
         }
-        p.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        from modules.app_api.param_utils import atomic_write_json
+        atomic_write_json(p, payload)
 
     def trim_entries(
         self,

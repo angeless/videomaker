@@ -53,7 +53,7 @@ def _build_social_export_runner(
         batch_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + job_id
         started_at = datetime.now().isoformat(timespec="seconds")
         if input_video_raw:
-            in_path = _resolve_path_with_base(input_video_raw, base_dir=anchor)
+            in_path = _resolve_path_with_base(input_video_raw, base_dir=anchor, enforce_contain=(input_mode == "project"))
         else:
             if input_mode == "project":
                 in_path = _default_master_video_path()
@@ -68,7 +68,7 @@ def _build_social_export_runner(
         out_dir = (
             (anchor / "output" / "social_exports")
             if not output_dir_raw
-            else _resolve_path_with_base(output_dir_raw, base_dir=anchor)
+            else _resolve_path_with_base(output_dir_raw, base_dir=anchor, enforce_contain=(input_mode == "project"))
         )
 
         plan = build_export_plan(
@@ -198,7 +198,7 @@ def _build_audio_voice_runner(
         output_dir = (
             (anchor / "data" / "audio_voice" / "voiceover")
             if not output_dir_raw
-            else _resolve_path_with_base(output_dir_raw, base_dir=anchor)
+            else _resolve_path_with_base(output_dir_raw, base_dir=anchor, enforce_contain=(input_mode == "project"))
         )
 
         _set_progress(20, "[配音] 开始 ElevenLabs 合成")
@@ -218,7 +218,7 @@ def _build_audio_voice_runner(
         output_audio = (
             (anchor / "data" / "audio_voice" / "narration_timeline.m4a")
             if not output_audio_raw
-            else _resolve_path_with_base(output_audio_raw, base_dir=anchor)
+            else _resolve_path_with_base(output_audio_raw, base_dir=anchor, enforce_contain=(input_mode == "project"))
         )
 
         _set_progress(55, "[配音] 生成旁白时间线轨")
@@ -232,7 +232,7 @@ def _build_audio_voice_runner(
 
         input_video_raw = str(payload.get("input_video", "") or "").strip()
         if input_video_raw:
-            input_video = _resolve_path_with_base(input_video_raw, base_dir=anchor)
+            input_video = _resolve_path_with_base(input_video_raw, base_dir=anchor, enforce_contain=(input_mode == "project"))
         else:
             if input_mode == "project":
                 input_video = _default_master_video_path()
@@ -250,7 +250,7 @@ def _build_audio_voice_runner(
             if _is_remote_media_url(bgm_audio_raw):
                 bgm_audio = bgm_audio_raw
             else:
-                bgm_path = _resolve_path_with_base(bgm_audio_raw, base_dir=anchor)
+                bgm_path = _resolve_path_with_base(bgm_audio_raw, base_dir=anchor, enforce_contain=(input_mode == "project"))
                 bgm_audio = str(bgm_path)
         elif bool(payload.get("auto_pick_bgm", True)):
             _set_progress(68, "[配乐] 自动匹配 BGM")
@@ -264,7 +264,10 @@ def _build_audio_voice_runner(
                     raw = str(item or "").strip()
                     if not raw:
                         continue
-                    resolved = _resolve_path_with_base(raw, base_dir=anchor)
+                    # BGM library dirs are legitimately OPERATOR-configured
+                    # to live outside the project (e.g. ~/Music/BGM_Library).
+                    # This is one of the few sites where containment is off.
+                    resolved = _resolve_path_with_base(raw, base_dir=anchor, enforce_contain=False)
                     if resolved.exists() and resolved.is_dir():
                         resolved_dirs.append(resolved)
             bgm_provider = str(payload.get("bgm_provider", "local_library") or "local_library")
@@ -275,7 +278,7 @@ def _build_audio_voice_runner(
                 bgm_output_dir = (
                     (anchor / "data" / "audio_voice" / "bgm")
                     if not bgm_output_raw
-                    else _resolve_path_with_base(bgm_output_raw, base_dir=anchor)
+                    else _resolve_path_with_base(bgm_output_raw, base_dir=anchor, enforce_contain=(input_mode == "project"))
                 )
             bgm_force_refresh = bool(payload.get("bgm_force_refresh", False))
             bgm_cache_max_age_days = float(payload.get("bgm_cache_max_age_days", 0) or 0)
@@ -316,7 +319,7 @@ def _build_audio_voice_runner(
         if replace_master:
             output_video = anchor / "output" / "final.mp4"
         elif output_video_raw:
-            output_video = _resolve_path_with_base(output_video_raw, base_dir=anchor)
+            output_video = _resolve_path_with_base(output_video_raw, base_dir=anchor, enforce_contain=(input_mode == "project"))
         else:
             output_video = anchor / "output" / "final_voice.mp4"
 
@@ -366,7 +369,8 @@ def _build_audio_voice_runner(
         }
         out_path = _project_data_path("audio_voice_pipeline_last.json") if input_mode == "project" else None
         if out_path is not None:
-            out_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+            from modules.app_api.param_utils import atomic_write_json
+            atomic_write_json(out_path, summary)
         return summary
 
     return _do_audio_voice
@@ -392,9 +396,9 @@ def _save_content_publish_sessions(sessions: Dict[str, Dict[str, Any]]) -> Dict[
     p = _project_data_path("content_publish_sessions.json")
     if p is None:
         return sessions
-    p.parent.mkdir(parents=True, exist_ok=True)
     payload = sessions if isinstance(sessions, dict) else {}
-    p.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    from modules.app_api.param_utils import atomic_write_json
+    atomic_write_json(p, payload)
     return payload
 
 
@@ -411,9 +415,9 @@ def _save_content_publish_history(history: List[Dict[str, Any]]) -> List[Dict[st
     p = _project_data_path("content_publish_history.json")
     if p is None:
         return history
-    p.parent.mkdir(parents=True, exist_ok=True)
     items = [x for x in history if isinstance(x, dict)]
-    p.write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
+    from modules.app_api.param_utils import atomic_write_json
+    atomic_write_json(p, items)
     return items
 
 
@@ -491,9 +495,29 @@ def _inject_youtube_oauth_token(connectors: Dict[str, Dict[str, Any]]) -> Dict[s
         })
         connectors = dict(connectors)
         connectors["youtube"] = yt_connector
-    except Exception:
-        pass
+    except Exception as _inject_exc:
+        # Don't silently eat OAuth refresh failures — surface them on the
+        # connector record so the downstream runner reports "OAuth refresh
+        # failed" instead of a cryptic 401 from YouTube. Round-12 P0 finding.
+        try:
+            _inject_logger = __import__("logging").getLogger(__name__)
+            _inject_logger.warning("[yt_oauth] inject failed: %s", _inject_exc)
+        except Exception:
+            pass
+        if isinstance(connectors, dict):
+            connectors = dict(connectors)
+            yt = connectors.get("youtube")
+            if isinstance(yt, dict):
+                yt = dict(yt)
+                yt["refresh_error"] = str(_inject_exc)
+                connectors["youtube"] = yt
     return connectors
+
+
+# 4MB cap on OAuth token-endpoint response; a healthy response is <2KB,
+# anything larger means the endpoint is compromised or hijacked — better
+# to OOM-fail the token refresh than OOM the whole app.
+_OAUTH_MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 
 
 def _refresh_youtube_token(token_data: dict) -> Optional[dict]:
@@ -522,7 +546,14 @@ def _refresh_youtube_token(token_data: dict) -> Optional[dict]:
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
         with urllib.request.urlopen(req, timeout=15) as resp:
-            new_token = _json.loads(resp.read().decode("utf-8"))
+            # Cap response size. Previously an unlimited resp.read() on a
+            # compromised/hijacked token endpoint could OOM the process.
+            raw = resp.read(_OAUTH_MAX_RESPONSE_BYTES + 1)
+            if len(raw) > _OAUTH_MAX_RESPONSE_BYTES:
+                raise ValueError(
+                    f"OAuth token endpoint response exceeds {_OAUTH_MAX_RESPONSE_BYTES} bytes"
+                )
+            new_token = _json.loads(raw.decode("utf-8"))
         new_access = new_token.get("access_token", "")
         if not new_access:
             return None
@@ -531,5 +562,14 @@ def _refresh_youtube_token(token_data: dict) -> Optional[dict]:
         # Persist refreshed token
         _secret_store.set("youtube_oauth", _json.dumps(token_data, ensure_ascii=False))
         return token_data
-    except Exception:
+    except Exception as _refresh_exc:
+        # Surface the failure reason to callers/logs — previously this
+        # bare return None hid 401s, expired refresh tokens, network
+        # errors, and JSON parse errors identically.
+        try:
+            __import__("logging").getLogger(__name__).warning(
+                "[yt_oauth] token refresh failed: %s", _refresh_exc
+            )
+        except Exception:
+            pass
         return None

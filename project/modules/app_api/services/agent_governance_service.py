@@ -303,8 +303,8 @@ def _save_agent_governance_usage(usage: Dict[str, Any]) -> Dict[str, Any]:
     out["updated_at"] = datetime.now().isoformat(timespec="seconds")
     p = _project_data_path("agent_governance_usage.json")
     if p is not None:
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
+        from modules.app_api.param_utils import atomic_write_json
+        atomic_write_json(p, out)
     return out
 
 

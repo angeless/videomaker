@@ -191,6 +191,44 @@ def is_safe_outbound_url(url: str) -> tuple[bool, str]:
     return True, ""
 
 
+def atomic_write_json(path: Any, data: Any, *, indent: int = 2) -> None:
+    """Atomically write JSON to *path*.
+
+    Plain ``p.write_text(json.dumps(...))`` truncates then writes, so a
+    crash / power loss / kill-9 mid-write leaves an empty or half-written
+    file. For app_settings.json this wipes stored API-key references; for
+    workflow.json / idempotency caches it corrupts the ledger.
+
+    This helper writes to a sibling tmp file, fsync's, then atomically
+    renames (POSIX rename is atomic on the same filesystem) — callers
+    always see either the old file or the new one, never a partial write.
+
+    Round-12 finding: 10+ service files had open-coded ``write_text``.
+    Standardizing through this helper is cheaper than auditing each.
+    """
+    import json as _json
+    import os as _os
+    import tempfile as _tf
+    from pathlib import Path as _Path
+
+    target = _Path(path) if not isinstance(path, _Path) else path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = _tf.mkstemp(dir=str(target.parent), suffix=".tmp", prefix=target.name + ".")
+    try:
+        with _os.fdopen(fd, "w", encoding="utf-8") as f:
+            _json.dump(data, f, ensure_ascii=False, indent=indent)
+            f.flush()
+            _os.fsync(f.fileno())
+        _os.replace(tmp, str(target))
+    except BaseException:
+        if _os.path.exists(tmp):
+            try:
+                _os.unlink(tmp)
+            except OSError:
+                pass
+        raise
+
+
 def write_json_result(path_obj: Any, data: Any) -> bool:
     """Write *data* as pretty-printed JSON to *path_obj* if it is not None.
 

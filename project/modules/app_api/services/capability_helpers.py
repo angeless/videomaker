@@ -98,11 +98,45 @@ def _capability_base_dir(input_mode: str) -> Path:
     return Path.cwd()
 
 
-def _resolve_path_with_base(path_raw: str, *, base_dir: Optional[Path]) -> Path:
+class PathTraversalError(ValueError):
+    """Raised when a user-supplied path escapes the allowed base directory."""
+
+
+def _resolve_path_with_base(
+    path_raw: str,
+    *,
+    base_dir: Optional[Path],
+    enforce_contain: bool = True,
+) -> Path:
+    """Resolve a user-supplied path within an anchor directory.
+
+    Round-12 P0 finding: this helper is called by publish_orchestrator's
+    audio_voice/social_export builders with payload fields like
+    ``input_video`` / ``output_dir`` / ``bgm_audio`` / ``bgm_library_dirs``
+    all reaching it. Previously it accepted absolute paths pointing
+    anywhere (e.g. ``../../../etc/hosts``) — the runner then passed that
+    path directly to FFmpeg / file operations. This is a real path
+    traversal primitive reachable from agent APIs.
+
+    Now: after resolution, verify the result is inside ``base_dir`` and
+    raise ``PathTraversalError`` otherwise. Set ``enforce_contain=False``
+    explicitly at sites where an absolute path outside the anchor is
+    legitimately expected (e.g. operator-configured library dirs).
+    """
     p = Path(str(path_raw or "").strip()).expanduser()
+    anchor = base_dir if base_dir is not None else Path.cwd()
     if not p.is_absolute():
-        anchor = base_dir if base_dir is not None else Path.cwd()
         p = (anchor / p).resolve()
+    else:
+        p = p.resolve()
+    if enforce_contain:
+        anchor_resolved = anchor.resolve()
+        try:
+            p.relative_to(anchor_resolved)
+        except ValueError as exc:
+            raise PathTraversalError(
+                f"Path {p} escapes allowed base {anchor_resolved}"
+            ) from exc
     return p
 
 
@@ -284,7 +318,8 @@ def _append_social_export_history(record: Dict, max_entries: int = 100) -> List[
 
     p = _project_data_path("social_export_history.json")
     if p is not None:
-        p.write_text(json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8")
+        from modules.app_api.param_utils import atomic_write_json
+        atomic_write_json(p, history)
     return history
 
 
@@ -382,8 +417,8 @@ def _save_social_export_templates(templates: Dict[str, Dict]) -> Dict[str, Dict]
             out[normalized["platform_id"]] = normalized
     p = _project_data_path("social_export_templates.json")
     if p is not None:
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
+        from modules.app_api.param_utils import atomic_write_json
+        atomic_write_json(p, out)
     return out
 
 

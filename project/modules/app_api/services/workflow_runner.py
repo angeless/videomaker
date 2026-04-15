@@ -66,8 +66,8 @@ def _save_agent_task_history(items: List[Dict[str, Any]]) -> List[Dict[str, Any]
         out = out[-_AGENT_TASK_HISTORY_MAX:]
     p = _project_data_path("agent_task_history.json")
     if p is not None:
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
+        from modules.app_api.param_utils import atomic_write_json
+        atomic_write_json(p, out)
     return out
 
 
@@ -294,9 +294,9 @@ def _save_custom_workflow_store(store: Dict[str, Dict[str, Any]]) -> Dict[str, D
 
     p = _custom_workflow_store_path()
     if p is not None:
-        p.parent.mkdir(parents=True, exist_ok=True)
         data = {"version": 1, "updated_at": datetime.now().isoformat(timespec="seconds"), "workflows": list(out.values())}
-        p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        from modules.app_api.param_utils import atomic_write_json
+        atomic_write_json(p, data)
     return out
 
 
@@ -335,8 +335,8 @@ def _save_custom_workflow_runs(items: List[Dict[str, Any]]) -> List[Dict[str, An
 
     p = _custom_workflow_runs_path()
     if p is not None:
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
+        from modules.app_api.param_utils import atomic_write_json
+        atomic_write_json(p, out)
     return out
 
 

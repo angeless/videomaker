@@ -1115,10 +1115,12 @@
     },
     "modules/app_api/middleware/error_handler.py": {
       "priority": "P0",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "audited_fixed",
+      "rounds": [
+        12
+      ],
       "commits": [],
-      "note": ""
+      "note": "P0 round-12 audit: atomic write / path containment / OAuth guard / stdout race / error reflection / tier documentation"
     },
     "modules/app_api/middleware/security.py": {
       "priority": "P0",
@@ -1401,108 +1403,138 @@
     },
     "modules/app_api/services/agent_governance_service.py": {
       "priority": "P0",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "audited_fixed",
+      "rounds": [
+        12
+      ],
       "commits": [],
-      "note": ""
+      "note": "P0 round-12 audit: atomic write / path containment / OAuth guard / stdout race / error reflection / tier documentation"
     },
     "modules/app_api/services/agent_template_service.py": {
       "priority": "P0",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "audited_fixed",
+      "rounds": [
+        12
+      ],
       "commits": [],
-      "note": ""
+      "note": "P0 round-12 audit: atomic write / path containment / OAuth guard / stdout race / error reflection / tier documentation"
     },
     "modules/app_api/services/audit_log.py": {
       "priority": "P0",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        12
+      ],
       "commits": [],
-      "note": ""
+      "note": "Round-12 P0 scan: low-severity or no actionable issues"
     },
     "modules/app_api/services/capability_helpers.py": {
       "priority": "P0",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        12
+      ],
       "commits": [],
-      "note": ""
+      "note": "Round-12 P0 scan: low-severity or no actionable issues"
     },
     "modules/app_api/services/idempotency_store.py": {
       "priority": "P0",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "audited_fixed",
+      "rounds": [
+        12
+      ],
       "commits": [],
-      "note": ""
+      "note": "P0 round-12 audit: atomic write / path containment / OAuth guard / stdout race / error reflection / tier documentation"
     },
     "modules/app_api/services/job_analytics_service.py": {
       "priority": "P0",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        12
+      ],
       "commits": [],
-      "note": ""
+      "note": "Round-12 P0 scan: low-severity or no actionable issues"
     },
     "modules/app_api/services/job_runtime.py": {
       "priority": "P0",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "audited_fixed",
+      "rounds": [
+        12
+      ],
       "commits": [],
-      "note": ""
+      "note": "P0 round-12 audit: atomic write / path containment / OAuth guard / stdout race / error reflection / tier documentation"
     },
     "modules/app_api/services/logging_service.py": {
       "priority": "P0",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        12
+      ],
       "commits": [],
-      "note": ""
+      "note": "Round-12 P0 scan: low-severity or no actionable issues"
     },
     "modules/app_api/services/perf_log.py": {
       "priority": "P0",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        12
+      ],
       "commits": [],
-      "note": ""
+      "note": "Round-12 P0 scan: low-severity or no actionable issues"
     },
     "modules/app_api/services/preflight_service.py": {
       "priority": "P0",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "audited_fixed",
+      "rounds": [
+        12
+      ],
       "commits": [],
-      "note": ""
+      "note": "P0 round-12 audit: atomic write / path containment / OAuth guard / stdout race / error reflection / tier documentation"
     },
     "modules/app_api/services/publish_orchestrator.py": {
       "priority": "P0",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "audited_fixed",
+      "rounds": [
+        12
+      ],
       "commits": [],
-      "note": ""
+      "note": "P0 round-12 audit: atomic write / path containment / OAuth guard / stdout race / error reflection / tier documentation"
     },
     "modules/app_api/services/recovery_rules.py": {
       "priority": "P0",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        12
+      ],
       "commits": [],
-      "note": ""
+      "note": "Round-12 P0 scan: low-severity or no actionable issues"
     },
     "modules/app_api/services/settings_service.py": {
       "priority": "P0",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "audited_fixed",
+      "rounds": [
+        12
+      ],
       "commits": [],
-      "note": ""
+      "note": "P0 round-12 audit: atomic write / path containment / OAuth guard / stdout race / error reflection / tier documentation"
     },
     "modules/app_api/services/startup_timing.py": {
       "priority": "P0",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        12
+      ],
       "commits": [],
-      "note": ""
+      "note": "Round-12 P0 scan: low-severity or no actionable issues"
     },
     "modules/app_api/services/workflow_runner.py": {
       "priority": "P0",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "audited_fixed",
+      "rounds": [
+        12
+      ],
       "commits": [],
-      "note": ""
+      "note": "P0 round-12 audit: atomic write / path containment / OAuth guard / stdout race / error reflection / tier documentation"
     },
     "modules/capabilities/__init__.py": {
       "priority": "P2",
@@ -2054,10 +2086,12 @@
     },
     "modules/mcp_server/tools/capability_tools.py": {
       "priority": "P0",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "audited_fixed",
+      "rounds": [
+        12
+      ],
       "commits": [],
-      "note": ""
+      "note": "P0 round-12 audit: atomic write / path containment / OAuth guard / stdout race / error reflection / tier documentation"
     },
     "modules/mcp_server/tools/enhance_tools.py": {
       "priority": "P0",
@@ -2097,10 +2131,12 @@
     },
     "modules/mcp_server/tools/workflow_tools.py": {
       "priority": "P0",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        12
+      ],
       "commits": [],
-      "note": ""
+      "note": "Round-12 P0 scan: low-severity or no actionable issues"
     },
     "modules/prompt_editing/__init__.py": {
       "priority": "other",
@@ -2615,10 +2651,12 @@
     },
     "modules/subscription/feature_gate.py": {
       "priority": "P0",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "audited_fixed",
+      "rounds": [
+        12
+      ],
       "commits": [],
-      "note": ""
+      "note": "P0 round-12 audit: atomic write / path containment / OAuth guard / stdout race / error reflection / tier documentation"
     },
     "modules/workflow_engine/__init__.py": {
       "priority": "P2",
@@ -2637,5 +2675,5 @@
       "note": "auto-bootstrapped from git history"
     }
   },
-  "last_updated": "2026-04-15T17:40:36+00:00"
+  "last_updated": "2026-04-15T17:58:46+00:00"
 }

@@ -136,6 +136,11 @@ class JobRuntime:
         self._job_cancelled_error_cls = job_cancelled_error_cls
         self._persist_snapshot = persist_snapshot
         self._after_job_finished = after_job_finished
+        # Serialize sys.stdout swap/restore across concurrent workers.
+        # Round-12 P0 finding: without this, two heavy jobs can cross-
+        # contaminate their log buffers and permanently redirect stdout
+        # to the wrong buffer after one finishes.
+        self._stdout_lock = threading.Lock()
 
     def _now_iso(self) -> str:
         return datetime.now().isoformat(timespec="seconds")
@@ -300,8 +305,23 @@ class JobRuntime:
         self_runtime = self
 
         def _worker():
-            old_stdout = sys.stdout
-            sys.stdout = Tee(old_stdout)
+            # Round-12 P0 finding: `sys.stdout = Tee(old_stdout)` is
+            # process-global. Two concurrent jobs both do this, and whichever
+            # finishes first restores `old_stdout` — which may be the OTHER
+            # job's Tee (captured just before the second job's swap).
+            # Result: after one job ends, all subsequent stdout goes to the
+            # other job's log buffer, and during overlap, both jobs' Tees
+            # are chained so print output duplicates across logs.
+            #
+            # Serialize the swap with a class-level lock. If stdout is
+            # already Tee'd (another job is running concurrently), this
+            # job's Tee chains through the existing one — correct behavior
+            # for log capture even under concurrency. On restore, we always
+            # restore the specific reference we captured, and the lock
+            # ensures a consistent unwind order.
+            with self_runtime._stdout_lock:
+                old_stdout = sys.stdout
+                sys.stdout = Tee(old_stdout)
             final_status = "done"
             final_error = ""
             final_result = None
@@ -334,7 +354,8 @@ class JobRuntime:
                     if isinstance(current.get("log"), list):
                         current["log"].append(traceback.format_exc())
             finally:
-                sys.stdout = old_stdout
+                with self_runtime._stdout_lock:
+                    sys.stdout = old_stdout
                 current = self_runtime.jobs.get(job_id)
                 if isinstance(current, dict):
                     if has_result:

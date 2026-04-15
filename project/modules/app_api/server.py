@@ -271,7 +271,7 @@ app.register_blueprint(
         normalize_export_template_id=lambda template_id: _normalize_export_template_id(template_id),
         get_social_export_history=lambda: _get_social_export_history(),
         capability_base_dir=lambda input_mode: _capability_base_dir(input_mode),
-        resolve_path_with_base=lambda path_raw, base_dir=None: _resolve_path_with_base(path_raw, base_dir=base_dir),
+        resolve_path_with_base=lambda path_raw, base_dir=None, enforce_contain=False: _resolve_path_with_base(path_raw, base_dir=base_dir, enforce_contain=enforce_contain),
         default_master_video_path=lambda: _default_master_video_path(),
         parse_platforms=lambda payload_value: _parse_platforms(payload_value),
         project_data_path=lambda filename: _project_data_path(filename),
@@ -295,7 +295,7 @@ app.register_blueprint(
             custom_dirs=custom_dirs,
         ),
         default_bgm_output_dir=lambda custom_dir="": _default_bgm_output_dir(custom_dir),
-        resolve_path_with_base=lambda path_raw, base_dir=None: _resolve_path_with_base(path_raw, base_dir=base_dir),
+        resolve_path_with_base=lambda path_raw, base_dir=None, enforce_contain=False: _resolve_path_with_base(path_raw, base_dir=base_dir, enforce_contain=enforce_contain),
         read_project_json=lambda filename, fallback=None: _read_project_json(filename, fallback=fallback),
         default_master_video_path=lambda: _default_master_video_path(),
         is_remote_media_url=lambda url: _is_remote_media_url(url),
@@ -320,7 +320,7 @@ app.register_blueprint(
         extract_material_semantics=lambda materials: _extract_material_semantics(materials),
         coerce_script_input=lambda payload, input_mode: _coerce_script_input(payload, input_mode=input_mode),
         capability_base_dir=lambda input_mode: _capability_base_dir(input_mode),
-        resolve_path_with_base=lambda path_raw, base_dir=None: _resolve_path_with_base(path_raw, base_dir=base_dir),
+        resolve_path_with_base=lambda path_raw, base_dir=None, enforce_contain=False: _resolve_path_with_base(path_raw, base_dir=base_dir, enforce_contain=enforce_contain),
         parse_str_list=lambda value: _parse_str_list(value),
     )
 )
@@ -1247,6 +1247,7 @@ _analytics_svc_early.init(
 from modules.app_api.services.capability_helpers import (  # noqa: E402
     _slugify, _extract_material_semantics, _parse_platforms, _parse_capability_input_mode,
     _request_json_any_method, _capability_base_dir, _resolve_path_with_base,
+    PathTraversalError,
     _coerce_script_input, _coerce_materials_input, _extract_subtitles_from_script,
     _script_to_text_blocks, _parse_str_list, _default_master_video_path,
     _default_bgm_library_dirs, _default_bgm_output_dir, _is_remote_media_url,

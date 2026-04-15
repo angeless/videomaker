@@ -4,6 +4,7 @@ import json
 import logging
 import urllib.request
 import urllib.error
+import urllib.parse
 from typing import Any, Dict, List, Optional
 
 from modules.mcp_server.health import DEFAULT_BACKEND_URL, check_backend_health
@@ -47,7 +48,12 @@ def library_search(query: str, top_k: int = 10, mode: str = "hybrid") -> Dict[st
     top_k = max(1, min(top_k, 1000))
     if mode not in ("hybrid", "semantic", "keyword"):
         mode = "hybrid"
-    return _get(f"/api/library/search?q={urllib.request.quote(query)}&top_k={top_k}&mode={mode}")
+    # Fix: `urllib.request.quote` does NOT exist — `quote` lives in
+    # `urllib.parse`. The previous typo caused AttributeError on every
+    # call; the bare `except Exception` in _get silently returned
+    # {"error": ..., "success": False}, hiding the fact that library
+    # search has been broken since this MCP tool shipped.
+    return _get(f"/api/library/search?q={urllib.parse.quote(query, safe='')}&top_k={top_k}&mode={mode}")
 
 
 def library_ingest(source_path: str, recursive: bool = True) -> Dict[str, Any]:
@@ -68,8 +74,12 @@ def project_list() -> Dict[str, Any]:
 
 def project_create(name: str, source_dir: str) -> Dict[str, Any]:
     """Create a new project from a source directory."""
-    if is_path_traversal(source_dir):
-        return {"error": "Permission denied: path traversal in source_dir", "success": False}
+    # Match the validation library_ingest uses (existence + traversal check),
+    # instead of the weaker traversal-substring-only check — otherwise
+    # absolute paths like "/etc" are accepted here but rejected there.
+    err = validate_source_path(source_dir)
+    if err:
+        return {"error": f"Permission denied: {err}", "success": False}
     return _post("/api/projects", {"name": name, "source_dir": source_dir})
 
 

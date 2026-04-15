@@ -409,6 +409,6 @@ def run_startup_preflight(
 
 def dump_preflight_report(path: Path, report: Dict[str, Any]) -> Path:
     target = Path(path).expanduser().resolve()
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    from modules.app_api.param_utils import atomic_write_json
+    atomic_write_json(target, report)
     return target
