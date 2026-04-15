@@ -1,0 +1,2641 @@
+{
+  "version": "1.0",
+  "baseline_commit": "da9e73c",
+  "files": {
+    "apps/desktop/ui-vue/src/App.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/canvas/CanvasBoard.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/canvas/CanvasEdge.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/canvas/CanvasMinimap.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/canvas/CanvasNode.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/canvas/CanvasToolbar.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/canvas/NodeConfigPanel.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/canvas/NodePalette.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/canvas/NodePropsPanel.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/canvas/WorkflowCanvas.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/capabilities/AgentObservability.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/capabilities/AgentTemplates.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/capabilities/ArticleExpand.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/capabilities/AudioVoice.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/capabilities/CapabilityLayout.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/capabilities/CapabilityPlaceholder.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/capabilities/ContentPublish.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/capabilities/ImageSemantic.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/capabilities/PublishPrep.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/capabilities/Refinement.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/capabilities/ShortClip.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/capabilities/SocialExport.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/capabilities/SubtitleCalibration.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/capabilities/TextRoughCut.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/capabilities/TopicCopy.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/capabilities/TopicLibrary.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/common/DegradationBanner.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/common/FormField.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/common/InterruptedJobsPanel.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/common/LogViewer.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/common/NotificationPanel.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/common/ProjectDialog.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/common/ProjectTitle.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/common/ResultCard.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/common/StageProgressCard.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/common/ToastContainer.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/layout/AppNav.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/library/AssetDetailPanel.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/library/CustomTagPanel.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/library/DuplicateGroupsPanel.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/library/EvidencePanel.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/library/FeedbackActions.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/library/IngestPanel.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/library/IngestProgress.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/library/LibraryAssetCard.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/library/LibraryAssetRow.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/library/LibraryHealthPanel.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/library/LocationHealthPanel2.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/library/ProjectRelinkPanel.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/library/RelinkReportPanel.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/library/SearchAnalyticsPanel.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/library/SearchAutocomplete.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/library/SemanticTagBrowser.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/library/TagBrowser.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/onboarding/OnboardingModal.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/review/AnnotationToolbar.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/review/CommentCard.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/review/CommentInput.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/review/CommentPanel.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/review/DiagnosticsPanel.vue": {
+      "priority": "other",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "291cce5"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "apps/desktop/ui-vue/src/components/review/DrawingOverlay.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/review/EnhancePanel.vue": {
+      "priority": "other",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "e174bd1"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "apps/desktop/ui-vue/src/components/review/ExportDialog.vue": {
+      "priority": "other",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "e174bd1"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "apps/desktop/ui-vue/src/components/review/PlayerControls.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/review/RenderProgress.vue": {
+      "priority": "other",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "4106ced"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "apps/desktop/ui-vue/src/components/review/ReviewPlayer.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/review/ReviewTimeline.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/review/SafeZoneOverlay.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/review/SubtitleEditor.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/review/ThumbnailStrip.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/review/TrackComments.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/review/VersionDiff.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/review/VersionSwitcher.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/review/WaveformTrack.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/roughcut/FillerMarkup.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/roughcut/RoughCutStats.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/roughcut/SceneCard.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/roughcut/SceneSelector.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/roughcut/TranscriptEditor.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/roughcut/TranscriptParagraph.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/roughcut/VideoTypeSelector.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/timeline/TimelineClipBlock.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/timeline/TimelineClipInfo.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/timeline/TimelinePanel.vue": {
+      "priority": "other",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "93e1aa8"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "apps/desktop/ui-vue/src/components/timeline/TimelinePlayhead.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/timeline/TimelineRuler.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/timeline/TimelineTrackAudio.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/timeline/TimelineTrackClips.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/timeline/TimelineTrackHeader.vue": {
+      "priority": "other",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "24a724a"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "apps/desktop/ui-vue/src/components/timeline/TimelineTrackSubtitles.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/workflow/Step1Materials.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/workflow/Step2Topics.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/workflow/Step3Script.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/workflow/Step4Match.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/workflow/Step5Frames.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/workflow/Step6Rough.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/workflow/Step7Render.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/workflow/WorkflowPanel.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/components/workflow/WorkflowStepper.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/composables/useApi.js": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/composables/useFormatters.js": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/composables/useJobPoller.js": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/composables/useKeyboardShortcuts.js": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/composables/useSemanticTranslation.js": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/composables/useTimeline.js": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/composables/useValidation.js": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/config/shortcuts.js": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/i18n/labels.js": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/main.js": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/router/index.js": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/stores/api.js": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/stores/app.js": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/stores/canvas.js": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/stores/capabilities.js": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/stores/library.js": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/stores/libraryGovernance.js": {
+      "priority": "other",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "e174bd1"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "apps/desktop/ui-vue/src/stores/notifications.js": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/stores/preferences.js": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/stores/project.js": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/stores/review.js": {
+      "priority": "other",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "4106ced"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "apps/desktop/ui-vue/src/stores/roughcut.js": {
+      "priority": "other",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "4106ced"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "apps/desktop/ui-vue/src/stores/settings.js": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/stores/system.js": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/stores/timeline.js": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/stores/toast.js": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/stores/workflow.js": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/views/AudioView.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/views/CanvasView.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/views/CreateView.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/views/IdeateView.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/views/LibraryView.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/views/OrganizeView.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/views/ProductionView.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/views/PublishView.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/views/RefineView.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/views/ReviewView.vue": {
+      "priority": "other",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "4106ced"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "apps/desktop/ui-vue/src/views/RoughCutView.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/views/SettingsView.vue": {
+      "priority": "other",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "39d5728"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "apps/desktop/ui-vue/src/views/StartupView.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/views/SubtitleView.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/views/ToolsView.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "apps/desktop/ui-vue/src/views/WorkflowManagerView.vue": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/__init__.py": {
+      "priority": "other",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/adapters/__init__.py": {
+      "priority": "P2",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/adapters/_vlm_claude.py": {
+      "priority": "P2",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "022a430"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/adapters/_vlm_local_llava.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/adapters/_vlm_openai.py": {
+      "priority": "P2",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "022a430"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/adapters/materials_mapper.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/adapters/nle_connector.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/adapters/pexels_adapter.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/adapters/tts_adapter.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/adapters/vlm_adapter.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/app_api/__init__.py": {
+      "priority": "other",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/app_api/job_store.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/app_api/middleware/__init__.py": {
+      "priority": "P0",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/app_api/middleware/error_handler.py": {
+      "priority": "P0",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/app_api/middleware/security.py": {
+      "priority": "P0",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "c04f109"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/app_api/migrations.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/app_api/param_utils.py": {
+      "priority": "other",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "95199fd"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/app_api/publish_prep_api.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/app_api/routes/__init__.py": {
+      "priority": "other",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/app_api/routes/agent_capability_routes.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/app_api/routes/agent_observability_routes.py": {
+      "priority": "other",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "95199fd"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/app_api/routes/agent_skill_routes.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/app_api/routes/agent_task_query_routes.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/app_api/routes/agent_task_run_routes.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/app_api/routes/agent_template_routes.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/app_api/routes/capability_audio_voice_routes.py": {
+      "priority": "other",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "95199fd"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/app_api/routes/capability_content_publish_routes.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/app_api/routes/capability_editing_routes.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/app_api/routes/capability_social_export_routes.py": {
+      "priority": "other",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "95199fd"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/app_api/routes/capability_text_semantic_routes.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/app_api/routes/enhance_routes.py": {
+      "priority": "other",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "c04f109"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/app_api/routes/idempotency_routes.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/app_api/routes/job_routes.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/app_api/routes/legacy_project_routes.py": {
+      "priority": "other",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "c04f109"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/app_api/routes/library_routes.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/app_api/routes/render_routes.py": {
+      "priority": "other",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "4106ced"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/app_api/routes/review_routes.py": {
+      "priority": "other",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "0a35f22"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/app_api/routes/roughcut_routes.py": {
+      "priority": "other",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "e174bd1"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/app_api/routes/settings_routes.py": {
+      "priority": "other",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "95199fd"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/app_api/routes/stock_routes.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/app_api/routes/style_routes.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/app_api/routes/system_routes.py": {
+      "priority": "other",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "022a430"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/app_api/routes/timeline_routes.py": {
+      "priority": "other",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "39d5728"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/app_api/routes/ui_routes.py": {
+      "priority": "other",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "c04f109"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/app_api/routes/vlm_routes.py": {
+      "priority": "other",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "e174bd1"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/app_api/routes/workflow_routes.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/app_api/secure_store.py": {
+      "priority": "other",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "c04f109"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/app_api/server.py": {
+      "priority": "other",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "7ab433c"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/app_api/services/__init__.py": {
+      "priority": "P0",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/app_api/services/agent_governance_service.py": {
+      "priority": "P0",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/app_api/services/agent_template_service.py": {
+      "priority": "P0",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/app_api/services/audit_log.py": {
+      "priority": "P0",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/app_api/services/capability_helpers.py": {
+      "priority": "P0",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/app_api/services/idempotency_store.py": {
+      "priority": "P0",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/app_api/services/job_analytics_service.py": {
+      "priority": "P0",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/app_api/services/job_runtime.py": {
+      "priority": "P0",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/app_api/services/logging_service.py": {
+      "priority": "P0",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/app_api/services/perf_log.py": {
+      "priority": "P0",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/app_api/services/preflight_service.py": {
+      "priority": "P0",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/app_api/services/publish_orchestrator.py": {
+      "priority": "P0",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/app_api/services/recovery_rules.py": {
+      "priority": "P0",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/app_api/services/settings_service.py": {
+      "priority": "P0",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/app_api/services/startup_timing.py": {
+      "priority": "P0",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/app_api/services/workflow_runner.py": {
+      "priority": "P0",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/capabilities/__init__.py": {
+      "priority": "P2",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/capabilities/article_expand.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/capabilities/audio_voice.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/capabilities/content_publish.py": {
+      "priority": "P2",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "99b18dc"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/capabilities/image_semantic.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/capabilities/nle_handoff.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/capabilities/publish_prep.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/capabilities/refinement.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/capabilities/registry.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/capabilities/short_clip.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/capabilities/social_export.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/capabilities/subtitle_calibration.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/capabilities/text_rough_cut.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/capabilities/topic_copy.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/capabilities/topic_library.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/capabilities/types.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/contracts/__init__.py": {
+      "priority": "other",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/exceptions.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/exporters/__init__.py": {
+      "priority": "other",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/exporters/fcpxml/__init__.py": {
+      "priority": "other",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/exporters/fcpxml/builder.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/exporters/fcpxml/schema.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/exporters/jianying/__init__.py": {
+      "priority": "other",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/exporters/jianying/draft_builder.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/exporters/jianying/schema.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/exporters/track_builder.py": {
+      "priority": "other",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "eaa1cc5"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/hardware/__init__.py": {
+      "priority": "P2",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/hardware/detector.py": {
+      "priority": "P2",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "7d7bd07"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/hardware/encoding_strategy.py": {
+      "priority": "P2",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "7d7bd07"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/job_system/__init__.py": {
+      "priority": "P2",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "99eed15"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/job_system/job_manager.py": {
+      "priority": "P2",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "2986b51"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/legacy_lab/__init__.py": {
+      "priority": "other",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/legacy_lab/manage_videos/__init__.py": {
+      "priority": "other",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/legacy_lab/manage_videos/chinese_search_ui.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/legacy_lab/manage_videos/demo/__init__.py": {
+      "priority": "other",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/legacy_lab/manage_videos/demo/demo_duplicate.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/legacy_lab/manage_videos/demo/demo_metadata_search.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/legacy_lab/manage_videos/fingerprint_system.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/legacy_lab/manage_videos/improved_fingerprint.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/legacy_lab/manage_videos/learn/__init__.py": {
+      "priority": "other",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/legacy_lab/manage_videos/learn/learn_ai_analysis.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/legacy_lab/manage_videos/learn/learn_ai_analysis_part2.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/legacy_lab/manage_videos/tests/__init__.py": {
+      "priority": "other",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/legacy_lab/manage_videos/tests/test_ai_tools.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/legacy_lab/manage_videos/tests/test_fix.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/legacy_lab/manage_videos/tests/test_search_fixed.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/legacy_lab/manage_videos/tests/test_search_function.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/legacy_lab/manage_videos/video_search_ui.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/library/__init__.py": {
+      "priority": "P1",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/library/_constants.py": {
+      "priority": "P1",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/library/core/__init__.py": {
+      "priority": "P1",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/library/core/core_mixin.py": {
+      "priority": "P1",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/library/db/__init__.py": {
+      "priority": "P1",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/library/db/schema.py": {
+      "priority": "P1",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/library/global_media_library.py": {
+      "priority": "P1",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/library/integrations/__init__.py": {
+      "priority": "P1",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/library/integrations/gdrive.py": {
+      "priority": "P1",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/library/maintenance/__init__.py": {
+      "priority": "P1",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/library/maintenance/duplicate_detection.py": {
+      "priority": "P1",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/library/maintenance/fingerprint.py": {
+      "priority": "P1",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/library/maintenance/path_relink.py": {
+      "priority": "P1",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/library/project_relink_adapter.py": {
+      "priority": "P1",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/library/semantic/__init__.py": {
+      "priority": "P1",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/library/semantic/embedding_cache.py": {
+      "priority": "P1",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/library/semantic/vector_index.py": {
+      "priority": "P1",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/library/tagging/__init__.py": {
+      "priority": "P1",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/library/tagging/auto_tagger.py": {
+      "priority": "P1",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/library/tagging/tag_manager.py": {
+      "priority": "P1",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/library/vision/__init__.py": {
+      "priority": "P1",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/library/vision/clip_encoder.py": {
+      "priority": "P1",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/library/vision/vision_mixin.py": {
+      "priority": "P1",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/mcp_server/__init__.py": {
+      "priority": "other",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/mcp_server/health.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/mcp_server/security.py": {
+      "priority": "other",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "f74f6d0"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/mcp_server/server.py": {
+      "priority": "other",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "93e1aa8"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/mcp_server/tools/__init__.py": {
+      "priority": "P0",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/mcp_server/tools/capability_tools.py": {
+      "priority": "P0",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/mcp_server/tools/enhance_tools.py": {
+      "priority": "P0",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "7dc0aac"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/mcp_server/tools/review_query_tools.py": {
+      "priority": "P0",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "f74f6d0"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/mcp_server/tools/review_tools.py": {
+      "priority": "P0",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "7dc0aac"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/mcp_server/tools/vlm_tools.py": {
+      "priority": "P0",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "7dc0aac"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/mcp_server/tools/workflow_tools.py": {
+      "priority": "P0",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/prompt_editing/__init__.py": {
+      "priority": "other",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/prompt_editing/executor.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/prompt_editing/parser.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/render_engine/__init__.py": {
+      "priority": "P2",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "24a724a"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/render_engine/render_manager.py": {
+      "priority": "P2",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "24a724a"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/review_engine/__init__.py": {
+      "priority": "P2",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/review_engine/artifact_store.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/review_engine/audio_enhancer.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/review_engine/bad_take_detector.py": {
+      "priority": "P2",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "c04f109"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/review_engine/bgm_selector.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/review_engine/comment_exporter.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/review_engine/comment_resolver.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/review_engine/contracts.py": {
+      "priority": "P2",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "7d7bd07"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/review_engine/edit_planner.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/review_engine/exceptions.py": {
+      "priority": "P2",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "7ab433c"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/review_engine/filler_detector.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/review_engine/frame_diagnostics.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/review_engine/frame_sampler.py": {
+      "priority": "P2",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "7ab433c"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/review_engine/intent_router.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/review_engine/mixed_editor.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/review_engine/node_manager.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/review_engine/region_extractor.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/review_engine/render_pipeline.py": {
+      "priority": "P2",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "9481ef1"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/review_engine/review_store.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/review_engine/scene_segmenter.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/review_engine/scene_selector.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/review_engine/scene_summarizer.py": {
+      "priority": "P2",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "24a724a"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/review_engine/social_reframe.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/review_engine/speaker_diarizer.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/review_engine/stock_media.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/review_engine/style_skills.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/review_engine/thumbnail_generator.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/review_engine/timeline_ops.py": {
+      "priority": "P2",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "39d5728"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/review_engine/timeline_store.py": {
+      "priority": "P2",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "1d46bdf"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/review_engine/transcript_editor.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/review_engine/transition_effects.py": {
+      "priority": "P2",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "c04f109"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/review_engine/tts_voiceover.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/review_engine/video_detector.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/review_engine/video_stream_analyzer.py": {
+      "priority": "P2",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "291cce5"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/review_engine/vlm_analyzer.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/review_engine/waveform_generator.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/step1_material_analysis/__init__.py": {
+      "priority": "P1",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/step1_material_analysis/audio_quality.py": {
+      "priority": "P1",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/step1_material_analysis/indexer/__init__.py": {
+      "priority": "P1",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/step1_material_analysis/indexer/fingerprint.py": {
+      "priority": "P1",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/step1_material_analysis/indexer/semantic.py": {
+      "priority": "P1",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/step1_material_analysis/transcribe.py": {
+      "priority": "P1",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/step1_material_analysis/transcript_correction.py": {
+      "priority": "P1",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/step1_material_analysis/usability_scorer.py": {
+      "priority": "P1",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/step1_material_analysis/video_asset_toolkit.py": {
+      "priority": "P1",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/step2_topic_planning/__init__.py": {
+      "priority": "P2",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/step2_topic_planning/ai_client.py": {
+      "priority": "P2",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "99b18dc"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/step2_topic_planning/topics.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/step3_script_generation/__init__.py": {
+      "priority": "P2",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/step3_script_generation/jianying_draft.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/step4_material_matching/__init__.py": {
+      "priority": "P2",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/step4_material_matching/adaptive_rewriter.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/step4_material_matching/search_videos.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/step5_frame_preview/__init__.py": {
+      "priority": "other",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/step5_frame_preview/frame_preview.py": {
+      "priority": "other",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/step6_rough_cut/__init__.py": {
+      "priority": "P2",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/step6_rough_cut/rough_cut.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/step7_final_render/__init__.py": {
+      "priority": "P2",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/step7_final_render/auto_render.py": {
+      "priority": "P2",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "99b18dc"
+      ],
+      "note": "auto-bootstrapped from git history"
+    },
+    "modules/step7_final_render/beauty.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/step7_final_render/color_grade.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/step7_final_render/generate_luts.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/step7_final_render/pipeline.py": {
+      "priority": "P2",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/subscription/__init__.py": {
+      "priority": "P0",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/subscription/feature_gate.py": {
+      "priority": "P0",
+      "status": "unaudited",
+      "rounds": [],
+      "commits": [],
+      "note": ""
+    },
+    "modules/workflow_engine/__init__.py": {
+      "priority": "P2",
+      "status": "skip",
+      "rounds": [],
+      "commits": [],
+      "note": "__init__.py stub"
+    },
+    "modules/workflow_engine/workflow.py": {
+      "priority": "P2",
+      "status": "audited_fixed",
+      "rounds": [],
+      "commits": [
+        "99b18dc"
+      ],
+      "note": "auto-bootstrapped from git history"
+    }
+  },
+  "last_updated": "2026-04-15T17:40:36+00:00"
+}
