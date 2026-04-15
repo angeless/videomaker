@@ -184,6 +184,20 @@ def create_agent_observability_blueprint(
                 "started_at",
                 "finished_at",
             ]
+            def _csv_safe(v: Any) -> str:
+                """Neutralize CSV formula injection.
+
+                Excel / LibreOffice / Numbers interpret a cell starting with
+                ``= + - @ TAB CR`` as a formula — e.g. ``=HYPERLINK("http://evil")``
+                would make the exported CSV a phishing vector when a user
+                opens it in a spreadsheet app. Prefix such values with a
+                single quote so the content is shown literally.
+                """
+                s = "" if v is None else str(v)
+                if s and s[0] in ("=", "+", "-", "@", "\t", "\r"):
+                    s = "'" + s
+                return s
+
             buf = io.StringIO()
             writer = csv.DictWriter(buf, fieldnames=fieldnames)
             writer.writeheader()
@@ -194,7 +208,7 @@ def create_agent_observability_blueprint(
                 for key in ("capability_ids", "skill_ids", "template_hits"):
                     val = row.get(key)
                     row[key] = "|".join(str(x) for x in val) if isinstance(val, list) else ""
-                writer.writerow({k: row.get(k, "") for k in fieldnames})
+                writer.writerow({k: _csv_safe(row.get(k, "")) for k in fieldnames})
             out_path.write_text(buf.getvalue(), encoding="utf-8")
 
         return jsonify({

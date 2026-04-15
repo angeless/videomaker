@@ -9,7 +9,14 @@ import uuid
 
 from flask import Blueprint, jsonify, request
 
-from modules.app_api.param_utils import parse_float_param, parse_int_param, parse_str_param, write_json_result
+from modules.app_api.param_utils import (
+    is_safe_outbound_url,
+    parse_float_param,
+    parse_int_param,
+    parse_str_param,
+    sanitize_ffmpeg_bin,
+    write_json_result,
+)
 
 
 def create_audio_voice_capability_blueprint(
@@ -62,13 +69,20 @@ def create_audio_voice_capability_blueprint(
         provider = str(payload.get("bgm_provider", "local_library") or "local_library")
         api_key = parse_str_param(payload.get("bgm_api_key", ""))
         endpoint = parse_str_param(payload.get("bgm_endpoint", ""))
+        # SSRF guard — endpoint is user-supplied and used in outbound
+        # urlopen/requests calls inside pick_bgm. Without this check the
+        # server can be weaponized to probe internal services.
+        if endpoint:
+            safe, reason = is_safe_outbound_url(endpoint)
+            if not safe:
+                return jsonify({"error": f"bgm_endpoint 校验失败: {reason}"}), 400
         bgm_download = bool(payload.get("bgm_download", True))
         bgm_strict_schema = bool(payload.get("bgm_strict_schema", False))
         bgm_cache_enabled = bool(payload.get("bgm_cache_enabled", True))
         bgm_force_refresh = bool(payload.get("bgm_force_refresh", False))
         bgm_cache_max_age_days = parse_float_param(payload.get("bgm_cache_max_age_days", 0), default=0.0, min_val=0.0)
         bgm_cache_max_age_seconds = max(bgm_cache_max_age_days, 0.0) * 86400.0
-        ffprobe_bin = str(payload.get("ffprobe_bin", "ffprobe") or "ffprobe")
+        ffprobe_bin = sanitize_ffmpeg_bin(payload.get("ffprobe_bin"), default="ffprobe")
         target_duration_s = payload.get("target_duration_s", None)
         try:
             target_duration_s = float(target_duration_s) if target_duration_s is not None else None
@@ -204,7 +218,7 @@ def create_audio_voice_capability_blueprint(
         if input_mode == "project" and project_dir_getter() is None:
             return jsonify({"error": "项目未加载"}), 400
         base_dir = capability_base_dir(input_mode)
-        ffmpeg_bin = str(payload.get("ffmpeg_bin", "ffmpeg") or "ffmpeg")
+        ffmpeg_bin = sanitize_ffmpeg_bin(payload.get("ffmpeg_bin"), default="ffmpeg")
         timeout_seconds = parse_float_param(payload.get("timeout_seconds", 600), default=600.0, min_val=1.0, max_val=3600.0)
         dry_run = bool(payload.get("dry_run", False))
 
@@ -254,8 +268,8 @@ def create_audio_voice_capability_blueprint(
         if input_mode == "project" and project_dir_getter() is None:
             return jsonify({"error": "项目未加载"}), 400
         base_dir = capability_base_dir(input_mode)
-        ffmpeg_bin = str(payload.get("ffmpeg_bin", "ffmpeg") or "ffmpeg")
-        ffprobe_bin = str(payload.get("ffprobe_bin", "ffprobe") or "ffprobe")
+        ffmpeg_bin = sanitize_ffmpeg_bin(payload.get("ffmpeg_bin"), default="ffmpeg")
+        ffprobe_bin = sanitize_ffmpeg_bin(payload.get("ffprobe_bin"), default="ffprobe")
         timeout_seconds = parse_float_param(payload.get("timeout_seconds", 900), default=900.0, min_val=1.0, max_val=7200.0)
         dry_run = bool(payload.get("dry_run", False))
         replace_master = bool(payload.get("replace_master", input_mode == "project"))

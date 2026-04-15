@@ -8,7 +8,13 @@ import uuid
 
 from flask import Blueprint, jsonify, request
 
-from modules.app_api.param_utils import parse_float_param, parse_int_param, parse_str_param, write_json_result
+from modules.app_api.param_utils import (
+    parse_float_param,
+    parse_int_param,
+    parse_str_param,
+    sanitize_ffmpeg_bin,
+    write_json_result,
+)
 
 
 def create_social_export_capability_blueprint(
@@ -156,7 +162,7 @@ def create_social_export_capability_blueprint(
         if not platforms:
             platforms = ["douyin", "xiaohongshu", "tiktok"]
         strict_duration_limit = bool(payload.get("strict_duration_limit", True))
-        ffprobe_bin = str(payload.get("ffprobe_bin", "ffprobe") or "ffprobe")
+        ffprobe_bin = sanitize_ffmpeg_bin(payload.get("ffprobe_bin"), default="ffprobe")
         templates = coerce_social_export_overrides(payload, input_mode=input_mode)
         try:
             report = validate_source_for_export(
@@ -207,7 +213,7 @@ def create_social_export_capability_blueprint(
         if quality not in {"low", "medium", "high", "lossless"}:
             quality = "high"
         strict_duration_limit = bool(payload.get("strict_duration_limit", True))
-        ffprobe_bin = str(payload.get("ffprobe_bin", "ffprobe") or "ffprobe")
+        ffprobe_bin = sanitize_ffmpeg_bin(payload.get("ffprobe_bin"), default="ffprobe")
         platforms = parse_platforms(payload.get("platforms"))
         if not platforms:
             platforms = ["douyin", "xiaohongshu", "tiktok"]
@@ -225,7 +231,7 @@ def create_social_export_capability_blueprint(
                 output_dir=str(output_dir),
                 platform_ids=platforms,
                 quality=quality,
-                ffmpeg_bin=str(payload.get("ffmpeg_bin", "ffmpeg") or "ffmpeg"),
+                ffmpeg_bin=sanitize_ffmpeg_bin(payload.get("ffmpeg_bin"), default="ffmpeg"),
                 ffprobe_bin=ffprobe_bin,
                 strict_duration_limit=strict_duration_limit,
                 profile_overrides=templates,
@@ -254,8 +260,8 @@ def create_social_export_capability_blueprint(
 
         base_dir = capability_base_dir(input_mode)
         timeout_seconds = parse_float_param(payload.get("timeout_seconds", 3600), default=3600.0, min_val=10.0, max_val=7200.0)
-        ffmpeg_bin = str(payload.get("ffmpeg_bin", "ffmpeg") or "ffmpeg")
-        ffprobe_bin = str(payload.get("ffprobe_bin", "ffprobe") or "ffprobe")
+        ffmpeg_bin = sanitize_ffmpeg_bin(payload.get("ffmpeg_bin"), default="ffmpeg")
+        ffprobe_bin = sanitize_ffmpeg_bin(payload.get("ffprobe_bin"), default="ffprobe")
         strict_duration_limit = bool(payload.get("strict_duration_limit", True))
         quality = parse_str_param(payload.get("quality", "high"), default="high").lower()
         if quality not in {"low", "medium", "high", "lossless"}:
@@ -312,8 +318,8 @@ def create_social_export_capability_blueprint(
         if quality not in {"low", "medium", "high", "lossless"}:
             quality = "high"
         strict_duration_limit = bool(payload.get("strict_duration_limit", record.get("strict_duration_limit", True)))
-        ffmpeg_bin = str(payload.get("ffmpeg_bin", "ffmpeg") or "ffmpeg")
-        ffprobe_bin = str(payload.get("ffprobe_bin", "ffprobe") or "ffprobe")
+        ffmpeg_bin = sanitize_ffmpeg_bin(payload.get("ffmpeg_bin"), default="ffmpeg")
+        ffprobe_bin = sanitize_ffmpeg_bin(payload.get("ffprobe_bin"), default="ffprobe")
         timeout_seconds = parse_float_param(payload.get("timeout_seconds", 3600), default=3600.0, min_val=10.0, max_val=7200.0)
         platforms = parse_platforms(payload.get("platforms", record.get("platforms", [])))
         templates = coerce_social_export_overrides(payload, input_mode=input_mode)

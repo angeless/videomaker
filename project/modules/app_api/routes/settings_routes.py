@@ -14,7 +14,7 @@ from flask import Blueprint, jsonify, request
 import threading
 from html import escape as _html_escape
 
-from modules.app_api.param_utils import parse_str_param, safe_error_response
+from modules.app_api.param_utils import is_safe_outbound_url, parse_str_param, safe_error_response
 
 logger = logging.getLogger(__name__)
 
@@ -28,43 +28,9 @@ _oauth_pending: Dict[str, dict] = {}
 _oauth_pending_lock = threading.Lock()
 
 
-def _is_safe_outbound_url(url: str) -> tuple[bool, str]:
-    """SSRF guard: reject URLs pointing at loopback / link-local / private
-    networks. Used for user-supplied webhook URLs where the server will make
-    an outbound HTTP request — prevents the server being weaponized as a
-    probe into the local network (e.g. AWS metadata 169.254.169.254, local
-    Ollama, internal admin panels, etc.).
-
-    Returns (ok, reason) where reason is empty on success.
-    """
-    import ipaddress
-    import socket
-    from urllib.parse import urlparse
-
-    try:
-        parsed = urlparse(url)
-    except Exception as exc:
-        return False, f"URL 格式无效: {exc}"
-    if parsed.scheme not in ("http", "https"):
-        return False, f"仅支持 http/https (got {parsed.scheme})"
-    host = parsed.hostname
-    if not host:
-        return False, "URL 缺少主机名"
-    # Resolve all A/AAAA records; block if ANY is private/loopback/link-local.
-    # (Otherwise a DNS-rebind attack could flip the record between check
-    # and fetch; we're best-effort here since urllib does its own resolution.)
-    try:
-        infos = socket.getaddrinfo(host, None)
-    except socket.gaierror as exc:
-        return False, f"DNS 解析失败: {exc}"
-    for info in infos:
-        try:
-            ip = ipaddress.ip_address(info[4][0])
-        except (ValueError, IndexError):
-            continue
-        if ip.is_loopback or ip.is_link_local or ip.is_private or ip.is_multicast or ip.is_reserved:
-            return False, f"禁止连接内网/回环地址: {ip}"
-    return True, ""
+# SSRF guard moved to modules.app_api.param_utils.is_safe_outbound_url
+# so it can be shared with capability routes that also make server-side
+# outbound requests (audio_voice pick_bgm, content_publish hooks, etc).
 
 
 def create_settings_blueprint(
@@ -520,10 +486,10 @@ def create_settings_blueprint(
         if not url:
             return jsonify({"error": "连接器缺少 URL"}), 400
 
-        # SSRF guard — see _is_safe_outbound_url. This is a server-side
-        # fetch with user-configurable URL; without this check the server
-        # could be used to probe local/cloud-metadata services.
-        safe, reason = _is_safe_outbound_url(url)
+        # SSRF guard — see param_utils.is_safe_outbound_url. This is a
+        # server-side fetch with user-configurable URL; without this check
+        # the server could be used to probe local/cloud-metadata services.
+        safe, reason = is_safe_outbound_url(url)
         if not safe:
             return jsonify({"error": f"URL 校验失败: {reason}"}), 400
 

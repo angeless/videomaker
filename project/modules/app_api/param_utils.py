@@ -88,6 +88,109 @@ def safe_error_response(exc: Exception, fallback_msg: str = "操作失败，请�
     return msg
 
 
+def sanitize_ffmpeg_bin(value: Any, default: str = "ffmpeg") -> str:
+    """Sanitize a user-supplied ffmpeg/ffprobe binary path.
+
+    Many capability routes accept ``ffmpeg_bin`` / ``ffprobe_bin`` from
+    the request payload so operators can point the server at a custom
+    build. Without sanitization this is an **arbitrary-program execution**
+    hazard: any local-token holder (or a token leaked via XSS) could POST
+    ``{"ffmpeg_bin": "/tmp/malicious.sh"}`` and the server would invoke
+    it via ``subprocess.run(cmd, ...)`` with the app's privileges.
+
+    Accepted forms:
+      - Empty / None → returns *default* ("ffmpeg" or "ffprobe")
+      - A plain basename matching the default (e.g. "ffmpeg", "ffprobe"):
+        resolved via ``shutil.which`` when available, else returned as-is
+        (PATH lookup).
+      - An absolute path whose basename is ffmpeg / ffprobe / ffmpeg.exe
+        / ffprobe.exe: allowed, so operators with a custom toolchain still
+        work.
+
+    Anything else (shell metacharacters, paths that don't end in the
+    expected binary name, etc.) falls back to *default*.
+
+    >>> sanitize_ffmpeg_bin("ffmpeg")
+    'ffmpeg'
+    >>> sanitize_ffmpeg_bin("/tmp/evil.sh", default="ffmpeg")
+    'ffmpeg'
+    >>> sanitize_ffmpeg_bin("/usr/local/bin/ffmpeg")
+    '/usr/local/bin/ffmpeg'
+    >>> sanitize_ffmpeg_bin("", default="ffprobe")
+    'ffprobe'
+    """
+    import os
+    import re
+
+    if default not in ("ffmpeg", "ffprobe"):
+        default = "ffmpeg"
+
+    v = str(value or "").strip()
+    if not v:
+        return default
+    # Reject any shell metacharacter — defence in depth even though shell=False.
+    if re.search(r"[;&|`$<>\n\r\t]", v):
+        return default
+    # Plain name: must match the default family
+    if v == default or v == f"{default}.exe":
+        return v
+    # Absolute path: verify it exists and has the expected basename.
+    if os.path.isabs(v):
+        base = os.path.basename(v).lower()
+        if base in (default, f"{default}.exe") and os.path.isfile(v):
+            return v
+    # Anything else (relative paths, wrong basename, dotdot segments, etc.) → default
+    return default
+
+
+def is_safe_outbound_url(url: str) -> tuple[bool, str]:
+    """SSRF guard for server-side outbound HTTP requests.
+
+    When a route calls ``urlopen(user_supplied_url)``, an attacker with
+    local-token access can weaponize the server to probe internal hosts
+    (AWS metadata at 169.254.169.254, internal admin panels, loopback
+    services like Ollama on 127.0.0.1:11434, etc.). This helper rejects
+    URLs whose resolved IP falls inside any private / loopback / link-local /
+    multicast / reserved range, and rejects non-http(s) schemes outright.
+
+    Returns ``(ok, reason)``. ``reason`` is empty on success.
+
+    >>> is_safe_outbound_url("https://example.com/hook")[0]
+    True
+    >>> is_safe_outbound_url("http://127.0.0.1/ssh")[0]
+    False
+    >>> is_safe_outbound_url("http://169.254.169.254/")[0]
+    False
+    >>> is_safe_outbound_url("file:///etc/passwd")[0]
+    False
+    """
+    import ipaddress
+    import socket
+    from urllib.parse import urlparse
+
+    try:
+        parsed = urlparse(url)
+    except Exception as exc:
+        return False, f"URL 格式无效: {exc}"
+    if parsed.scheme not in ("http", "https"):
+        return False, f"仅支持 http/https (got {parsed.scheme})"
+    host = parsed.hostname
+    if not host:
+        return False, "URL 缺少主机名"
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror as exc:
+        return False, f"DNS 解析失败: {exc}"
+    for info in infos:
+        try:
+            ip = ipaddress.ip_address(info[4][0])
+        except (ValueError, IndexError):
+            continue
+        if ip.is_loopback or ip.is_link_local or ip.is_private or ip.is_multicast or ip.is_reserved:
+            return False, f"禁止连接内网/回环地址: {ip}"
+    return True, ""
+
+
 def write_json_result(path_obj: Any, data: Any) -> bool:
     """Write *data* as pretty-printed JSON to *path_obj* if it is not None.
 
