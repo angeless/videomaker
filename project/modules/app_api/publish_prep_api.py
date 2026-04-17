@@ -48,8 +48,10 @@ def create_publish_prep_blueprint(
         path = _profiles_path()
         if path is None:
             return None
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(overrides, ensure_ascii=False, indent=2), encoding="utf-8")
+        # Round-15: atomic write — crash mid-save used to zero the
+        # profiles file, wiping user-saved platform overrides.
+        from modules.app_api.param_utils import atomic_write_json
+        atomic_write_json(path, overrides)
         return path
 
     @bp.route("/api/capabilities/publish_prep/profiles", methods=["GET"])
@@ -146,8 +148,8 @@ def create_publish_prep_blueprint(
         if store_result:
             out_path = _result_path()
             if out_path is not None:
-                out_path.parent.mkdir(parents=True, exist_ok=True)
-                out_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+                from modules.app_api.param_utils import atomic_write_json
+                atomic_write_json(out_path, result)
 
         return jsonify(
             {

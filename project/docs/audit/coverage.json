@@ -1305,10 +1305,12 @@
     },
     "modules/adapters/_vlm_local_llava.py": {
       "priority": "P2",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "audited_fixed",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: HIGH/MED fixes"
     },
     "modules/adapters/_vlm_openai.py": {
       "priority": "P2",
@@ -1373,10 +1375,12 @@
     },
     "modules/app_api/job_store.py": {
       "priority": "other",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/app_api/middleware/__init__.py": {
       "priority": "P0",
@@ -1405,10 +1409,12 @@
     },
     "modules/app_api/migrations.py": {
       "priority": "other",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/app_api/param_utils.py": {
       "priority": "other",
@@ -1421,10 +1427,12 @@
     },
     "modules/app_api/publish_prep_api.py": {
       "priority": "other",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "audited_fixed",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: HIGH/MED fixes"
     },
     "modules/app_api/routes/__init__.py": {
       "priority": "other",
@@ -1435,10 +1443,12 @@
     },
     "modules/app_api/routes/agent_capability_routes.py": {
       "priority": "other",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/app_api/routes/agent_observability_routes.py": {
       "priority": "other",
@@ -1451,31 +1461,39 @@
     },
     "modules/app_api/routes/agent_skill_routes.py": {
       "priority": "other",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/app_api/routes/agent_task_query_routes.py": {
       "priority": "other",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/app_api/routes/agent_task_run_routes.py": {
       "priority": "other",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/app_api/routes/agent_template_routes.py": {
       "priority": "other",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/app_api/routes/capability_audio_voice_routes.py": {
       "priority": "other",
@@ -1488,17 +1506,21 @@
     },
     "modules/app_api/routes/capability_content_publish_routes.py": {
       "priority": "other",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/app_api/routes/capability_editing_routes.py": {
       "priority": "other",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/app_api/routes/capability_social_export_routes.py": {
       "priority": "other",
@@ -1511,10 +1533,12 @@
     },
     "modules/app_api/routes/capability_text_semantic_routes.py": {
       "priority": "other",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/app_api/routes/enhance_routes.py": {
       "priority": "other",
@@ -1527,17 +1551,21 @@
     },
     "modules/app_api/routes/idempotency_routes.py": {
       "priority": "other",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/app_api/routes/job_routes.py": {
       "priority": "other",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "audited_fixed",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: HIGH/MED fixes"
     },
     "modules/app_api/routes/legacy_project_routes.py": {
       "priority": "other",
@@ -1550,10 +1578,12 @@
     },
     "modules/app_api/routes/library_routes.py": {
       "priority": "other",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/app_api/routes/render_routes.py": {
       "priority": "other",
@@ -1593,17 +1623,21 @@
     },
     "modules/app_api/routes/stock_routes.py": {
       "priority": "other",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "audited_fixed",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: HIGH/MED fixes"
     },
     "modules/app_api/routes/style_routes.py": {
       "priority": "other",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/app_api/routes/system_routes.py": {
       "priority": "other",
@@ -1643,10 +1677,12 @@
     },
     "modules/app_api/routes/workflow_routes.py": {
       "priority": "other",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "audited_fixed",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: HIGH/MED fixes"
     },
     "modules/app_api/secure_store.py": {
       "priority": "other",
@@ -1959,10 +1995,12 @@
     },
     "modules/exceptions.py": {
       "priority": "other",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/exporters/__init__.py": {
       "priority": "other",
@@ -1980,17 +2018,21 @@
     },
     "modules/exporters/fcpxml/builder.py": {
       "priority": "other",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "audited_fixed",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: HIGH/MED fixes"
     },
     "modules/exporters/fcpxml/schema.py": {
       "priority": "other",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/exporters/jianying/__init__.py": {
       "priority": "other",
@@ -2001,17 +2043,21 @@
     },
     "modules/exporters/jianying/draft_builder.py": {
       "priority": "other",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "audited_fixed",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: HIGH/MED fixes"
     },
     "modules/exporters/jianying/schema.py": {
       "priority": "other",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/exporters/track_builder.py": {
       "priority": "other",
@@ -2414,10 +2460,12 @@
     },
     "modules/mcp_server/health.py": {
       "priority": "other",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/mcp_server/security.py": {
       "priority": "other",
@@ -2507,17 +2555,21 @@
     },
     "modules/prompt_editing/executor.py": {
       "priority": "other",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/prompt_editing/parser.py": {
       "priority": "other",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/render_engine/__init__.py": {
       "priority": "P2",
@@ -2548,17 +2600,21 @@
     },
     "modules/review_engine/artifact_store.py": {
       "priority": "P2",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/review_engine/audio_enhancer.py": {
       "priority": "P2",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/review_engine/bad_take_detector.py": {
       "priority": "P2",
@@ -2571,24 +2627,30 @@
     },
     "modules/review_engine/bgm_selector.py": {
       "priority": "P2",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/review_engine/comment_exporter.py": {
       "priority": "P2",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/review_engine/comment_resolver.py": {
       "priority": "P2",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/review_engine/contracts.py": {
       "priority": "P2",
@@ -2603,10 +2665,12 @@
     },
     "modules/review_engine/edit_planner.py": {
       "priority": "P2",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/review_engine/exceptions.py": {
       "priority": "P2",
@@ -2621,10 +2685,12 @@
     },
     "modules/review_engine/filler_detector.py": {
       "priority": "P2",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/review_engine/frame_diagnostics.py": {
       "priority": "P2",
@@ -2646,31 +2712,39 @@
     },
     "modules/review_engine/intent_router.py": {
       "priority": "P2",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "audited_fixed",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: HIGH/MED fixes"
     },
     "modules/review_engine/mixed_editor.py": {
       "priority": "P2",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/review_engine/node_manager.py": {
       "priority": "P2",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/review_engine/region_extractor.py": {
       "priority": "P2",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/review_engine/render_pipeline.py": {
       "priority": "P2",
@@ -2703,10 +2777,12 @@
     },
     "modules/review_engine/scene_selector.py": {
       "priority": "P2",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/review_engine/scene_summarizer.py": {
       "priority": "P2",
@@ -2721,17 +2797,21 @@
     },
     "modules/review_engine/social_reframe.py": {
       "priority": "P2",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/review_engine/speaker_diarizer.py": {
       "priority": "P2",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/review_engine/stock_media.py": {
       "priority": "P2",
@@ -2744,17 +2824,21 @@
     },
     "modules/review_engine/style_skills.py": {
       "priority": "P2",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "audited_fixed",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: HIGH/MED fixes"
     },
     "modules/review_engine/thumbnail_generator.py": {
       "priority": "P2",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "audited_fixed",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: HIGH/MED fixes"
     },
     "modules/review_engine/timeline_ops.py": {
       "priority": "P2",
@@ -2805,10 +2889,12 @@
     },
     "modules/review_engine/video_detector.py": {
       "priority": "P2",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/review_engine/video_stream_analyzer.py": {
       "priority": "P2",
@@ -2830,10 +2916,12 @@
     },
     "modules/review_engine/waveform_generator.py": {
       "priority": "P2",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "audited_fixed",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: HIGH/MED fixes"
     },
     "modules/step1_material_analysis/__init__.py": {
       "priority": "P1",
@@ -2930,10 +3018,12 @@
     },
     "modules/step2_topic_planning/topics.py": {
       "priority": "P2",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/step3_script_generation/__init__.py": {
       "priority": "P2",
@@ -2985,10 +3075,12 @@
     },
     "modules/step5_frame_preview/frame_preview.py": {
       "priority": "other",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/step6_rough_cut/__init__.py": {
       "priority": "P2",
@@ -3026,24 +3118,30 @@
     },
     "modules/step7_final_render/beauty.py": {
       "priority": "P2",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/step7_final_render/color_grade.py": {
       "priority": "P2",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/step7_final_render/generate_luts.py": {
       "priority": "P2",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        15
+      ],
       "commits": [],
-      "note": ""
+      "note": "R15: swept, no new HIGH/MED findings"
     },
     "modules/step7_final_render/pipeline.py": {
       "priority": "P2",
@@ -3098,5 +3196,5 @@
       "note": "P2-A round-14: concat quote escape / atomic writes / dict hardening / page size"
     }
   },
-  "last_updated": "2026-04-17T06:40:39+00:00"
+  "last_updated": "2026-04-17T07:17:17+00:00"
 }

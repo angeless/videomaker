@@ -6,6 +6,7 @@ pacing) that can be saved/loaded and auto-extracted from projects.
 
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
@@ -42,15 +43,37 @@ def _check_yaml():
         raise ReviewEngineError("pyyaml is required for style skills: pip install pyyaml")
 
 
+# Round-15 P2: style.name flows from HTTP POST body. Previously the
+# sanitizer only stripped "/" and " " — an attacker could set
+# name="../../etc/passwd" and write outside styles_dir (cross-platform:
+# works on Windows via "\\", partially on macOS). Stricter regex:
+# allowlist [A-Za-z0-9_\-\u4e00-\u9fff.] with a hard length cap.
+_STYLE_NAME_SANITIZE = re.compile(r"[^A-Za-z0-9_\-\u4e00-\u9fff.]")
+
+
+def _sanitize_style_name(name: str) -> str:
+    v = _STYLE_NAME_SANITIZE.sub("_", str(name or "").strip())
+    # Strip leading dots to block "..X" and hidden-file shenanigans
+    v = v.lstrip(".") or "unnamed"
+    return v[:80]  # hard length cap
+
+
 def save_style(style: StyleConfig, styles_dir: str) -> str:
     """Save a style config to YAML.
 
     Returns the file path.
     """
     _check_yaml()
-    os.makedirs(styles_dir, exist_ok=True)
-    safe_name = style.name.replace(" ", "_").replace("/", "_")
-    path = os.path.join(styles_dir, f"{safe_name}.yaml")
+    from pathlib import Path as _Path
+    base = _Path(styles_dir).resolve()
+    base.mkdir(parents=True, exist_ok=True)
+    safe_name = _sanitize_style_name(style.name)
+    path = base / f"{safe_name}.yaml"
+    # Defense in depth: verify the resolved path stays inside base_dir.
+    try:
+        path.resolve().relative_to(base)
+    except ValueError as exc:
+        raise ReviewEngineError(f"unsafe style name: {style.name!r}") from exc
 
     data = {
         "name": style.name,
@@ -63,19 +86,47 @@ def save_style(style: StyleConfig, styles_dir: str) -> str:
         "subtitle_style": style.subtitle_style,
     }
 
-    with open(path, "w", encoding="utf-8") as f:
-        yaml.dump(data, f, allow_unicode=True, default_flow_style=False)
+    # Round-15: atomic YAML write (tempfile + os.replace) so crash during
+    # save cannot corrupt an existing style file.
+    import tempfile as _tf
+    fd, tmp = _tf.mkstemp(dir=str(base), suffix=".yaml.tmp", prefix=safe_name + ".")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            yaml.dump(data, f, allow_unicode=True, default_flow_style=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, str(path))
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
-    return path
+    return str(path)
 
 
-def load_style(path: str) -> StyleConfig:
-    """Load a style config from YAML."""
+def load_style(path: str, styles_dir: Optional[str] = None) -> StyleConfig:
+    """Load a style config from YAML.
+
+    If ``styles_dir`` is given, enforces that ``path`` resolves inside it
+    — blocks attacker-supplied paths like '/etc/passwd'.
+    """
     _check_yaml()
-    if not os.path.isfile(path):
+    from pathlib import Path as _Path
+    p = _Path(path).expanduser().resolve()
+    if styles_dir is not None:
+        base = _Path(styles_dir).expanduser().resolve()
+        try:
+            p.relative_to(base)
+        except ValueError as exc:
+            raise ReviewEngineError(
+                f"style path {p} escapes allowed base {base}"
+            ) from exc
+    if not p.is_file():
         raise ReviewEngineError(f"Style file not found: {path}")
 
-    with open(path, "r", encoding="utf-8") as f:
+    with open(p, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
     return StyleConfig(

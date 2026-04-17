@@ -55,18 +55,15 @@ def create_stock_blueprint(*, jobs_getter):
 
     @bp.route("/api/stock/download", methods=["POST"])
     def stock_download():
-        data = request.get_json(silent=True) or {}
-        video_url = data.get("url")
-        if not video_url:
-            return _error_response("url required", "MISSING_PARAM", 400)
-
-        job_id = uuid.uuid4().hex[:8]
-        jobs = jobs_getter()
-        jobs[job_id] = {
-            "type": "stock_download",
-            "url": video_url,
-            "status": "queued",
-        }
-        return _ok({"job_id": job_id, "status": "queued"}, 202)
+        # Round-15 finding H2: previously this endpoint created a
+        # job record with status="queued" but no worker was scheduled,
+        # so clients polling GET /api/job/<id> waited forever. Return
+        # 501 Not Implemented to surface the gap rather than silently
+        # dead-stub. Wiring to a real worker is v0.19.0 WISHLIST item E2.
+        return _error_response(
+            "stock download is not yet implemented in this build",
+            "NOT_IMPLEMENTED",
+            501,
+        )
 
     return bp

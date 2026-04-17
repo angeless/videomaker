@@ -90,9 +90,18 @@ class TestGenerateWaveform:
         # Mock FFmpeg to create a PCM file with known data
         samples_per_peak = AUDIO_SAMPLE_RATE // DEFAULT_PEAKS_PER_SECOND
 
+        # Round-15 note: waveform_generator now allocates the PCM path via
+        # mkstemp() (per-call isolation to prevent concurrent-worker PCM
+        # corruption), so the filename is randomized. The mock must read
+        # the real path from the FFmpeg argv (last positional arg) instead
+        # of hardcoding "audio_raw.pcm".
+        pcm_paths_used = []
+
         def side_effect(*args, **kwargs):
-            os.makedirs(output_dir, exist_ok=True)
-            pcm_path = os.path.join(output_dir, "audio_raw.pcm")
+            argv = args[0]  # first positional is the cmd list
+            pcm_path = argv[-1]  # ffmpeg output path is last
+            pcm_paths_used.append(pcm_path)
+            os.makedirs(os.path.dirname(pcm_path), exist_ok=True)
             with open(pcm_path, "wb") as f:
                 # Write 3 peaks of known amplitudes
                 for peak_val in [0, 16384, 32767]:
@@ -110,8 +119,10 @@ class TestGenerateWaveform:
         assert result["peaks"][2] == 1.0  # 32767/32768 rounds to 1.0
         assert result["sample_rate"] == AUDIO_SAMPLE_RATE
         assert os.path.isfile(os.path.join(output_dir, "waveform.json"))
-        # PCM should be cleaned up
-        assert not os.path.isfile(os.path.join(output_dir, "audio_raw.pcm"))
+        # PCM should be cleaned up — no lingering audio_raw_*.pcm files
+        assert pcm_paths_used, "FFmpeg side_effect was never called"
+        for used in pcm_paths_used:
+            assert not os.path.isfile(used), f"leftover PCM: {used}"
 
     @patch("modules.review_engine.waveform_generator.subprocess.run")
     @patch("modules.review_engine.waveform_generator._find_ffmpeg", return_value="/usr/bin/ffmpeg")

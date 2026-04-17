@@ -70,7 +70,13 @@ def generate_waveform(
     os.makedirs(output_dir, exist_ok=True)
 
     ffmpeg = _find_ffmpeg()
-    pcm_path = os.path.join(output_dir, "audio_raw.pcm")
+    # Round-15: per-call PCM tempfile. Previously the fixed name
+    # "audio_raw.pcm" caused two concurrent renders targeting the same
+    # output_dir to corrupt each other's extraction. Use mkstemp so the
+    # two workers get isolated files and can clean up independently.
+    import tempfile as _tf
+    fd_pcm, pcm_path = _tf.mkstemp(dir=output_dir, prefix="audio_raw_", suffix=".pcm")
+    os.close(fd_pcm)  # ffmpeg will reopen for writing
 
     # Extract raw PCM (signed 16-bit little-endian, mono, 44100 Hz)
     cmd = [
@@ -123,10 +129,10 @@ def generate_waveform(
         "peak_count": total_samples,
     }
 
-    # Write JSON
+    # Round-15: atomic write via shared helper.
+    from modules.app_api.param_utils import atomic_write_json
     meta_path = os.path.join(output_dir, "waveform.json")
-    with open(meta_path, "w", encoding="utf-8") as f:
-        json.dump(metadata, f)
+    atomic_write_json(meta_path, metadata, indent=None)
 
     logger.info("Waveform generated: %d peaks over %dms", total_samples, duration_ms)
     return metadata
@@ -171,7 +177,7 @@ def _flat_waveform(output_dir: str) -> dict:
         "duration_ms": 0,
         "peak_count": 0,
     }
+    from modules.app_api.param_utils import atomic_write_json
     meta_path = os.path.join(output_dir, "waveform.json")
-    with open(meta_path, "w", encoding="utf-8") as f:
-        json.dump(metadata, f)
+    atomic_write_json(meta_path, metadata, indent=None)
     return metadata

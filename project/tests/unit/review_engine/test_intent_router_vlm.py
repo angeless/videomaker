@@ -51,11 +51,15 @@ class TestVisualContextInjection:
             llm_caller=llm_capture,
             visual_context=visual_ctx,
         )
-        # Verify visual context was injected into prompt
+        # Verify visual context was injected into prompt (wrapped in
+        # <visual_context>…</visual_context> tags — Round-15 prompt-injection
+        # hardening: the LLM is instructed to treat tag contents as data,
+        # never as instructions).
         assert len(captured_prompts) == 1
         prompt = captured_prompts[0]
         assert "logo" in prompt
-        assert "画面上下文" in prompt
+        assert "<visual_context>" in prompt
+        assert "</visual_context>" in prompt
 
     def test_broll_with_scene_context(self):
         visual_ctx = {
@@ -92,4 +96,8 @@ class TestVisualContextInjection:
             llm_caller=llm_capture,
             visual_context=None,
         )
-        assert "画面上下文" not in captured[0]
+        # The Round-15 safety preamble mentions <visual_context> once
+        # (explaining the rule). An actual injection would emit a
+        # closing </visual_context> too — its absence confirms no
+        # visual context was injected.
+        assert "</visual_context>" not in captured[0]

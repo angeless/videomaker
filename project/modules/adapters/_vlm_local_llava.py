@@ -25,12 +25,34 @@ from modules.adapters.vlm_adapter import VLMResponse
 
 DEFAULT_MODEL = "llava-hf/llava-1.5-7b-hf"
 
+# Round-15 P2: allowlist known-safe LLaVA/LLaVA-Next model repos.
+# model_name flows from workflow config into HF pipeline, which downloads
+# the repo and runs its `configuration.py`/modeling code — untrusted repo
+# names can execute arbitrary code during model loading.
+_ALLOWED_LLAVA_MODELS = {
+    "llava-hf/llava-1.5-7b-hf",
+    "llava-hf/llava-1.5-13b-hf",
+    "llava-hf/llava-v1.6-mistral-7b-hf",
+    "llava-hf/llava-v1.6-vicuna-7b-hf",
+    "llava-hf/llava-v1.6-vicuna-13b-hf",
+    "llava-hf/llava-v1.6-34b-hf",
+    "llava-hf/llava-next-72b-hf",
+    "llava-hf/llava-next-interleave-qwen-7b-hf",
+}
+
 
 class LocalLlavaAdapter:
     """Local LLaVA inference adapter with lazy model loading."""
 
     def __init__(self, model_name: Optional[str] = None):
-        self._model_name = model_name or DEFAULT_MODEL
+        raw = model_name or DEFAULT_MODEL
+        if raw not in _ALLOWED_LLAVA_MODELS:
+            logger.warning(
+                "LLaVA model_name %r not on allowlist; falling back to %s",
+                raw, DEFAULT_MODEL,
+            )
+            raw = DEFAULT_MODEL
+        self._model_name = raw
         self._pipe: Any = None
         self._loaded = False
 

@@ -370,7 +370,7 @@ def create_workflow_blueprint(
                     store.pop(old_id, None)
                 saved = save_custom_workflow_store(store)
         except Exception as exc:
-            return jsonify({"error": f"workflow 保存失败: {exc}"}), 400
+            return jsonify({"error": safe_error_response(exc, "workflow 保存失败")}), 400
         return jsonify(
             {
                 "ok": True,
@@ -390,7 +390,7 @@ def create_workflow_blueprint(
             workflow = resolve_custom_workflow_from_payload(payload)
             plan = build_custom_workflow_plan(workflow=workflow, payload=payload, dry_run=dry_run)
         except Exception as exc:
-            return jsonify({"error": f"workflow 规划失败: {exc}"}), 400
+            return jsonify({"error": safe_error_response(exc, "workflow 规划失败")}), 400
         return jsonify(
             {
                 "ok": True,
@@ -433,7 +433,7 @@ def create_workflow_blueprint(
             )
         except Exception as exc:
             _audit("run", "workflow", None, actor=_actor, status="error", detail={"error": str(exc)})
-            return jsonify({"error": f"workflow 执行失败: {exc}"}), 400
+            return jsonify({"error": safe_error_response(exc, "workflow 执行失败")}), 400
         _audit("run", "workflow", str(ret.get("run_id", "")), actor=_actor)
         ret["request_context"] = ctx
         return jsonify(ret)
@@ -506,7 +506,7 @@ def create_workflow_blueprint(
         try:
             workflow = normalize_custom_workflow_payload(workflow_raw, existing=workflow_raw)
         except Exception as exc:
-            return jsonify({"error": f"workflow 解析失败: {exc}"}), 400
+            return jsonify({"error": safe_error_response(exc, "workflow 解析失败")}), 400
 
         if rerun_failed_only:
             try:
@@ -542,7 +542,7 @@ def create_workflow_blueprint(
         except Exception as exc:
             from modules.app_api.services.audit_log import audit as _audit
             _audit("rerun", "workflow", run_id, actor=f"{ctx.get('actor_type', 'human')}:{ctx.get('actor_id', '')}", status="error", detail={"error": str(exc)})
-            return jsonify({"error": f"workflow 重跑失败: {exc}"}), 400
+            return jsonify({"error": safe_error_response(exc, "workflow 重跑失败")}), 400
         from modules.app_api.services.audit_log import audit as _audit
         _audit("rerun", "workflow", str(ret.get("run_id", "")), actor=f"{ctx.get('actor_type', 'human')}:{ctx.get('actor_id', '')}", detail={"source_run_id": run_id})
         ret["source_run_id"] = run_id
@@ -612,7 +612,7 @@ def create_workflow_blueprint(
                 store[workflow["workflow_id"]] = workflow
                 saved = save_custom_workflow_store(store)
         except Exception as exc:
-            return jsonify({"error": f"模板实例化失败: {exc}"}), 400
+            return jsonify({"error": safe_error_response(exc, "模板实例化失败")}), 400
 
         _audit("instantiate_template", "workflow", workflow["workflow_id"],
                actor=_actor, detail={"template_id": template_id})

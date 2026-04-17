@@ -249,12 +249,20 @@ def create_job_blueprint(
             if job is None or str(job.get("status", "")).lower() != "interrupted":
                 failed += 1
                 continue
-            # Mark as queued for re-dispatch
-            job["status"] = "queued"
-            job["error"] = ""
+            # Round-15 finding H2: previously this set status="queued"
+            # but never re-dispatched the job, and the original _fn/_args
+            # were already popped by the interrupt handler — so the job
+            # was stuck "queued" forever (dead-stub reactivation). Mark
+            # as "needs_resubmit" instead so the UI tells the user to
+            # re-trigger the original action. Proper retry needs the
+            # replay payload preserved at interrupt time (v0.19.0 WISHLIST).
+            job["status"] = "needs_resubmit"
+            job["error"] = "中断任务无法自动恢复 — 请重新发起原操作"
             job["finished_at"] = ""
-            job["log"].append("[系统] 中断任务已重新入队")
-            persist_job_snapshot(jid, "job_requeued")
+            job.setdefault("log", []).append(
+                "[系统] 中断任务标记为需重新提交（auto-retry 不可用）"
+            )
+            persist_job_snapshot(jid, "job_needs_resubmit")
             retried += 1
         from modules.app_api.services.audit_log import audit as _audit
         _audit("batch_retry_interrupted", "job", None, actor=f"local:{request.remote_addr}",

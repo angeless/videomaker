@@ -101,7 +101,29 @@ class FCPXMLBuilder:
         tree = ET.ElementTree(root)
         ET.indent(tree, space="  ")
         xml_str = FCPXML_DOCTYPE + ET.tostring(root, encoding="unicode")
-        out.write_text(xml_str, encoding="utf-8")
+
+        # Round-15: atomic XML write — crash mid-write used to corrupt the
+        # .fcpxml file; FCP / Resolve would refuse to open it and the user
+        # had to re-run the whole export. tempfile + fsync + os.replace
+        # guarantees either the old file or the new file is visible, never
+        # a partial write.
+        import os as _os
+        import tempfile as _tf
+        fd, tmp = _tf.mkstemp(
+            dir=str(out.parent), suffix=".fcpxml.tmp", prefix=out.name + "."
+        )
+        try:
+            with _os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(xml_str)
+                f.flush()
+                _os.fsync(f.fileno())
+            _os.replace(tmp, str(out))
+        except BaseException:
+            try:
+                _os.unlink(tmp)
+            except OSError:
+                pass
+            raise
 
         _log.info("FCPXML exported to %s", out)
         return {

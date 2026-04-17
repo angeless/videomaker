@@ -38,19 +38,23 @@ class TestStockAPI:
         data = resp.get_json()
         assert data["error"] == "STOCK_SEARCH_FAILED"
 
-    def test_download_returns_202(self, client, app):
+    def test_download_returns_501(self, client, app):
+        """Round-15 H2: endpoint used to dead-stub (create queued job
+        with no worker). Now returns 501 to surface the gap."""
         resp = client.post("/api/stock/download", json={
             "url": "https://example.com/video.mp4",
         })
-        assert resp.status_code == 202
+        assert resp.status_code == 501
         data = resp.get_json()
-        assert data["success"] is True
-        assert "job_id" in data
-        # Verify job was created
+        assert data["success"] is False
+        assert data["error"] == "NOT_IMPLEMENTED"
+        # No phantom job should be created
         jobs = app.config["_jobs"]
-        assert data["job_id"] in jobs
+        assert len(jobs) == 0
 
-    def test_download_missing_url(self, client):
+    def test_download_missing_url_still_501(self, client):
+        """Even with missing params, the endpoint is not implemented —
+        501 takes precedence over 400 (the endpoint is deliberately dead)."""
         resp = client.post("/api/stock/download", json={})
-        assert resp.status_code == 400
-        assert resp.get_json()["error"] == "MISSING_PARAM"
+        assert resp.status_code == 501
+        assert resp.get_json()["error"] == "NOT_IMPLEMENTED"

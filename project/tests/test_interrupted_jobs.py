@@ -60,7 +60,11 @@ class TestInterruptedList:
 
 
 class TestRetryAll:
-    def test_requeues_interrupted_jobs(self):
+    def test_marks_interrupted_jobs_needs_resubmit(self):
+        """Round-15 H2: retry-all used to set status='queued' without
+        re-dispatching (the original _fn/_args were already popped), so
+        jobs got stuck 'queued' forever. Now they're marked
+        'needs_resubmit' and the UI nudges the user to re-trigger."""
         jobs = {
             "j1": {"status": "interrupted", "kind": "social_export", "log": [], "error": "crash", "finished_at": "t"},
         }
@@ -72,9 +76,9 @@ class TestRetryAll:
             assert data["ok"] is True
             assert data["retried"] == 1
             assert data["failed"] == 0
-        assert jobs["j1"]["status"] == "queued"
-        assert jobs["j1"]["error"] == ""
-        assert ("j1", "job_requeued") in snapshots
+        assert jobs["j1"]["status"] == "needs_resubmit"
+        assert "中断任务无法自动恢复" in jobs["j1"]["error"]
+        assert ("j1", "job_needs_resubmit") in snapshots
 
     def test_skips_non_interrupted(self):
         jobs = {"j1": {"status": "done", "kind": "generic", "log": []}}

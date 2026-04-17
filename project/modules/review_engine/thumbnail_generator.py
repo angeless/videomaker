@@ -154,10 +154,10 @@ def generate_thumbnails(
         "duration_ms": int(duration * 1000),
     }
 
-    # Write metadata JSON alongside sprite
+    # Round-15: atomic write via shared helper.
+    from modules.app_api.param_utils import atomic_write_json
     meta_path = os.path.join(output_dir, "thumbnails.json")
-    with open(meta_path, "w", encoding="utf-8") as f:
-        json.dump(metadata, f, indent=2)
+    atomic_write_json(meta_path, metadata)
 
     logger.info("Thumbnail sprite generated: %s (%d frames)", sprite_path, frame_count)
     return metadata

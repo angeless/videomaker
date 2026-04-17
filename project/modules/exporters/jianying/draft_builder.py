@@ -157,9 +157,12 @@ class JianyingExportBuilder:
         content["materials"]["texts"] = materials_texts
         content["tracks"] = tracks_out
 
-        # Write files
+        # Round-15: atomic writes — crash mid-export used to corrupt the
+        # draft package, forcing the user to restart Jianying. Atomicity
+        # via tempfile + os.replace in the shared helper.
+        from modules.app_api.param_utils import atomic_write_json
         content_path = draft_dir / "draft_content.json"
-        content_path.write_text(json.dumps(content, ensure_ascii=False, indent=2), encoding="utf-8")
+        atomic_write_json(content_path, content)
 
         meta = make_draft_meta(self._name, self._width, self._height)
         meta["draft_id"] = content["id"]
@@ -167,7 +170,7 @@ class JianyingExportBuilder:
         meta["tm_draft_create"] = content["update_time"]
         meta["tm_draft_modified"] = content["update_time"]
         meta_path = draft_dir / "draft_meta_info.json"
-        meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+        atomic_write_json(meta_path, meta)
 
         _log.info("Jianying draft exported to %s", draft_dir)
         return {
