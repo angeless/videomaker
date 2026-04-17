@@ -136,7 +136,12 @@ function onEscKey(e) {
   if (e.key === 'Escape') skip()
 }
 onMounted(() => window.addEventListener('keydown', onEscKey))
-onUnmounted(() => window.removeEventListener('keydown', onEscKey))
+onUnmounted(() => {
+  window.removeEventListener('keydown', onEscKey)
+  // Stop the ingest job poll chain (Round-14).
+  _pollAlive = false
+  if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null }
+})
 
 function skip() {
   appStore.dismissOnboarding(true)
@@ -179,17 +184,25 @@ async function startIngest() {
   }
 }
 
+// Round-14: track the poll timer so onBeforeUnmount can stop the chain.
+// Previously the recursive setTimeout kept hitting /api/jobs/{id} after the
+// modal was dismissed, wasting network traffic + logging noise.
+let _pollTimer = null
+let _pollAlive = true
+
 async function pollIngestJob() {
   if (!ingestJobId.value) { ingestDone.value = true; return }
   const check = async () => {
+    if (!_pollAlive) return
     const data = await apiStore.api('GET', `/api/jobs/${ingestJobId.value}`)
+    if (!_pollAlive) return
     if (!data || data.status === 'done' || data.status === 'error') {
       ingestDone.value = true
       return
     }
-    setTimeout(check, 2000)
+    _pollTimer = setTimeout(check, 2000)
   }
-  setTimeout(check, 2000)
+  _pollTimer = setTimeout(check, 2000)
 }
 
 function shortenPath(p) {

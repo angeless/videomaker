@@ -191,9 +191,11 @@ class RenderManager:
             return
 
         concat_list = os.path.join(temp_dir, "concat.txt")
+        # Round-14: use escape-aware helper. Without this, a segment path
+        # with a single quote would inject arbitrary concat directives.
+        from modules.render_engine.concat_utils import concat_list_body
         with open(concat_list, "w") as f:
-            for p in segment_paths:
-                f.write(f"file '{p}'\n")
+            f.write(concat_list_body(segment_paths))
 
         cmd = [
             self._ffmpeg, "-y",

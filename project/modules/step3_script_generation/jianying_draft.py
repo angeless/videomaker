@@ -289,11 +289,10 @@ class JianyingDraftBuilder:
         """保存草稿到文件"""
         draft = self.build()
         output_path = Path(output_path)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(draft, f, ensure_ascii=False, indent=2)
-        
+        # Round-14: atomic write via shared helper.
+        from modules.app_api.param_utils import atomic_write_json
+        atomic_write_json(output_path, draft)
+
         return output_path
 
 

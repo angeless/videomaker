@@ -50,44 +50,80 @@ class PexelsAdapter:
 
     def search(self, query: str, **kwargs) -> Dict:
         import urllib.request
+        import urllib.parse
         import json
 
-        per_page = kwargs.get("per_page", 15)
-        orientation = kwargs.get("orientation", "")
-        min_duration = kwargs.get("min_duration", 0)
-        max_duration = kwargs.get("max_duration", 0)
+        per_page = int(kwargs.get("per_page", 15) or 15)
+        per_page = max(1, min(per_page, 80))  # Pexels API cap is 80
+        orientation = str(kwargs.get("orientation", "") or "").strip().lower()
+        if orientation and orientation not in ("landscape", "portrait", "square"):
+            orientation = ""
+        min_duration = int(kwargs.get("min_duration", 0) or 0)
+        max_duration = int(kwargs.get("max_duration", 0) or 0)
 
-        url = f"{self.API_BASE}/search?query={query}&per_page={per_page}"
+        # Round-14 P2: urlencode query — previously an unescaped query could
+        # inject additional Pexels params (e.g. "&api_key=attacker").
+        params = {
+            "query": str(query or ""),
+            "per_page": str(per_page),
+        }
         if orientation:
-            url += f"&orientation={orientation}"
+            params["orientation"] = orientation
         if min_duration:
-            url += f"&min_duration={min_duration}"
+            params["min_duration"] = str(min_duration)
         if max_duration:
-            url += f"&max_duration={max_duration}"
+            params["max_duration"] = str(max_duration)
+        url = f"{self.API_BASE}/search?{urllib.parse.urlencode(params)}"
 
         req = urllib.request.Request(url)
         req.add_header("Authorization", self.api_key)
 
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
-                return json.loads(resp.read())
+                # Cap body to 16MB — malicious/compromised endpoint could
+                # otherwise return a multi-GB payload to OOM the process.
+                raw = resp.read(16 * 1024 * 1024 + 1)
+                if len(raw) > 16 * 1024 * 1024:
+                    raise StockMediaError("Pexels search response too large")
+                return json.loads(raw)
         except (urllib.error.URLError, json.JSONDecodeError, OSError) as e:
             raise StockMediaError(f"Pexels search failed: {e}") from e
 
     def download(self, video_url: str, output_path: str) -> str:
         import urllib.request
+        import urllib.parse
 
+        # Round-14 P2: validate download URL. Previously accepted ANY URL
+        # (SSRF via http://169.254.169.254 / http://127.0.0.1/ etc.)
+        parsed = urllib.parse.urlparse(str(video_url or ""))
+        if parsed.scheme != "https":
+            raise StockMediaError(f"stock download must be https://, got {parsed.scheme!r}")
+        host = (parsed.hostname or "").lower()
+        if not (host == "videos.pexels.com" or host.endswith(".pexels.com")):
+            raise StockMediaError(
+                f"stock download host must be *.pexels.com, got {host!r}"
+            )
+
+        # Atomic write via .part → rename so a crash mid-download doesn't
+        # leave a truncated file that ffmpeg might silently accept.
+        import os as _os
+        tmp_path = f"{output_path}.part"
         try:
             req = urllib.request.Request(video_url)
             with urllib.request.urlopen(req, timeout=120) as resp:
-                with open(output_path, "wb") as f:
+                with open(tmp_path, "wb") as f:
                     while True:
                         chunk = resp.read(8192)
                         if not chunk:
                             break
                         f.write(chunk)
+            _os.replace(tmp_path, output_path)
             return output_path
         except (urllib.error.URLError, OSError) as e:
+            try:
+                _os.unlink(tmp_path)
+            except OSError:
+                pass
             raise StockMediaError(f"Download failed: {e}") from e
 
 

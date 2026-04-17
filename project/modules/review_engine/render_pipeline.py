@@ -207,11 +207,11 @@ def render_rough_cut(
             _transcode_segment(seg.source_path, seg.start_ms, seg.end_ms, seg_path, ffmpeg_bin)
             segment_paths.append(seg_path)
 
-        # Step 2: Create concat list
+        # Step 2: Create concat list (Round-14: quote-escape via shared helper)
+        from modules.render_engine.concat_utils import concat_list_body
         concat_list = os.path.join(tmp_dir, "concat.txt")
         with open(concat_list, "w") as f:
-            for path in segment_paths:
-                f.write(f"file '{path}'\n")
+            f.write(concat_list_body(segment_paths))
 
         # Step 3: Concatenate
         if on_progress:

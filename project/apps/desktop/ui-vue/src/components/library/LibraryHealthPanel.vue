@@ -248,7 +248,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useApiStore } from '../../stores/api.js'
 
 const api = useApiStore()
@@ -347,6 +347,11 @@ const thumbLoading = ref(false)
 const thumbProgress = ref(0)
 const thumbResult = ref(null)
 
+// Round-14: track the thumbnail-generation poll so onBeforeUnmount can
+// stop it. Previously navigating away from the library view left the
+// 2s interval hitting /api/jobs/* until the job finished.
+let _thumbPoll = null
+
 async function generateThumbnails() {
   thumbLoading.value = true
   thumbProgress.value = 0
@@ -355,16 +360,21 @@ async function generateThumbnails() {
     const resp = await api.api('POST', '/api/library/thumbnails/generate')
     const jobId = resp?.job_id
     if (!jobId) { thumbLoading.value = false; return }
-    const poll = setInterval(async () => {
+    _thumbPoll = setInterval(async () => {
       try {
         const job = await api.api('GET', `/api/jobs/${jobId}`)
         thumbProgress.value = job.progress || 0
         if (job.status === 'done' || job.status === 'error') {
-          clearInterval(poll)
+          clearInterval(_thumbPoll)
+          _thumbPoll = null
           thumbLoading.value = false
           thumbResult.value = job.result || null
         }
-      } catch { clearInterval(poll); thumbLoading.value = false }
+      } catch {
+        clearInterval(_thumbPoll)
+        _thumbPoll = null
+        thumbLoading.value = false
+      }
     }, 2000)
   } catch {
     thumbLoading.value = false
@@ -390,6 +400,14 @@ function toggle() {
 watch(expanded, (val) => {
   if (val && !health.value) {
     loadHealth()
+  }
+})
+
+// Round-14: stop the thumbnail-generation interval on unmount.
+onBeforeUnmount(() => {
+  if (_thumbPoll) {
+    clearInterval(_thumbPoll)
+    _thumbPoll = null
   }
 })
 </script>

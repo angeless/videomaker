@@ -48,12 +48,22 @@ class RegionDescription:
 _FALLBACK = RegionDescription(summary="[画面区域]", objects=[], scene_type="", visual_issues=[])
 
 
+# Round-14 P2: bound + lock the VLM cache.
+# Previously unbounded (grew for process lifetime) and read/written without
+# a lock (torn reads under Flask's threaded server). OrderedDict + Lock
+# gives LRU semantics AND thread safety in one structure.
+_VLM_CACHE_MAX = 512
+
+
 class VLMAnalyzer:
     """VLM-powered region analysis with caching and graceful degradation."""
 
     def __init__(self, adapter: Optional[Any] = None):
+        import threading as _threading
+        from collections import OrderedDict as _OrderedDict
         self._adapter = adapter
-        self._cache: Dict[str, Tuple[float, RegionDescription]] = {}
+        self._cache: "_OrderedDict[str, Tuple[float, RegionDescription]]" = _OrderedDict()
+        self._cache_lock = _threading.Lock()
 
     def describe_region(
         self,
@@ -74,13 +84,18 @@ class VLMAnalyzer:
                 summary="[画面区域]", objects=[], scene_type="", visual_issues=[]
             )
 
-        # Check cache
+        # Check cache (thread-safe + LRU-promoting)
         cache_key = self._make_cache_key(image, context)
-        cached = self._cache.get(cache_key)
-        if cached is not None:
-            ts, desc = cached
-            if time.monotonic() - ts < CACHE_TTL_S:
-                return desc
+        with self._cache_lock:
+            cached = self._cache.get(cache_key)
+            if cached is not None:
+                ts, desc = cached
+                if time.monotonic() - ts < CACHE_TTL_S:
+                    # Promote to MRU
+                    self._cache.move_to_end(cache_key)
+                    return desc
+                # Expired — drop it
+                self._cache.pop(cache_key, None)
 
         # Build prompt with context
         prompt = self._build_prompt(context)
@@ -101,7 +116,11 @@ class VLMAnalyzer:
         desc = self._parse_response(resp.text)
 
         # Update cache
-        self._cache[cache_key] = (time.monotonic(), desc)
+        with self._cache_lock:
+            self._cache[cache_key] = (time.monotonic(), desc)
+            # Evict oldest when over cap (LRU)
+            while len(self._cache) > _VLM_CACHE_MAX:
+                self._cache.popitem(last=False)
 
         return desc
 

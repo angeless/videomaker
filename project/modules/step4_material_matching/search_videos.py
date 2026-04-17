@@ -33,54 +33,62 @@ class VideoSearch:
         query_lower = query.lower()
         
         for video_id, video_data in self.index.get("videos", {}).items():
+            # Round-14: defensive accessors. Previously unconditional
+            # subscripts raised KeyError on any malformed entry (e.g. old
+            # schema or hand-edited index), aborting the ENTIRE search.
+            # Now skip malformed entries and continue.
+            if not isinstance(video_data, dict):
+                continue
+            file_info = video_data.get("file_info") or {}
+            index_data = video_data.get("index_data") or {}
+            content = video_data.get("content_summary") or {}
+            tech = video_data.get("technical_summary") or {}
+
+            raw_filename = file_info.get("filename") or ""
+            if not raw_filename:
+                continue
+
             match_score = 0
             match_details = []
-            
-            # 在文件名中搜索
-            filename = video_data["file_info"]["filename"].lower()
+
+            filename = raw_filename.lower()
             if query_lower in filename:
                 match_score += 10
-                match_details.append(f"文件名匹配: {video_data['file_info']['filename']}")
-            
-            # 在标签中搜索
-            tags = video_data["index_data"]["tags"]
+                match_details.append(f"文件名匹配: {raw_filename}")
+
+            tags = index_data.get("tags") or []
             for tag in tags:
-                if query_lower in tag.lower():
+                if query_lower in str(tag).lower():
                     match_score += 5
                     match_details.append(f"标签匹配: {tag}")
-            
-            # 在搜索关键词中搜索
-            keywords = video_data["index_data"]["search_keywords"]
+
+            keywords = index_data.get("search_keywords") or []
             for keyword in keywords:
                 if query_lower in str(keyword).lower():
                     match_score += 3
                     match_details.append(f"关键词匹配: {keyword}")
-            
-            # 在内容摘要中搜索
-            content = video_data["content_summary"]
-            for note in content.get("notes", []):
-                if query_lower in note.lower():
+
+            for note in (content.get("notes") or []):
+                if query_lower in str(note).lower():
                     match_score += 2
                     match_details.append(f"内容匹配: {note}")
-            
-            # 在技术信息中搜索
-            tech = video_data["technical_summary"]
-            resolution = tech.get("resolution", "").lower()
+
+            resolution = str(tech.get("resolution") or "").lower()
             if query_lower in resolution:
                 match_score += 4
                 match_details.append(f"分辨率匹配: {resolution}")
-            
+
             if match_score > 0:
                 results.append({
                     "video_id": video_id,
-                    "filename": video_data["file_info"]["filename"],
+                    "filename": raw_filename,
                     "match_score": match_score,
                     "match_details": match_details,
-                    "preview_info": video_data["index_data"]["preview_info"],
-                    "content_summary": video_data["content_summary"],
+                    "preview_info": index_data.get("preview_info") or {},
+                    "content_summary": content,
                     "file_info": {
-                        "size": video_data["file_info"]["file_size_human"],
-                        "created": video_data["file_info"]["created_time"][:10]
+                        "size": file_info.get("file_size_human") or "",
+                        "created": (file_info.get("created_time") or "")[:10],
                     },
                     "usability_score": video_data.get("usability_score"),
                     "usability_tier": video_data.get("usability_tier"),
@@ -108,21 +116,28 @@ class VideoSearch:
         
         results = []
         for video_id, video_data in self.index.get("videos", {}).items():
-            video_tags = video_data["index_data"]["tags"]
-            
-            # 计算标签匹配度
+            # Round-14: defensive accessors — skip malformed entries.
+            if not isinstance(video_data, dict):
+                continue
+            file_info = video_data.get("file_info") or {}
+            index_data = video_data.get("index_data") or {}
+            video_tags = index_data.get("tags") or []
+            raw_filename = file_info.get("filename") or ""
+            if not raw_filename:
+                continue
+
             matched_tags = set(video_tags) & set(tags)
             if matched_tags:
                 match_score = len(matched_tags) * 5
-                
+
                 results.append({
                     "video_id": video_id,
-                    "filename": video_data["file_info"]["filename"],
+                    "filename": raw_filename,
                     "match_score": match_score,
                     "matched_tags": list(matched_tags),
                     "all_tags": video_tags,
-                    "preview_info": video_data["index_data"]["preview_info"],
-                    "content_summary": video_data["content_summary"]
+                    "preview_info": index_data.get("preview_info") or {},
+                    "content_summary": video_data.get("content_summary") or {},
                 })
         
         results.sort(key=lambda x: x["match_score"], reverse=True)
@@ -135,32 +150,37 @@ class VideoSearch:
         
         results = []
         for video_id, video_data in self.index.get("videos", {}).items():
-            resolution = video_data["technical_summary"]["resolution"]
-            
-            # 解析分辨率
+            # Round-14: defensive accessors.
+            if not isinstance(video_data, dict):
+                continue
+            tech = video_data.get("technical_summary") or {}
+            resolution = str(tech.get("resolution") or "")
+
             try:
                 if "x" in resolution:
-                    width_str, height_str = resolution.split("x")
+                    width_str, height_str = resolution.split("x", 1)
                     width = int(width_str)
                     height = int(height_str)
-                    
+
                     match = True
                     if min_width and width < min_width:
                         match = False
                     if min_height and height < min_height:
                         match = False
-                    
+
                     if match:
+                        file_info = video_data.get("file_info") or {}
+                        index_data = video_data.get("index_data") or {}
                         results.append({
                             "video_id": video_id,
-                            "filename": video_data["file_info"]["filename"],
+                            "filename": file_info.get("filename") or "",
                             "resolution": resolution,
                             "width": width,
                             "height": height,
-                            "preview_info": video_data["index_data"]["preview_info"],
-                            "content_summary": video_data["content_summary"]
+                            "preview_info": index_data.get("preview_info") or {},
+                            "content_summary": video_data.get("content_summary") or {},
                         })
-            except Exception:
+            except (ValueError, TypeError):
                 continue
         
         # 按分辨率排序（从高到低）

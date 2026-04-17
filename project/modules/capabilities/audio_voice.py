@@ -941,7 +941,11 @@ def mix_voiceover_to_video(
     bgm_input = ""
     if bgm_raw:
         if bgm_is_remote:
-            bgm_input = bgm_raw
+            # Round-14 P2: previously bgm_raw flowed straight to ffmpeg -i.
+            # ffmpeg supports file:// / concat: / pipe: protocols, so a crafted
+            # URL could read local files or exec through input demuxers.
+            # Route through the existing remote-endpoint validator.
+            bgm_input = _validate_remote_endpoint(bgm_raw)
         else:
             bgm_path = Path(bgm_raw).expanduser().resolve()
             bgm_input = str(bgm_path)
@@ -957,7 +961,15 @@ def mix_voiceover_to_video(
     has_origin_audio = _probe_has_audio_stream(str(in_path), ffprobe_bin=ffprobe_bin)
     input_duration_s = _probe_media_duration(str(in_path), ffprobe_bin=ffprobe_bin)
 
-    cmd = [ffmpeg_bin, "-y", "-i", str(in_path), "-i", str(nar_path)]
+    # Round-14: restrict ffmpeg input protocols to exactly what we need.
+    # Without this, the demuxer auto-accepts concat: / subfile: / data: etc.,
+    # any of which could be weaponized by a crafted remote URL.
+    cmd = [
+        ffmpeg_bin, "-y",
+        "-protocol_whitelist", "file,http,https,tcp,tls,crypto",
+        "-i", str(in_path),
+        "-i", str(nar_path),
+    ]
     bgm_present = bool(bgm_input)
     bgm_loop_requested = bool(bgm_loop)
     bgm_loop_applied = bgm_loop_requested and bgm_present and not bgm_is_remote

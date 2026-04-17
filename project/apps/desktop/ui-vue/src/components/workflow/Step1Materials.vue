@@ -185,7 +185,7 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '../../stores/app.js'
 import { useWorkflowStore } from '../../stores/workflow.js'
@@ -237,6 +237,15 @@ onMounted(async () => {
     await searchAssets()
   } else {
     sourceMode.value = 'import'
+  }
+})
+
+// Round-14: cancel any in-flight poll chains on unmount.
+onBeforeUnmount(() => {
+  _pollAlive = false
+  if (_pollTimer) {
+    clearTimeout(_pollTimer)
+    _pollTimer = null
   }
 })
 
@@ -470,11 +479,17 @@ async function pollUntilDone(jobId) {
         resolve()
         return
       }
-      setTimeout(poll, 1500)
+      if (!_pollAlive) { resolve(); return }
+      _pollTimer = setTimeout(poll, 1500)
     }
     poll()
   })
 }
+
+// Round-14: track poll timers so navigation away from step 1 doesn't
+// leave setTimeout chains hitting /api/workflow/* forever.
+let _pollTimer = null
+let _pollAlive = true
 
 // ── 等待 workflow job 完成 ──
 function waitForWorkflowJob() {
@@ -482,6 +497,7 @@ function waitForWorkflowJob() {
     let ticks = 0
     function check() {
       ticks++
+      if (!_pollAlive) { resolve(); return }
       // Sync progress display with workflow store
       if (workflow.jobStatus) {
         importStatus.value = `正在分析素材… ${workflow.jobStatus}`
@@ -493,10 +509,10 @@ function waitForWorkflowJob() {
         resolve()
         return
       }
-      setTimeout(check, 1000)
+      _pollTimer = setTimeout(check, 1000)
     }
     // Give the poll a moment to start
-    setTimeout(check, 500)
+    _pollTimer = setTimeout(check, 500)
   })
 }
 

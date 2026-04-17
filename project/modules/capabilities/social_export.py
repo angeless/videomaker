@@ -468,6 +468,30 @@ def build_export_plan(
     }
 
 
+# Round-14 P2: argv[0] allowlist for export plans. run_export_plan used to
+# execute `job["command"]` verbatim — if a plan was ever deserialized from
+# untrusted JSON (e.g. imported config, tampered cache file), the attacker
+# fully controlled argv including the binary. Restrict argv[0] to the
+# ffmpeg/ffprobe family (same allowlist philosophy as sanitize_ffmpeg_bin).
+_EXPORT_ARGV0_ALLOWLIST = ("ffmpeg", "ffprobe", "ffmpeg.exe", "ffprobe.exe")
+
+
+def _is_safe_export_argv0(argv0: str) -> bool:
+    import os as _os
+    v = str(argv0 or "").strip()
+    if not v:
+        return False
+    # Plain name on PATH
+    if v in _EXPORT_ARGV0_ALLOWLIST:
+        return True
+    # Absolute path to ffmpeg/ffprobe binary that actually exists
+    if _os.path.isabs(v) and _os.path.isfile(v):
+        base = _os.path.basename(v).lower()
+        if base in _EXPORT_ARGV0_ALLOWLIST:
+            return True
+    return False
+
+
 def run_export_plan(plan: Dict, timeout_seconds: float = 3600) -> Dict:
     """Execute export jobs sequentially and return status summary."""
     jobs = list(plan.get("jobs", []))
@@ -481,6 +505,15 @@ def run_export_plan(plan: Dict, timeout_seconds: float = 3600) -> Dict:
         cmd = list(job.get("command", []))
         if not cmd:
             results.append({"index": idx, "status": "failed", "error": "Missing command", **job})
+            failed += 1
+            continue
+        # Round-14: reject export plans whose argv[0] isn't ffmpeg/ffprobe.
+        if not _is_safe_export_argv0(cmd[0]):
+            results.append({
+                "index": idx, "status": "failed",
+                "error": f"unsafe argv[0]: {cmd[0]!r} — only ffmpeg/ffprobe allowed",
+                **job,
+            })
             failed += 1
             continue
         try:

@@ -77,10 +77,9 @@ def convert_managevideos_to_videoeditor(input_file: str, output_file: str):
     
     # 保存
     output_path = Path(output_file)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    with open(output_path, 'w', encoding='utf-8') as f:
-        json.dump(target_data, f, ensure_ascii=False, indent=2)
+    # Round-14: atomic write via shared helper.
+    from modules.app_api.param_utils import atomic_write_json
+    atomic_write_json(output_path, target_data)
     
     logger.info("转换完成: %s", output_path)
     logger.info("   共 %s 个视频", len(target_data['videos']))
@@ -269,10 +268,10 @@ def merge_indexes(index_files: list, output_file: str):
                     merged["videos"][vid] = vdata
     
     merged["total_videos"] = len(merged["videos"])
-    
-    # 保存
-    with open(output_file, 'w', encoding='utf-8') as f:
-        json.dump(merged, f, ensure_ascii=False, indent=2)
+
+    # Round-14: atomic write via shared helper.
+    from modules.app_api.param_utils import atomic_write_json
+    atomic_write_json(output_file, merged)
     
     logger.info("合并完成: %s", output_file)
     logger.info("   共 %s 个视频", merged['total_videos'])

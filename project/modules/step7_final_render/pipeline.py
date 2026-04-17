@@ -222,9 +222,10 @@ class RenderPipeline:
             )
         else:
             concat_file = str(self._temp_dir / "concat.txt")
+            # Round-14: quote-escape via shared helper.
+            from modules.render_engine.concat_utils import concat_list_body
             with open(concat_file, "w", encoding="utf-8") as f:
-                for s in segs:
-                    f.write(f"file '{s}'\n")
+                f.write(concat_list_body(segs))
 
             cmd2 = [
                 self.ffmpeg, "-y",
@@ -362,9 +363,10 @@ class RenderPipeline:
         if len(segs) > 24:
             logger.warning("片段过多，转场自动降级为硬切拼接")
             concat_file = str(self._temp_dir / "concat_xfade_fallback.txt")
+            # Round-14: quote-escape via shared helper.
+            from modules.render_engine.concat_utils import concat_list_body
             with open(concat_file, "w", encoding="utf-8") as f:
-                for s in segs:
-                    f.write(f"file '{s}'\n")
+                f.write(concat_list_body(segs))
             cmd_fallback = [
                 self.ffmpeg, "-y",
                 "-f", "concat", "-safe", "0",

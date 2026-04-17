@@ -271,7 +271,10 @@ class AdaptiveRewriter:
         Returns:
             (重写后的剧本, 修改记录列表)
         """
-        rewritten = json.loads(json.dumps(script))  # 深拷贝
+        # Round-14: use copy.deepcopy — previously json.loads(json.dumps(...))
+        # failed on non-JSON-safe values (datetime, set, etc.).
+        import copy as _copy
+        rewritten = _copy.deepcopy(script)
         changes = []
         
         for i, clip in enumerate(rewritten.get("clips", [])):
@@ -479,9 +482,9 @@ def main():
                 logger.info("    原文: %s...", change['original'][:50])
                 logger.info("    改写: %s...", change['rewritten'][:50])
         
-        # 保存
-        with open(args.output, 'w', encoding='utf-8') as f:
-            json.dump(rewritten, f, ensure_ascii=False, indent=2)
+        # Round-14: atomic write via shared helper.
+        from modules.app_api.param_utils import atomic_write_json
+        atomic_write_json(args.output, rewritten)
         
         logger.info("重写完成: %s", args.output)
     else:

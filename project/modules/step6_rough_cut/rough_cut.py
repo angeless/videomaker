@@ -120,10 +120,17 @@ def build_rough_cut(
             raise RuntimeError("没有可用片段生成粗剪")
 
         concat_list = tmp / "concat.txt"
-        concat_list.write_text("\n".join(f"file '{p}'" for p in segs), encoding="utf-8")
+        # Round-14: quote-escape per FFmpeg concat syntax.
+        from modules.render_engine.concat_utils import concat_list_body
+        concat_list.write_text(concat_list_body(segs), encoding="utf-8")
         cmd2 = [ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", str(concat_list), "-c", "copy", str(rough_path)]
         _check_cancel()
-        subprocess.run(cmd2, capture_output=True, check=True, timeout=600)
+        try:
+            r = subprocess.run(cmd2, capture_output=True, check=True, timeout=600)
+        except subprocess.CalledProcessError as exc:
+            # Round-14: previously raw CalledProcessError leaked to caller.
+            stderr_tail = (exc.stderr or b"").decode("utf-8", errors="replace")[-500:]
+            raise RuntimeError(f"粗剪合并失败: {stderr_tail}") from exc
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

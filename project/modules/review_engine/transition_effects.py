@@ -126,8 +126,10 @@ def _concat_cut(ffmpeg: str, seg_a: str, seg_b: str, output: str) -> str:
     # when the faster caller's os.unlink ran first.
     fd, list_file = tempfile.mkstemp(prefix="concat_list_", suffix=".txt")
     try:
+        # Round-14: quote-escape via shared helper.
+        from modules.render_engine.concat_utils import concat_list_body
         with os.fdopen(fd, "w") as f:
-            f.write(f"file '{seg_a}'\nfile '{seg_b}'\n")
+            f.write(concat_list_body([seg_a, seg_b]))
         cmd = [
             ffmpeg, "-y",
             "-f", "concat", "-safe", "0", "-i", list_file,

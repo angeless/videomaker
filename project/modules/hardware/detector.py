@@ -142,7 +142,14 @@ def _macos_available_memory(total_gb: float) -> float:
     """Parse vm_stat for free + inactive pages."""
     try:
         out = subprocess.check_output(["vm_stat"], text=True, timeout=5)
-        page_size = 16384  # Apple Silicon default
+        # Round-14: use OS-reported page size rather than hardcoded 16384
+        # (which is only correct on Apple Silicon; Intel macOS uses 4096).
+        # The regex fallback below will grab the actual page size from
+        # vm_stat's header on modern macOS; use sysconf as last resort.
+        try:
+            page_size = os.sysconf("SC_PAGESIZE")  # correct per-arch
+        except (AttributeError, ValueError, OSError):
+            page_size = 4096  # safe universal fallback
         m = re.search(r"page size of (\d+) bytes", out)
         if m:
             page_size = int(m.group(1))
