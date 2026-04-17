@@ -11,6 +11,7 @@ import subprocess
 import re
 from typing import Dict, Optional
 
+from modules.render_engine.concat_utils import safe_ffmpeg_arg
 from modules.review_engine.contracts import DetectionResult, VideoType
 from modules.review_engine.exceptions import VideoDetectionError
 
@@ -50,7 +51,7 @@ def _get_audio_duration(video_path: str, ffmpeg_bin: str) -> Optional[float]:
         "-print_format", "json",
         "-show_streams",
         "-select_streams", "a",
-        video_path,
+        safe_ffmpeg_arg(video_path),
     ]
     try:
         result = subprocess.run(
@@ -92,7 +93,7 @@ def _get_video_duration(video_path: str, ffmpeg_bin: str) -> float:
         "-v", "quiet",
         "-print_format", "json",
         "-show_format",
-        video_path,
+        safe_ffmpeg_arg(video_path),
     ]
     try:
         result = subprocess.run(
@@ -124,10 +125,16 @@ def _detect_silence_segments(
     min_duration: float = MIN_SILENCE_DURATION_S,
 ) -> list:
     """Run FFmpeg silencedetect, return list of (start, end, duration) tuples."""
+    # Round-15.5: clamp noise_db/min_duration to numeric ranges so the
+    # f-string interpolation into the -af filter cannot smuggle filter
+    # graph fragments, and safe_ffmpeg_arg prevents leading-dash argv
+    # injection on video_path.
+    noise_db_i = int(noise_db)
+    min_duration_f = max(0.01, float(min_duration))
     cmd = [
         ffmpeg_bin,
-        "-i", video_path,
-        "-af", f"silencedetect=noise={noise_db}dB:d={min_duration}",
+        "-i", safe_ffmpeg_arg(video_path),
+        "-af", f"silencedetect=noise={noise_db_i}dB:d={min_duration_f:.3f}",
         "-f", "null", "-",
     ]
     try:

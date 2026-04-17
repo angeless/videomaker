@@ -11,6 +11,7 @@ import shutil
 import subprocess
 from typing import Dict, List, Optional, Tuple
 
+from modules.render_engine.concat_utils import safe_ffmpeg_arg
 from .contracts import Segment
 from .exceptions import RenderError
 
@@ -108,17 +109,18 @@ def mix_bgm(
         f"[0:a][bgm]amix=inputs=2:normalize=0[out]"
     )
 
+    # Round-15.5: safe_ffmpeg_arg shields against leading-dash argv injection.
     cmd = [
         ffmpeg, "-y",
-        "-i", video_path,
-        "-i", bgm_path,
+        "-i", safe_ffmpeg_arg(video_path),
+        "-i", safe_ffmpeg_arg(bgm_path),
         "-filter_complex", bgm_filter,
         "-map", "0:v", "-map", "[out]",
         "-c:v", "copy",
         "-ar", "44100",
         "-c:a", "aac", "-b:a", "128k",
         "-shortest",
-        output_path,
+        safe_ffmpeg_arg(output_path),
     ]
 
     try:
@@ -135,7 +137,8 @@ def _get_duration(path: str, ffmpeg: str) -> float:
     ffprobe = ffmpeg.replace("ffmpeg", "ffprobe")
     try:
         result = subprocess.run(
-            [ffprobe, "-v", "quiet", "-print_format", "json", "-show_format", path],
+            [ffprobe, "-v", "quiet", "-print_format", "json",
+             "-show_format", safe_ffmpeg_arg(path)],
             capture_output=True, text=True, timeout=30,
         )
         data = json.loads(result.stdout)

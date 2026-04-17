@@ -15,6 +15,46 @@ from modules.app_api.param_utils import parse_int_param, safe_error_response
 logger = logging.getLogger(__name__)
 
 
+# Round-15.5: denylist-style guard for user-supplied ingest paths.
+# The app is desktop-local (user runs as themselves) so we cannot
+# require an allowlist without breaking legitimate imports from
+# arbitrary user dirs. But a local-token holder (or stored-XSS pivot)
+# could previously walk /etc, ~/Library, /root, etc. and exfiltrate
+# file contents via library metadata responses. Rejecting system and
+# sensitive user paths plugs that without hurting real users.
+_INGEST_DENY_PREFIXES = (
+    "/etc", "/root", "/proc", "/sys", "/dev",
+    "/System", "/Library",
+    "/private/etc", "/private/var/db", "/private/var/root",
+    "/private/var/log", "/private/var/audit",
+    "/usr/bin", "/usr/sbin", "/bin", "/sbin",
+)
+
+
+def _is_safe_ingest_path(raw: str) -> tuple[bool, str]:
+    """Return (ok, reason). Rejects system paths and credential dirs.
+
+    Caller should pass the user-supplied string; we do the resolve here
+    so symlink traversal via ``~`` or ``../`` is normalized first.
+    """
+    if not raw:
+        return False, "path is empty"
+    try:
+        resolved = str(Path(raw).expanduser().resolve())
+    except (OSError, RuntimeError) as exc:
+        return False, f"cannot resolve: {exc}"
+    for bad in _INGEST_DENY_PREFIXES:
+        if resolved == bad or resolved.startswith(bad + "/"):
+            return False, f"path under system prefix {bad}"
+    # Also block known credential directories under home
+    home = str(Path.home())
+    for suffix in (".ssh", ".aws", ".gnupg", ".kube", ".config/gcloud"):
+        bad_home = f"{home}/{suffix}"
+        if resolved == bad_home or resolved.startswith(bad_home + "/"):
+            return False, f"path under credential dir ~/{suffix}"
+    return True, ""
+
+
 def create_library_blueprint(
     *,
     library_getter: Callable[[], Any],
@@ -149,8 +189,15 @@ def create_library_blueprint(
         asset_id = (request.args.get("asset_id", "") or "").strip()
         if not asset_id:
             return jsonify({"error": "asset_id is required"}), 400
+        # Round-15.5: raw int() on query data used to 500 on "?tag_id=abc";
+        # silently drop non-numeric tag_id rather than erroring.
         tag_id_str = request.args.get("tag_id")
-        tag_id = int(tag_id_str) if tag_id_str else None
+        tag_id = None
+        if tag_id_str:
+            try:
+                tag_id = int(tag_id_str)
+            except (TypeError, ValueError):
+                tag_id = None
         return jsonify(_library().get_evidence_chain(asset_id, tag_id=tag_id))
 
     # ── Phase 5: Custom Tag CRUD ──
@@ -282,6 +329,10 @@ def create_library_blueprint(
         max_results = parse_int_param(data.get("max_results", 30), default=30, min_val=1, max_val=200)
         if not source_path:
             return jsonify({"error": "path 不能为空"}), 400
+        # Round-15.5: reject system/credential paths before triggering a walk.
+        _ok, _why = _is_safe_ingest_path(source_path)
+        if not _ok:
+            return jsonify({"error": "path 被拒绝", "reason": _why}), 400
         running = running_heavy_jobs_getter()
         if running:
             return (
@@ -328,6 +379,10 @@ def create_library_blueprint(
 
         if not source_path:
             return jsonify({"error": "path 不能为空"}), 400
+        # Round-15.5: reject system/credential paths before triggering a walk.
+        _ok, _why = _is_safe_ingest_path(source_path)
+        if not _ok:
+            return jsonify({"error": "path 被拒绝", "reason": _why}), 400
         root = Path(source_path).expanduser().resolve()
         if not root.exists():
             return jsonify({"error": f"路径不存在: {root}"}), 400
@@ -395,6 +450,10 @@ def create_library_blueprint(
         max_results = parse_int_param(data.get("max_results", 30), default=30, min_val=1, max_val=300)
         if not source_path:
             return jsonify({"error": "path 不能为空"}), 400
+        # Round-15.5: reject system/credential paths before triggering a walk.
+        _ok, _why = _is_safe_ingest_path(source_path)
+        if not _ok:
+            return jsonify({"error": "path 被拒绝", "reason": _why}), 400
         running = running_heavy_jobs_getter()
         if running:
             return (
@@ -441,6 +500,10 @@ def create_library_blueprint(
 
         if not source_path:
             return jsonify({"error": "path 不能为空"}), 400
+        # Round-15.5: reject system/credential paths before triggering a walk.
+        _ok, _why = _is_safe_ingest_path(source_path)
+        if not _ok:
+            return jsonify({"error": "path 被拒绝", "reason": _why}), 400
         root = Path(source_path).expanduser().resolve()
         if not root.exists():
             return jsonify({"error": f"路径不存在: {root}"}), 400
@@ -502,6 +565,10 @@ def create_library_blueprint(
         max_videos = parse_int_param(data.get("max_videos", 30), default=30, min_val=1, max_val=200)
         if not source_path:
             return jsonify({"error": "path 不能为空"}), 400
+        # Round-15.5: reject system/credential paths before triggering a walk.
+        _ok, _why = _is_safe_ingest_path(source_path)
+        if not _ok:
+            return jsonify({"error": "path 被拒绝", "reason": _why}), 400
         running = running_heavy_jobs_getter()
         if running:
             return jsonify({"error": "已有重任务运行中，请等待完成后再预览", "running_jobs": running}), 409
@@ -526,6 +593,10 @@ def create_library_blueprint(
         max_videos = parse_int_param(data.get("max_videos", 600), default=600, min_val=1, max_val=5000)
         if not source_path:
             return jsonify({"error": "path 不能为空"}), 400
+        # Round-15.5: reject system/credential paths before triggering a walk.
+        _ok, _why = _is_safe_ingest_path(source_path)
+        if not _ok:
+            return jsonify({"error": "path 被拒绝", "reason": _why}), 400
         root = Path(source_path).expanduser().resolve()
         if not root.exists():
             return jsonify({"error": f"路径不存在: {root}"}), 400
@@ -574,6 +645,10 @@ def create_library_blueprint(
         max_items = parse_int_param(data.get("max_items", 30), default=30, min_val=1, max_val=300)
         if not source_path:
             return jsonify({"error": "path 不能为空"}), 400
+        # Round-15.5: reject system/credential paths before triggering a walk.
+        _ok, _why = _is_safe_ingest_path(source_path)
+        if not _ok:
+            return jsonify({"error": "path 被拒绝", "reason": _why}), 400
         running = running_heavy_jobs_getter()
         if running:
             return jsonify({"error": "已有重任务运行中，请等待完成后再预览", "running_jobs": running}), 409
@@ -598,6 +673,10 @@ def create_library_blueprint(
         max_images = parse_int_param(data.get("max_images", 1200), default=1200, min_val=1, max_val=8000)
         if not source_path:
             return jsonify({"error": "path 不能为空"}), 400
+        # Round-15.5: reject system/credential paths before triggering a walk.
+        _ok, _why = _is_safe_ingest_path(source_path)
+        if not _ok:
+            return jsonify({"error": "path 被拒绝", "reason": _why}), 400
         root = Path(source_path).expanduser().resolve()
         if not root.exists():
             return jsonify({"error": f"路径不存在: {root}"}), 400

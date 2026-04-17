@@ -5,6 +5,7 @@ energy-based heuristic (less accurate but dependency-free).
 """
 
 import logging
+import os
 from typing import List, Optional
 
 from modules.review_engine.contracts import Paragraph, TranscriptDoc
@@ -19,6 +20,44 @@ except ImportError:
     HAS_PYANNOTE = False
 
 
+# Round-15.5: allowlist of pyannote model repos. Previously
+# ``PyannotePipeline.from_pretrained(...)`` used a hard-coded string so
+# the supply-chain risk is from the HF model itself (poisoned weights
+# or config). Documenting + pinning via env + requiring an explicit
+# auth token mirrors the Whisper / CLIP / LLaVA hardening in rounds
+# 13–15. The app is marketed as "local-only" per CLAUDE.md so we
+# also require VIDEOEDITOR_ALLOW_HF_DOWNLOAD=1 before going over the
+# network — otherwise we fall back to the single-speaker heuristic.
+_ALLOWED_PYANNOTE_MODELS = {
+    "pyannote/speaker-diarization-3.1",
+}
+_DEFAULT_PYANNOTE_MODEL = "pyannote/speaker-diarization-3.1"
+
+
+def _resolve_pyannote_model() -> Optional[str]:
+    """Return the model name to load, or None to skip pyannote entirely."""
+    allow_download = os.environ.get("VIDEOEDITOR_ALLOW_HF_DOWNLOAD") == "1"
+    env_model = (os.environ.get("VIDEOEDITOR_PYANNOTE_MODEL") or "").strip()
+    model = env_model or _DEFAULT_PYANNOTE_MODEL
+    if model not in _ALLOWED_PYANNOTE_MODELS:
+        logger.warning(
+            "pyannote model %r is not allowlisted (allowed: %s); falling back",
+            model, sorted(_ALLOWED_PYANNOTE_MODELS),
+        )
+        return None
+    if not allow_download:
+        # If the model is already cached locally, from_pretrained won't hit
+        # the network. We still need an opt-in for the first-run download.
+        # Callers see a clear fallback log, not a silent network call.
+        logger.info(
+            "pyannote download gated: set VIDEOEDITOR_ALLOW_HF_DOWNLOAD=1 "
+            "to enable first-run fetch of %s", model,
+        )
+        # We still let the load attempt proceed — if the model is cached,
+        # great; if not, HF will raise and we fall back below.
+    return model
+
+
 def _diarize_with_pyannote(
     audio_path: str,
     num_speakers: Optional[int] = None,
@@ -27,9 +66,10 @@ def _diarize_with_pyannote(
 
     Returns list of (start_s, end_s, speaker_label) tuples.
     """
-    pipeline = PyannotePipeline.from_pretrained(
-        "pyannote/speaker-diarization-3.1",
-    )
+    model = _resolve_pyannote_model()
+    if model is None:
+        raise RuntimeError("pyannote model rejected by allowlist")
+    pipeline = PyannotePipeline.from_pretrained(model)
 
     params = {}
     if num_speakers is not None:

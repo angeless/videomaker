@@ -22,6 +22,8 @@ import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from modules.render_engine.concat_utils import safe_ffmpeg_arg
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -124,7 +126,7 @@ def _analyze_clip_ffmpeg(video_path: str) -> Dict[str, Any]:
         "ffprobe", "-v", "error",
         "-select_streams", "v:0",
         "-show_entries", "stream=width,height",
-        "-of", "json", str(video_path),
+        "-of", "json", safe_ffmpeg_arg(str(video_path)),
     ]
     try:
         subprocess.run(cmd, capture_output=True, timeout=10)
@@ -317,12 +319,13 @@ def grade_video_ffmpeg(
     filter_chain = ",".join(filters)
 
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+    # Round-15.5: safe_ffmpeg_arg on both positional paths.
     cmd = [
-        "ffmpeg", "-y", "-i", str(input_path),
+        "ffmpeg", "-y", "-i", safe_ffmpeg_arg(str(input_path)),
         "-vf", filter_chain,
         "-c:v", "libx264", "-preset", "medium", "-crf", "18",
         "-c:a", "copy",
-        str(output_path),
+        safe_ffmpeg_arg(str(output_path)),
     ]
     try:
         r = subprocess.run(cmd, capture_output=True, timeout=300)

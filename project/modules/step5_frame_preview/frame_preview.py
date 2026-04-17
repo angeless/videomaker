@@ -4,8 +4,11 @@
 from pathlib import Path
 from typing import Callable, Dict, Optional
 import logging
+import math
 import re
 import subprocess
+
+from modules.render_engine.concat_utils import safe_ffmpeg_arg
 
 logger = logging.getLogger(__name__)
 
@@ -51,13 +54,29 @@ def generate_frame_previews(
             logger.warning("  片段 %s: 找不到 %s，跳过", idx, vid_id)
             continue
 
-        ss = clip.get("source_start", 0)
-        se = clip.get("source_end", ss + clip.get("duration", 5))
+        # Round-15.5: coerce seek time to a finite non-negative float so
+        # nan/inf can't reach the -ss flag; safe_ffmpeg_arg neutralizes
+        # leading-dash filenames from the video resolver.
+        try:
+            ss = float(clip.get("source_start", 0) or 0)
+            se = float(clip.get("source_end", ss + float(clip.get("duration", 5) or 5)))
+        except (TypeError, ValueError):
+            ss, se = 0.0, 5.0
         mid = (ss + se) / 2.0
+        if not math.isfinite(mid) or mid < 0:
+            mid = 0.0
 
         desc = re.sub(r"[^\w\u4e00-\u9fff]", "_", clip.get("scene_description", "clip"))[:20]
-        out_jpg = frames_dir / f"{idx:02d}_{desc}.jpg"
-        cmd = [ffmpeg, "-y", "-ss", str(mid), "-i", vid_path, "-vframes", "1", "-q:v", "2", str(out_jpg)]
+        # Also clamp idx to a non-negative int so filenames can't start with "-".
+        safe_idx = max(0, int(idx or 0))
+        out_jpg = frames_dir / f"{safe_idx:02d}_{desc}.jpg"
+        cmd = [
+            ffmpeg, "-y",
+            "-ss", f"{mid:.3f}",
+            "-i", safe_ffmpeg_arg(vid_path),
+            "-vframes", "1", "-q:v", "2",
+            safe_ffmpeg_arg(str(out_jpg)),
+        ]
         result = subprocess.run(cmd, capture_output=True, timeout=30)
         if result.returncode == 0:
             extracted += 1

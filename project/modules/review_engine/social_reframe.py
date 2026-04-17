@@ -10,6 +10,7 @@ import shutil
 import subprocess
 from typing import Dict, Optional
 
+from modules.render_engine.concat_utils import safe_ffmpeg_arg
 from .exceptions import RenderError
 
 logger = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ def _get_video_info(ffmpeg: str, path: str) -> Dict:
     ffprobe = ffmpeg.replace("ffmpeg", "ffprobe")
     cmd = [
         ffprobe, "-v", "quiet", "-print_format", "json",
-        "-show_streams", "-show_format", path,
+        "-show_streams", "-show_format", safe_ffmpeg_arg(path),
     ]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
@@ -80,6 +81,11 @@ def reframe(
     info = _get_video_info(ffmpeg, video_path)
     src_w, src_h = info["width"], info["height"]
     duration = info["duration"]
+    # Round-15.5: guard against zero/negative dims from malformed probe
+    if src_w <= 0 or src_h <= 0:
+        raise RenderError(
+            f"Invalid source dimensions {src_w}x{src_h} for {video_path}"
+        )
 
     plat = PLATFORMS[platform]
     target_w_ratio, target_h_ratio = plat["ratio"]
@@ -107,16 +113,16 @@ def reframe(
 
     cmd = [
         ffmpeg, "-y",
-        "-i", video_path,
+        "-i", safe_ffmpeg_arg(video_path),
         "-vf", f"crop={crop_w}:{crop_h}:{x_offset}:{y_offset}",
         "-c:v", "libx264", "-preset", "fast", "-crf", "23",
         "-c:a", "copy",
     ]
 
     if max_dur and duration > max_dur:
-        cmd.extend(["-t", str(max_dur)])
+        cmd.extend(["-t", str(int(max_dur))])
 
-    cmd.append(output_path)
+    cmd.append(safe_ffmpeg_arg(output_path))
 
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
     if result.returncode != 0:

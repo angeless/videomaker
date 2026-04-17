@@ -10,6 +10,7 @@ import os
 import subprocess
 from typing import Any, Dict, List, Optional
 
+from modules.render_engine.concat_utils import safe_ffmpeg_arg
 from modules.review_engine.exceptions import VideoDetectionError
 
 logger = logging.getLogger(__name__)
@@ -67,11 +68,12 @@ def detect_scenes(
 
 def _get_duration(video_path: str) -> float:
     """Get video duration in seconds via ffprobe."""
+    # Round-15.5: safe_ffmpeg_arg neutralizes leading-dash filenames.
     cmd = [
         "ffprobe", "-v", "quiet",
         "-print_format", "json",
         "-show_format",
-        video_path,
+        safe_ffmpeg_arg(video_path),
     ]
     try:
         result = subprocess.run(
@@ -90,8 +92,8 @@ def _get_duration(video_path: str) -> float:
 def _detect_scene_timestamps(video_path: str, threshold: float) -> List[float]:
     """Run FFmpeg scene detection filter, return list of scene change timestamps."""
     cmd = [
-        "ffmpeg", "-i", video_path,
-        "-filter:v", f"select='gt(scene,{threshold})',showinfo",
+        "ffmpeg", "-i", safe_ffmpeg_arg(video_path),
+        "-filter:v", f"select='gt(scene,{float(threshold):.4f})',showinfo",
         "-f", "null", "-",
     ]
     try:
@@ -156,11 +158,11 @@ def _extract_frame(video_path: str, timestamp_s: float, output_path: str):
     """Extract a single frame at the given timestamp."""
     cmd = [
         "ffmpeg", "-y",
-        "-ss", str(timestamp_s),
-        "-i", video_path,
+        "-ss", f"{float(timestamp_s):.3f}",
+        "-i", safe_ffmpeg_arg(video_path),
         "-frames:v", "1",
         "-q:v", "3",
-        output_path,
+        safe_ffmpeg_arg(output_path),
     ]
     try:
         result = subprocess.run(

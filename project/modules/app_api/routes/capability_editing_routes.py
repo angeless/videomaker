@@ -10,7 +10,13 @@ import tempfile
 
 from flask import Blueprint, jsonify, request
 
-from modules.app_api.param_utils import parse_float_param, parse_int_param, parse_str_param, write_json_result
+from modules.app_api.param_utils import (
+    parse_float_param,
+    parse_int_param,
+    parse_str_param,
+    safe_error_response,
+    write_json_result,
+)
 
 
 def _is_safe_export_path(resolved_path: str) -> bool:
@@ -581,7 +587,7 @@ def create_editing_capability_blueprint(
                 fps=fps,
             )
         except Exception as exc:
-            return jsonify({"error": f"NLE 交接包生成失败: {exc}"}), 500
+            return jsonify({"error": safe_error_response(exc, "NLE 交接包生成失败")}), 500
         return jsonify(
             {
                 "ok": True,
@@ -631,7 +637,7 @@ def create_editing_capability_blueprint(
                 fps=fps,
             )
         except Exception as exc:
-            return jsonify({"error": f"NLE 交接包生成失败: {exc}"}), 500
+            return jsonify({"error": safe_error_response(exc, "NLE 交接包生成失败")}), 500
 
         launch_result = None
         if launch:
@@ -642,7 +648,7 @@ def create_editing_capability_blueprint(
                     timeout_seconds=timeout_seconds,
                 )
             except Exception as exc:
-                return jsonify({"error": f"NLE 启动失败: {exc}", "handoff": handoff}), 500
+                return jsonify({"error": safe_error_response(exc, "NLE 启动失败"), "handoff": handoff}), 500
             if launch_result.get("status") != "done":
                 return jsonify({"error": "NLE 启动失败", "handoff": handoff, "launch": launch_result}), 500
 
@@ -729,7 +735,7 @@ def create_editing_capability_blueprint(
                 copy_mode=copy_mode,
             )
         except Exception as exc:
-            return jsonify({"error": f"导回成片失败: {exc}"}), 400
+            return jsonify({"error": safe_error_response(exc, "导回成片失败")}), 400
 
         record = {
             "editor": editor,

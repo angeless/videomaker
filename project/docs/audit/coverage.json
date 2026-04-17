@@ -1419,11 +1419,13 @@
     "modules/app_api/param_utils.py": {
       "priority": "other",
       "status": "audited_fixed",
-      "rounds": [],
+      "rounds": [
+        15
+      ],
       "commits": [
         "95199fd"
       ],
-      "note": "auto-bootstrapped from git history"
+      "note": "R15.5: real audit findings fixed"
     },
     "modules/app_api/publish_prep_api.py": {
       "priority": "other",
@@ -1515,12 +1517,12 @@
     },
     "modules/app_api/routes/capability_editing_routes.py": {
       "priority": "other",
-      "status": "scanned",
+      "status": "audited_fixed",
       "rounds": [
         15
       ],
       "commits": [],
-      "note": "R15: swept, no new HIGH/MED findings"
+      "note": "R15.5: real audit findings fixed"
     },
     "modules/app_api/routes/capability_social_export_routes.py": {
       "priority": "other",
@@ -1533,12 +1535,12 @@
     },
     "modules/app_api/routes/capability_text_semantic_routes.py": {
       "priority": "other",
-      "status": "scanned",
+      "status": "audited_fixed",
       "rounds": [
         15
       ],
       "commits": [],
-      "note": "R15: swept, no new HIGH/MED findings"
+      "note": "R15.5: real audit findings fixed"
     },
     "modules/app_api/routes/enhance_routes.py": {
       "priority": "other",
@@ -1578,12 +1580,12 @@
     },
     "modules/app_api/routes/library_routes.py": {
       "priority": "other",
-      "status": "scanned",
+      "status": "audited_fixed",
       "rounds": [
         15
       ],
       "commits": [],
-      "note": "R15: swept, no new HIGH/MED findings"
+      "note": "R15.5: real audit findings fixed"
     },
     "modules/app_api/routes/render_routes.py": {
       "priority": "other",
@@ -2609,12 +2611,12 @@
     },
     "modules/review_engine/audio_enhancer.py": {
       "priority": "P2",
-      "status": "scanned",
+      "status": "audited_fixed",
       "rounds": [
         15
       ],
       "commits": [],
-      "note": "R15: swept, no new HIGH/MED findings"
+      "note": "R15.5: real audit findings fixed"
     },
     "modules/review_engine/bad_take_detector.py": {
       "priority": "P2",
@@ -2627,21 +2629,21 @@
     },
     "modules/review_engine/bgm_selector.py": {
       "priority": "P2",
-      "status": "scanned",
+      "status": "audited_fixed",
       "rounds": [
         15
       ],
       "commits": [],
-      "note": "R15: swept, no new HIGH/MED findings"
+      "note": "R15.5: real audit findings fixed"
     },
     "modules/review_engine/comment_exporter.py": {
       "priority": "P2",
-      "status": "scanned",
+      "status": "audited_fixed",
       "rounds": [
         15
       ],
       "commits": [],
-      "note": "R15: swept, no new HIGH/MED findings"
+      "note": "R15.5: real audit findings fixed"
     },
     "modules/review_engine/comment_resolver.py": {
       "priority": "P2",
@@ -2739,12 +2741,12 @@
     },
     "modules/review_engine/region_extractor.py": {
       "priority": "P2",
-      "status": "scanned",
+      "status": "audited_fixed",
       "rounds": [
         15
       ],
       "commits": [],
-      "note": "R15: swept, no new HIGH/MED findings"
+      "note": "R15.5: real audit findings fixed"
     },
     "modules/review_engine/render_pipeline.py": {
       "priority": "P2",
@@ -2777,12 +2779,12 @@
     },
     "modules/review_engine/scene_selector.py": {
       "priority": "P2",
-      "status": "scanned",
+      "status": "audited_fixed",
       "rounds": [
         15
       ],
       "commits": [],
-      "note": "R15: swept, no new HIGH/MED findings"
+      "note": "R15.5: real audit findings fixed"
     },
     "modules/review_engine/scene_summarizer.py": {
       "priority": "P2",
@@ -2797,21 +2799,21 @@
     },
     "modules/review_engine/social_reframe.py": {
       "priority": "P2",
-      "status": "scanned",
+      "status": "audited_fixed",
       "rounds": [
         15
       ],
       "commits": [],
-      "note": "R15: swept, no new HIGH/MED findings"
+      "note": "R15.5: real audit findings fixed"
     },
     "modules/review_engine/speaker_diarizer.py": {
       "priority": "P2",
-      "status": "scanned",
+      "status": "audited_fixed",
       "rounds": [
         15
       ],
       "commits": [],
-      "note": "R15: swept, no new HIGH/MED findings"
+      "note": "R15.5: real audit findings fixed"
     },
     "modules/review_engine/stock_media.py": {
       "priority": "P2",
@@ -2889,12 +2891,12 @@
     },
     "modules/review_engine/video_detector.py": {
       "priority": "P2",
-      "status": "scanned",
+      "status": "audited_fixed",
       "rounds": [
         15
       ],
       "commits": [],
-      "note": "R15: swept, no new HIGH/MED findings"
+      "note": "R15.5: real audit findings fixed"
     },
     "modules/review_engine/video_stream_analyzer.py": {
       "priority": "P2",
@@ -3075,12 +3077,12 @@
     },
     "modules/step5_frame_preview/frame_preview.py": {
       "priority": "other",
-      "status": "scanned",
+      "status": "audited_fixed",
       "rounds": [
         15
       ],
       "commits": [],
-      "note": "R15: swept, no new HIGH/MED findings"
+      "note": "R15.5: real audit findings fixed"
     },
     "modules/step6_rough_cut/__init__.py": {
       "priority": "P2",
@@ -3118,21 +3120,21 @@
     },
     "modules/step7_final_render/beauty.py": {
       "priority": "P2",
-      "status": "scanned",
+      "status": "audited_fixed",
       "rounds": [
         15
       ],
       "commits": [],
-      "note": "R15: swept, no new HIGH/MED findings"
+      "note": "R15.5: real audit findings fixed"
     },
     "modules/step7_final_render/color_grade.py": {
       "priority": "P2",
-      "status": "scanned",
+      "status": "audited_fixed",
       "rounds": [
         15
       ],
       "commits": [],
-      "note": "R15: swept, no new HIGH/MED findings"
+      "note": "R15.5: real audit findings fixed"
     },
     "modules/step7_final_render/generate_luts.py": {
       "priority": "P2",
@@ -3190,11 +3192,12 @@
       "priority": "P2",
       "status": "audited_fixed",
       "rounds": [
-        14
+        14,
+        15
       ],
       "commits": [],
-      "note": "P2-A round-14: concat quote escape / atomic writes / dict hardening / page size"
+      "note": "R15.5: real audit findings fixed"
     }
   },
-  "last_updated": "2026-04-17T07:17:17+00:00"
+  "last_updated": "2026-04-17T07:53:47+00:00"
 }

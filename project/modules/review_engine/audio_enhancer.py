@@ -11,6 +11,7 @@ import subprocess
 from dataclasses import dataclass, field
 from typing import List, Optional
 
+from modules.render_engine.concat_utils import safe_ffmpeg_arg
 from .exceptions import RenderError
 
 logger = logging.getLogger(__name__)
@@ -89,13 +90,17 @@ def enhance_audio(
 
     af = ",".join(filters)
 
+    # Round-15.5: safe_ffmpeg_arg prevents leading-dash filename argv
+    # injection (e.g. user file "-filter_complex;..." being parsed as
+    # an option). Absolute paths pass through unchanged; relative ones
+    # get a "./" prefix.
     cmd = [
         ffmpeg, "-y",
-        "-i", audio_path,
+        "-i", safe_ffmpeg_arg(audio_path),
         "-af", af,
         "-ar", "44100",  # MUST: prevent loudnorm sample rate bug
         "-c:a", "aac", "-b:a", "128k",
-        output_path,
+        safe_ffmpeg_arg(output_path),
     ]
 
     last_error = None

@@ -39,3 +39,32 @@ def concat_list_line(path: PathLike) -> str:
 def concat_list_body(paths: Iterable[PathLike]) -> str:
     """Return a complete concat-demuxer list body (newline-terminated)."""
     return "".join(concat_list_line(p) for p in paths)
+
+
+def safe_ffmpeg_arg(path: PathLike) -> str:
+    """Return a path safe to pass as a positional FFmpeg/ffprobe argument.
+
+    FFmpeg parses any argument starting with ``-`` as an option, which
+    means a filename like ``-filter_complex;evil`` or a path containing
+    dash-prefixed components supplied by an attacker could smuggle
+    additional options into the command line (even in argv mode, no
+    ``shell=True`` needed).
+
+    The POSIX-standard escape is ``./<relative>`` for relative paths and
+    leaving absolute paths alone (they already start with ``/``). This
+    helper applies that rule without changing the path's semantics.
+
+    Round 15.5: hoisted here so every FFmpeg-invoking module uses the
+    same guard (audio_enhancer, bgm_selector, scene_selector,
+    social_reframe, video_detector, frame_preview, color_grade).
+    """
+    s = str(path)
+    if not s:
+        raise ValueError("empty path rejected by safe_ffmpeg_arg")
+    # Absolute path — already unambiguous.
+    if s.startswith("/") or (len(s) > 1 and s[1] == ":"):  # unix abs or win drive
+        return s
+    # Any other path that would be parsed as a flag — prefix with ./
+    if s.startswith("-"):
+        return "./" + s
+    return s

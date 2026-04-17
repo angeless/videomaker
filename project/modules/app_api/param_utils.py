@@ -232,18 +232,15 @@ def atomic_write_json(path: Any, data: Any, *, indent: int = 2) -> None:
 def write_json_result(path_obj: Any, data: Any) -> bool:
     """Write *data* as pretty-printed JSON to *path_obj* if it is not None.
 
-    This is a convenience wrapper for the repetitive pattern::
-
-        out = project_data_path("some_file.json")
-        if out is not None:
-            out.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-
     Returns True if the file was written, False if *path_obj* was None.
+
+    Round-15.5: delegates to :func:`atomic_write_json` so a crash mid-
+    write never leaves callers with a truncated/empty file. 8+ route
+    handlers use this wrapper (plan/run state, export snapshots,
+    idempotency ledger) — making it atomic here closes them all in
+    one change instead of touching every callsite.
     """
     if path_obj is None:
         return False
-    path_obj.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    atomic_write_json(path_obj, data)
     return True

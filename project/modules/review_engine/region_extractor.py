@@ -60,6 +60,13 @@ class RegionExtractor:
 
         frame_w, frame_h = frame.size
         canvas_w, canvas_h = canvas_size or (frame_w, frame_h)
+        # Round-15.5: a caller passing canvas_size=(0, 0) would crash on
+        # frame_w/canvas_w below. Fall back to frame dimensions when the
+        # canvas is missing/degenerate.
+        if not canvas_w or canvas_w <= 0:
+            canvas_w = frame_w
+        if not canvas_h or canvas_h <= 0:
+            canvas_h = frame_h
 
         # Auto-detect normalized coordinates (0-1 range from DrawingOverlay)
         all_points = [p for s in strokes for p in s.get("points", [])]

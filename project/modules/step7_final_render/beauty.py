@@ -256,10 +256,31 @@ _LUT_DIR = Path(__file__).parent / "luts"
 
 
 def load_cube_lut(name: str) -> Optional["np.ndarray"]:
-    """Load a .cube LUT file and return a (size, size, size, 3) float64 array."""
+    """Load a .cube LUT file and return a (size, size, size, 3) float64 array.
+
+    Round-15.5: ``name`` must be a member of ``LUT_PRESETS``. Previously
+    any string was accepted and concatenated into ``_LUT_DIR / f"{name}.cube"``
+    — an attacker with control over ``name`` could use ``../../etc/passwd``
+    (or a NUL-terminator trick) to read outside the LUT directory. The
+    public ``apply_beauty_v2`` entry point already allowlisted via
+    ``lut_name in LUT_PRESETS``, but ``load_cube_lut`` / ``apply_scene_lut``
+    are also public and bypassed that guard.
+    """
     if not HAS_CV2:
         return None
+    if name not in LUT_PRESETS:
+        logger.warning(
+            "load_cube_lut rejected non-allowlisted name: %r (allowed: %s)",
+            name, LUT_PRESETS,
+        )
+        return None
     cube_path = _LUT_DIR / f"{name}.cube"
+    # Defense in depth: resolve the path and confirm it is still inside _LUT_DIR.
+    try:
+        cube_path.resolve().relative_to(_LUT_DIR.resolve())
+    except ValueError:
+        logger.warning("LUT path escape blocked: %s", cube_path)
+        return None
     if not cube_path.exists():
         logger.warning("LUT file not found: %s", cube_path)
         return None
