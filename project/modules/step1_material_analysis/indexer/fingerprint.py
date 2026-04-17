@@ -154,7 +154,21 @@ class FingerprintDB:
     def __init__(self, db_path: Path):
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(self.db_path))
+        # Round-13 P1:
+        # - check_same_thread=False because Flask / step1 worker threads
+        #   share this instance. Required; otherwise concurrent calls raise.
+        # - WAL mode for concurrent reads alongside a writer (default
+        #   journal_mode=DELETE serializes all access and blocks readers
+        #   during writes).
+        # - Module-level lock to serialize writes across threads, preventing
+        #   "database is locked" errors under concurrent step1 runs.
+        import threading as _threading
+        self._conn = sqlite3.connect(
+            str(self.db_path), check_same_thread=False, timeout=10.0
+        )
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA synchronous=NORMAL")
+        self._lock = _threading.Lock()
         self._init_db()
 
     def _init_db(self):

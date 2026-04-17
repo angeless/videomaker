@@ -1893,10 +1893,12 @@
     },
     "modules/library/_constants.py": {
       "priority": "P1",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        13
+      ],
       "commits": [],
-      "note": ""
+      "note": "P1 round-13: scanned with MED/LOW only"
     },
     "modules/library/core/__init__.py": {
       "priority": "P1",
@@ -1907,10 +1909,12 @@
     },
     "modules/library/core/core_mixin.py": {
       "priority": "P1",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        13
+      ],
       "commits": [],
-      "note": ""
+      "note": "P1 round-13: scanned with MED/LOW only"
     },
     "modules/library/db/__init__.py": {
       "priority": "P1",
@@ -1921,17 +1925,21 @@
     },
     "modules/library/db/schema.py": {
       "priority": "P1",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "audited_fixed",
+      "rounds": [
+        13
+      ],
       "commits": [],
-      "note": ""
+      "note": "P1 round-13: security hardening"
     },
     "modules/library/global_media_library.py": {
       "priority": "P1",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        13
+      ],
       "commits": [],
-      "note": ""
+      "note": "P1 round-13: scanned with MED/LOW only"
     },
     "modules/library/integrations/__init__.py": {
       "priority": "P1",
@@ -1942,10 +1950,12 @@
     },
     "modules/library/integrations/gdrive.py": {
       "priority": "P1",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "audited_fixed",
+      "rounds": [
+        13
+      ],
       "commits": [],
-      "note": ""
+      "note": "P1 round-13: security hardening"
     },
     "modules/library/maintenance/__init__.py": {
       "priority": "P1",
@@ -1956,31 +1966,39 @@
     },
     "modules/library/maintenance/duplicate_detection.py": {
       "priority": "P1",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        13
+      ],
       "commits": [],
-      "note": ""
+      "note": "P1 round-13: scanned with MED/LOW only"
     },
     "modules/library/maintenance/fingerprint.py": {
       "priority": "P1",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        13
+      ],
       "commits": [],
-      "note": ""
+      "note": "P1 round-13: scanned with MED/LOW only"
     },
     "modules/library/maintenance/path_relink.py": {
       "priority": "P1",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "audited_fixed",
+      "rounds": [
+        13
+      ],
       "commits": [],
-      "note": ""
+      "note": "P1 round-13: security hardening"
     },
     "modules/library/project_relink_adapter.py": {
       "priority": "P1",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "audited_fixed",
+      "rounds": [
+        13
+      ],
       "commits": [],
-      "note": ""
+      "note": "P1 round-13: security hardening"
     },
     "modules/library/semantic/__init__.py": {
       "priority": "P1",
@@ -1991,17 +2009,21 @@
     },
     "modules/library/semantic/embedding_cache.py": {
       "priority": "P1",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "audited_fixed",
+      "rounds": [
+        13
+      ],
       "commits": [],
-      "note": ""
+      "note": "P1 round-13: security hardening"
     },
     "modules/library/semantic/vector_index.py": {
       "priority": "P1",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "audited_fixed",
+      "rounds": [
+        13
+      ],
       "commits": [],
-      "note": ""
+      "note": "P1 round-13: security hardening"
     },
     "modules/library/tagging/__init__.py": {
       "priority": "P1",
@@ -2012,17 +2034,21 @@
     },
     "modules/library/tagging/auto_tagger.py": {
       "priority": "P1",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        13
+      ],
       "commits": [],
-      "note": ""
+      "note": "P1 round-13: scanned with MED/LOW only"
     },
     "modules/library/tagging/tag_manager.py": {
       "priority": "P1",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        13
+      ],
       "commits": [],
-      "note": ""
+      "note": "P1 round-13: scanned with MED/LOW only"
     },
     "modules/library/vision/__init__.py": {
       "priority": "P1",
@@ -2033,17 +2059,21 @@
     },
     "modules/library/vision/clip_encoder.py": {
       "priority": "P1",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        13
+      ],
       "commits": [],
-      "note": ""
+      "note": "P1 round-13: scanned with MED/LOW only"
     },
     "modules/library/vision/vision_mixin.py": {
       "priority": "P1",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        13
+      ],
       "commits": [],
-      "note": ""
+      "note": "P1 round-13: scanned with MED/LOW only"
     },
     "modules/mcp_server/__init__.py": {
       "priority": "other",
@@ -2458,10 +2488,12 @@
     },
     "modules/step1_material_analysis/audio_quality.py": {
       "priority": "P1",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        13
+      ],
       "commits": [],
-      "note": ""
+      "note": "P1 round-13: scanned with MED/LOW only"
     },
     "modules/step1_material_analysis/indexer/__init__.py": {
       "priority": "P1",
@@ -2472,45 +2504,57 @@
     },
     "modules/step1_material_analysis/indexer/fingerprint.py": {
       "priority": "P1",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "audited_fixed",
+      "rounds": [
+        13
+      ],
       "commits": [],
-      "note": ""
+      "note": "P1 round-13: security hardening"
     },
     "modules/step1_material_analysis/indexer/semantic.py": {
       "priority": "P1",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "audited_fixed",
+      "rounds": [
+        13
+      ],
       "commits": [],
-      "note": ""
+      "note": "P1 round-13: security hardening"
     },
     "modules/step1_material_analysis/transcribe.py": {
       "priority": "P1",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "audited_fixed",
+      "rounds": [
+        13
+      ],
       "commits": [],
-      "note": ""
+      "note": "P1 round-13: security hardening"
     },
     "modules/step1_material_analysis/transcript_correction.py": {
       "priority": "P1",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "audited_fixed",
+      "rounds": [
+        13
+      ],
       "commits": [],
-      "note": ""
+      "note": "P1 round-13: security hardening"
     },
     "modules/step1_material_analysis/usability_scorer.py": {
       "priority": "P1",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "scanned",
+      "rounds": [
+        13
+      ],
       "commits": [],
-      "note": ""
+      "note": "P1 round-13: scanned with MED/LOW only"
     },
     "modules/step1_material_analysis/video_asset_toolkit.py": {
       "priority": "P1",
-      "status": "unaudited",
-      "rounds": [],
+      "status": "audited_fixed",
+      "rounds": [
+        13
+      ],
       "commits": [],
-      "note": ""
+      "note": "P1 round-13: security hardening"
     },
     "modules/step2_topic_planning/__init__.py": {
       "priority": "P2",
@@ -2675,5 +2719,5 @@
       "note": "auto-bootstrapped from git history"
     }
   },
-  "last_updated": "2026-04-15T17:58:46+00:00"
+  "last_updated": "2026-04-17T03:58:32+00:00"
 }

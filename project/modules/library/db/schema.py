@@ -990,7 +990,20 @@ class SchemaMixin:
             "thumbnail_hash": "TEXT",
             "fingerprint_version": "INTEGER DEFAULT 0",
         }
+        # Round-13 P1: harden against future drive-by changes that might
+        # route `col`/`col_type` from external input into this f-string.
+        # Current values are hardcoded literals — safe — but the IDIOM is
+        # what prior rounds flagged as CRITICAL elsewhere.
+        _allowed_col_types = {
+            "TEXT", "TEXT DEFAULT NULL", "TEXT DEFAULT 'none'",
+            "INTEGER", "INTEGER DEFAULT 0", "INTEGER DEFAULT NULL",
+            "REAL", "REAL DEFAULT NULL",
+        }
         for col, col_type in extra_columns.items():
+            if not col.isidentifier():
+                raise ValueError(f"unsafe column name: {col!r}")
+            if col_type not in _allowed_col_types:
+                raise ValueError(f"unsafe column type: {col_type!r}")
             if col not in existing_columns:
                 conn.execute(f"ALTER TABLE assets ADD COLUMN {col} {col_type}")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_assets_semantic_version ON assets(semantic_version)")
@@ -1009,6 +1022,10 @@ class SchemaMixin:
             "trash_level": "TEXT DEFAULT 'none'",
         }
         for col, col_type in usability_columns.items():
+            if not col.isidentifier():
+                raise ValueError(f"unsafe column name: {col!r}")
+            if col_type not in _allowed_col_types:
+                raise ValueError(f"unsafe column type: {col_type!r}")
             if col not in existing_columns:
                 conn.execute(f"ALTER TABLE assets ADD COLUMN {col} {col_type}")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_assets_usability ON assets(usability_score)")

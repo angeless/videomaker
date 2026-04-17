@@ -228,12 +228,24 @@ class VideoAssetToolkit:
     def extract_metadata(self, video_path):
         """提取视频元数据"""
         try:
+            # Round-13: resolve to absolute path so ffprobe can't interpret a
+            # filename starting with "-" as an option (argv injection).
+            # If somehow relative and starts with "-", prefix with "./".
+            vp = str(video_path)
+            if not os.path.isabs(vp):
+                vp_abs = os.path.abspath(vp)
+            else:
+                vp_abs = vp
+            if vp_abs.startswith("-"):
+                # Absolute paths normally start with "/" so this is rare, but
+                # be defensive: refuse rather than feed a "-" arg to ffprobe.
+                raise ValueError(f"refusing ffprobe on suspicious path {vp_abs!r}")
             cmd = [
                 "ffprobe", "-v", "quiet",
                 "-print_format", "json",
                 "-show_format",
                 "-show_streams",
-                str(video_path)
+                vp_abs,
             ]
             output = subprocess.check_output(cmd, stderr=subprocess.STDOUT, timeout=30)
             metadata = json.loads(output)
@@ -811,11 +823,11 @@ class VideoAssetToolkit:
             
         saved_files = []
         
-        # JSON格式
+        # JSON格式 — atomic write (Round-13)
         if "json" in formats:
             json_file = self.results_dir / f"{base_name}.json"
-            with open(json_file, 'w', encoding='utf-8') as f:
-                json.dump(results, f, ensure_ascii=False, indent=2)
+            from modules.app_api.param_utils import atomic_write_json
+            atomic_write_json(json_file, results)
             saved_files.append(str(json_file))
             
         # Markdown格式

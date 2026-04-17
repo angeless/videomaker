@@ -44,6 +44,73 @@ except ImportError:
     HAS_OPENAI_WHISPER = False
 
 
+# ── Round-13 P1 security hardening ──
+#
+# Whisper model sizes must be on an allowlist before flowing into
+# `FasterWhisperModel(...)` / `openai_whisper.load_model(...)`. Both
+# libraries trigger a HuggingFace auto-download on first use, and
+# the target repository's `configuration.py` is executed during
+# `from_pretrained()` — arbitrary code execution if a malicious repo
+# name sneaks in via workflow config. Also reject any value containing
+# "/" (which would redirect HF to an arbitrary repo like
+# "attacker/evil-whisper").
+_ALLOWED_WHISPER_SIZES = {
+    "tiny", "base", "small", "medium", "large", "large-v1", "large-v2", "large-v3",
+    # faster-whisper variants
+    "tiny.en", "base.en", "small.en", "medium.en",
+    "distil-large-v2", "distil-large-v3", "distil-small.en", "distil-medium.en",
+}
+
+
+def _validate_model_size(raw: str) -> str:
+    """Coerce the model-size arg to an allowlisted value; fall back to 'base'."""
+    v = str(raw or "").strip()
+    if not v or "/" in v or "\\" in v or v not in _ALLOWED_WHISPER_SIZES:
+        if v:
+            logger.warning(
+                "unknown whisper model_size=%r (not in allowlist); falling back to 'base'",
+                v,
+            )
+        return "base"
+    return v
+
+
+# Whisper inference can hang indefinitely on malformed audio (long silence,
+# corrupted codec, adversarial sample). Subprocess calls to ffmpeg already
+# have timeouts, but in-process `model.transcribe(...)` did not. Wrap in a
+# daemon thread + timeout so the whole step1 pipeline can't get stuck.
+_WHISPER_TIMEOUT_S = int(os.environ.get("VIDEOEDITOR_WHISPER_TIMEOUT_S", "600"))
+
+
+def _run_with_timeout(fn, timeout_s: int, label: str):
+    """Run *fn* in a daemon thread; raise TimeoutError if it exceeds timeout_s.
+
+    Note: Python can't truly kill a thread. On timeout we abandon the worker
+    (daemon=True lets the process exit) and surface a TimeoutError. The
+    thread may continue consuming CPU/RAM until the underlying call yields;
+    for Whisper this is usually when the next frame batch completes.
+    """
+    import threading as _threading
+    result: list = []
+    error: list = []
+
+    def _target():
+        try:
+            result.append(fn())
+        except BaseException as exc:  # noqa: BLE001 — propagate anything
+            error.append(exc)
+
+    t = _threading.Thread(target=_target, daemon=True, name=f"whisper-{label}")
+    t.start()
+    t.join(timeout_s)
+    if t.is_alive():
+        logger.error("%s exceeded %ds timeout — abandoning worker", label, timeout_s)
+        raise TimeoutError(f"{label} timeout after {timeout_s}s")
+    if error:
+        raise error[0]
+    return result[0] if result else None
+
+
 def _extract_audio(video_path: str, output_wav: str, timeout: int = 60) -> bool:
     """用 FFmpeg 从视频提取 16kHz 单声道 WAV 音频"""
     cmd = [
@@ -159,15 +226,15 @@ def _transcribe_faster_whisper(
     wav_path: str, model_size: str, language: str = None
 ) -> dict:
     """使用 faster-whisper 转录"""
+    model_size = _validate_model_size(model_size)  # Round-13: allowlist
     logger.info("使用 faster-whisper/%s 转录...", model_size)
 
-    try:
+    def _do_transcribe():
         model = FasterWhisperModel(
             model_size,
             device="cpu",       # faster-whisper CTranslate2 不支持 MPS
             compute_type="int8",
         )
-
         segments_iter, info = model.transcribe(
             wav_path,
             language=language,
@@ -178,12 +245,21 @@ def _transcribe_faster_whisper(
                 speech_pad_ms=200,
             ),
         )
+        # Consume iterator eagerly inside the timed thread so the actual
+        # transcription work is covered by the timeout (not just the setup).
+        segs = list(segments_iter)
+        return segs, info
+
+    try:
+        segments_list, info = _run_with_timeout(
+            _do_transcribe, _WHISPER_TIMEOUT_S, f"faster-whisper/{model_size}"
+        )
 
         segments = []
         full_text_parts = []
         total_speech_dur = 0.0
 
-        for seg in segments_iter:
+        for seg in segments_list:
             segments.append({
                 "start": round(seg.start, 2),
                 "end": round(seg.end, 2),
@@ -225,6 +301,7 @@ def _transcribe_openai_whisper(
     wav_path: str, model_size: str, language: str = None
 ) -> dict:
     """使用 openai-whisper 转录"""
+    model_size = _validate_model_size(model_size)  # Round-13: allowlist
     logger.info("使用 openai-whisper/%s 转录...", model_size)
 
     try:
@@ -232,10 +309,14 @@ def _transcribe_openai_whisper(
         import torch
         device = "mps" if torch.backends.mps.is_available() else "cpu"
 
-        model = openai_whisper.load_model(model_size, device=device)
+        def _do_transcribe():
+            model = openai_whisper.load_model(model_size, device=device)
+            opts = {"language": language} if language else {}
+            return model.transcribe(wav_path, **opts)
 
-        opts = {"language": language} if language else {}
-        result = model.transcribe(wav_path, **opts)
+        result = _run_with_timeout(
+            _do_transcribe, _WHISPER_TIMEOUT_S, f"openai-whisper/{model_size}"
+        )
 
         segments = []
         total_speech_dur = 0.0

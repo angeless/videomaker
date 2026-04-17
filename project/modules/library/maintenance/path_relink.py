@@ -25,6 +25,46 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+# Round-13 P1: os.walk accepts any directory path, but walking /, /System,
+# /etc, /proc, /dev etc. is both a DoS (gigabytes of I/O + SHA256) and an
+# information disclosure primitive (attacker can confirm existence of
+# known files via timing / hash comparison).
+#
+# Denylist known-dangerous roots. macOS + Linux + Windows system paths
+# are all excluded regardless of case.
+_UNSAFE_WALK_ROOTS = {
+    "/",
+    "/System", "/Library", "/bin", "/sbin", "/etc", "/var", "/usr",
+    "/proc", "/sys", "/dev", "/boot", "/root",
+    "/private", "/private/var", "/private/etc", "/private/tmp",
+    "C:\\", "C:\\Windows", "C:\\Program Files", "C:\\Program Files (x86)",
+}
+
+
+def _is_safe_walk_root(root: Path) -> bool:
+    """Reject system paths to prevent walk over / or /etc etc."""
+    try:
+        resolved = root.resolve()
+    except OSError:
+        return False
+    try:
+        s = str(resolved)
+    except Exception:
+        return False
+    if s in _UNSAFE_WALK_ROOTS:
+        return False
+    # Prefix-match common system trees. Note: /private/var/folders/ on macOS
+    # is where user tempfiles live (tmp_path fixtures, etc.) — we allow that.
+    # Only /private/var/{db,root,log,...} is system.
+    for deny in ("/System/", "/etc/", "/proc/", "/sys/", "/dev/",
+                 "/private/etc/",
+                 "/private/var/db/", "/private/var/root/", "/private/var/log/",
+                 "C:\\Windows\\", "C:\\Program Files\\"):
+        if s.startswith(deny):
+            return False
+    return True
+
+
 class PathRelinkMixin:
     """Methods related to asset path relocation and project relinking."""
 
@@ -107,6 +147,10 @@ class PathRelinkMixin:
         for root in roots[:14]:
             if time.time() > deadline:
                 return None
+            # Reject system paths to avoid O(disk) I/O + info disclosure.
+            if not _is_safe_walk_root(root):
+                logger.warning("path_relink: refusing to walk system root %s", root)
+                continue
             try:
                 walker = os.walk(root)
             except Exception:
@@ -404,6 +448,11 @@ class PathRelinkMixin:
                 target_size = int(size_bytes) if size_bytes is not None else None
 
                 for root in search_roots[:20]:
+                    if not _is_safe_walk_root(Path(root)):
+                        logger.warning(
+                            "batch_relocate: refusing to walk system root %s", root
+                        )
+                        continue
                     try:
                         for cur_dir, _, files in os.walk(root):
                             if filename not in files:

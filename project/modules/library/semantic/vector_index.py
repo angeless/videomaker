@@ -222,13 +222,26 @@ class VectorIndex:
                 "use_faiss": self._use_faiss and self._faiss_index is not None,
             }
             meta_path = self._index_dir / "index_meta.json"
-            meta_path.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+            # Round-13: atomic write — crash mid-write used to corrupt the
+            # metadata and desync from index.npy/faiss file.
+            from modules.app_api.param_utils import atomic_write_json
+            atomic_write_json(meta_path, meta)
 
             if self._use_faiss and self._faiss_index is not None:
-                faiss.write_index(self._faiss_index,
-                                  str(self._index_dir / "index.faiss"))
+                # Faiss has its own write API; write to tmp then rename for
+                # atomicity.
+                import os as _os
+                tmp_faiss = str(self._index_dir / "index.faiss.tmp")
+                final_faiss = str(self._index_dir / "index.faiss")
+                faiss.write_index(self._faiss_index, tmp_faiss)
+                _os.replace(tmp_faiss, final_faiss)
             elif self._np_matrix is not None:
-                np.save(str(self._index_dir / "index.npy"), self._np_matrix)
+                # np.save also non-atomic; same temp+rename dance.
+                import os as _os
+                tmp_npy = str(self._index_dir / "index.npy.tmp")
+                final_npy = str(self._index_dir / "index.npy")
+                np.save(tmp_npy, self._np_matrix)
+                _os.replace(tmp_npy, final_npy)
 
             self._dirty = False
             self._wal_clear()  # R6b: checkpoint — WAL merged into main index

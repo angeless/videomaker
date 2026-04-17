@@ -8,9 +8,79 @@ ProjectRelinkAdapter ABC.
 """
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import json
+
+
+# Round-13 P1: project_path / output_path flow in from HTTP API payloads
+# (see /api/library/project-relink routes). Without validation, attackers
+# with local-token access could read arbitrary files via project_path
+# (e.g. `/etc/passwd`) or write to arbitrary locations via output_path
+# (e.g. `~/.ssh/authorized_keys`). We enforce:
+#   1. Path must resolve to an existing .json (for reads) or parent dir
+#      (for writes)
+#   2. If ``allowed_base`` is provided, the resolved path must be inside it
+#   3. Max file size for reads to prevent DoS via huge-JSON parse
+_MAX_PROJECT_JSON_BYTES = 256 * 1024 * 1024  # 256 MB — well above any real NLE project
+
+
+def _safe_project_path(
+    raw: str, *, allowed_base: Optional[Path] = None, must_exist: bool = True
+) -> Path:
+    """Resolve and validate a user-supplied project file path.
+
+    Raises ValueError if the path is missing, not a file, too large, or
+    escapes ``allowed_base`` (when provided).
+    """
+    if not raw:
+        raise ValueError("project_path is required")
+    p = Path(str(raw).strip()).expanduser().resolve()
+    if allowed_base is not None:
+        base = Path(allowed_base).expanduser().resolve()
+        try:
+            p.relative_to(base)
+        except ValueError as exc:
+            raise ValueError(
+                f"project_path {p} escapes allowed base {base}"
+            ) from exc
+    if must_exist:
+        if not p.is_file():
+            raise ValueError(f"project_path is not a file: {p}")
+        try:
+            size = p.stat().st_size
+        except OSError as exc:
+            raise ValueError(f"cannot stat project_path: {exc}") from exc
+        if size > _MAX_PROJECT_JSON_BYTES:
+            raise ValueError(
+                f"project_path exceeds size cap "
+                f"({size} > {_MAX_PROJECT_JSON_BYTES} bytes)"
+            )
+    return p
+
+
+def _safe_output_path(
+    raw: str, *, allowed_base: Optional[Path] = None
+) -> Path:
+    """Resolve and validate a user-supplied OUTPUT path.
+
+    Ensures we're writing a .json file inside an allowed base directory.
+    The parent directory need not exist (we'll create it).
+    """
+    if not raw:
+        raise ValueError("output_path is required")
+    p = Path(str(raw).strip()).expanduser().resolve()
+    if p.suffix.lower() != ".json":
+        raise ValueError(f"output_path must be a .json file (got {p.suffix!r})")
+    if allowed_base is not None:
+        base = Path(allowed_base).expanduser().resolve()
+        try:
+            p.relative_to(base)
+        except ValueError as exc:
+            raise ValueError(
+                f"output_path {p} escapes allowed base {base}"
+            ) from exc
+    return p
 
 
 class ProjectRelinkAdapter(ABC):
@@ -101,9 +171,10 @@ class JianyingRelinkAdapter(ProjectRelinkAdapter):
         version_info: Dict = {}
 
         try:
-            with open(project_path, "r", encoding="utf-8") as f:
+            safe_path = _safe_project_path(project_path)
+            with open(safe_path, "r", encoding="utf-8") as f:
                 draft = json.load(f)
-        except (json.JSONDecodeError, OSError) as exc:
+        except (ValueError, json.JSONDecodeError, OSError) as exc:
             return {
                 "valid": False,
                 "errors": [str(exc)],
@@ -136,7 +207,8 @@ class JianyingRelinkAdapter(ProjectRelinkAdapter):
     # ── parse_references ──
 
     def parse_references(self, project_path: str) -> List[Dict]:
-        with open(project_path, "r", encoding="utf-8") as f:
+        safe_path = _safe_project_path(project_path)
+        with open(safe_path, "r", encoding="utf-8") as f:
             draft = json.load(f)
 
         refs: List[Dict] = []
@@ -162,7 +234,9 @@ class JianyingRelinkAdapter(ProjectRelinkAdapter):
     def apply_relink(
         self, project_path: str, output_path: str, path_map: Dict[str, str]
     ) -> Dict:
-        with open(project_path, "r", encoding="utf-8") as f:
+        safe_in = _safe_project_path(project_path)
+        safe_out = _safe_output_path(output_path)
+        with open(safe_in, "r", encoding="utf-8") as f:
             draft = json.load(f)
 
         applied = 0
@@ -174,9 +248,9 @@ class JianyingRelinkAdapter(ProjectRelinkAdapter):
                     entry["path"] = path_map[entry_path]
                     applied += 1
 
-        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-        with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(draft, f, ensure_ascii=False, indent=2)
+        # Atomic write so a crash during apply can't corrupt the output.
+        from modules.app_api.param_utils import atomic_write_json
+        atomic_write_json(safe_out, draft)
 
         return {"applied": applied, "skipped": len(path_map) - applied}
 
@@ -184,13 +258,14 @@ class JianyingRelinkAdapter(ProjectRelinkAdapter):
 
     def get_version_info(self, project_path: str) -> Dict:
         try:
-            with open(project_path, "r", encoding="utf-8") as f:
+            safe_path = _safe_project_path(project_path)
+            with open(safe_path, "r", encoding="utf-8") as f:
                 draft = json.load(f)
             return {
                 "app_version": draft.get("app_version"),
                 "draft_version": draft.get("version"),
             }
-        except Exception:
+        except (ValueError, json.JSONDecodeError, OSError):
             return {}
 
 

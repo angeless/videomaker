@@ -35,6 +35,21 @@ except ImportError:
     HAS_CLIP = False
 
 
+# Round-13 P1: CLIP model_name flows from workflow config into
+# `CLIPModel.from_pretrained(model_name)`, which auto-downloads the named
+# HuggingFace repo. Untrusted repo names can trigger arbitrary-code
+# execution during model loading. Allowlist is the reliable defense.
+_ALLOWED_CLIP_MODELS = {
+    "openai/clip-vit-base-patch32",
+    "openai/clip-vit-base-patch16",
+    "openai/clip-vit-large-patch14",
+    "openai/clip-vit-large-patch14-336",
+    # Multilingual variants some users run
+    "laion/CLIP-ViT-B-32-laion2B-s34B-b79K",
+    "laion/CLIP-ViT-L-14-laion2B-s32B-b82K",
+}
+
+
 class CLIPEncoder:
     """CLIP 图文编码器"""
 
@@ -42,6 +57,14 @@ class CLIPEncoder:
         if not HAS_CLIP:
             raise ImportError("CLIP 依赖未安装：pip install torch transformers Pillow")
 
+        # Reject any model name not on the allowlist to block code execution
+        # via malicious HuggingFace repo download.
+        if model_name not in _ALLOWED_CLIP_MODELS:
+            logger.warning(
+                "CLIP model_name %r not on allowlist; falling back to openai/clip-vit-base-patch32",
+                model_name,
+            )
+            model_name = "openai/clip-vit-base-patch32"
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.model_name = model_name
         self._model = None
@@ -128,9 +151,10 @@ class SemanticIndex:
                 self._index = json.load(f)
 
     def _save_index(self):
-        self.index_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.index_path, 'w', encoding='utf-8') as f:
-            json.dump(self._index, f, ensure_ascii=False)
+        # Round-13: atomic write so crash mid-save can't corrupt the
+        # semantic index (which would lose all prior embeddings).
+        from modules.app_api.param_utils import atomic_write_json
+        atomic_write_json(self.index_path, self._index)
 
     def _get_encoder(self) -> CLIPEncoder:
         if self._encoder is None:
