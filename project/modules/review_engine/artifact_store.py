@@ -39,6 +39,36 @@ class ArtifactStore:
         if os.sep in value or "/" in value or "\\" in value or ".." in value:
             raise ValueError(f"Invalid {name}: path traversal detected")
 
+    # Round-15.6: artifact_store.save accepts source_path from internal
+    # callers, but a leaky abstraction could plumb it from API payload.
+    # Reject paths under known sensitive prefixes as defense in depth so
+    # an attacker can't get the symlink branch to point an artifact at
+    # /etc/passwd, ~/.ssh/id_rsa, etc. (the symlink would then survive
+    # for as long as the artifact row lives).
+    _SOURCE_PATH_DENY = (
+        "/etc", "/root", "/proc", "/sys", "/dev",
+        "/private/etc", "/private/var/db", "/private/var/root",
+        "/usr/bin", "/usr/sbin", "/bin", "/sbin",
+    )
+
+    @classmethod
+    def _validate_source_path(cls, source_path: str) -> None:
+        try:
+            resolved = os.path.realpath(source_path)
+        except (OSError, ValueError) as exc:
+            raise ValueError(f"cannot resolve source_path: {exc}") from exc
+        for bad in cls._SOURCE_PATH_DENY:
+            if resolved == bad or resolved.startswith(bad + os.sep):
+                raise ValueError(
+                    f"source_path under denylisted prefix {bad}: {source_path!r}"
+                )
+        # Block credential dirs under home explicitly.
+        home = os.path.expanduser("~")
+        for suffix in (".ssh", ".aws", ".gnupg", ".kube", ".config/gcloud"):
+            bad_home = os.path.join(home, suffix)
+            if resolved == bad_home or resolved.startswith(bad_home + os.sep):
+                raise ValueError(f"source_path under credential dir ~/{suffix}")
+
     def _version_dir(self, session_id: str, version_number: int, node_name: str) -> str:
         self._validate_path_component(session_id, "session_id")
         self._validate_path_component(node_name, "node_name")
@@ -86,6 +116,8 @@ class ArtifactStore:
         """
         if not os.path.isfile(source_path):
             raise FileNotFoundError(f"Source file not found: {source_path}")
+        # Round-15.6: defense-in-depth path denylist.
+        self._validate_source_path(source_path)
 
         dest_dir = self._version_dir(session_id, version_number, node_name)
         os.makedirs(dest_dir, exist_ok=True)
@@ -111,7 +143,14 @@ class ArtifactStore:
                     os.remove(tmp_path)
                 raise
 
-        checksum = self._file_checksum(source_path)
+        # Round-15.6: checksum from dest_path so it reflects the bytes
+        # we actually committed. Previously we re-read source_path after
+        # the copy, leaving a TOCTOU window where a concurrent writer
+        # could change the source between copy and checksum and produce
+        # a stored row whose checksum didn't match the stored bytes.
+        # For symlinks this still resolves through the symlink, which
+        # matches the lookup behavior of get().
+        checksum = self._file_checksum(dest_path)
         artifact_id = str(uuid.uuid4())
 
         # Record in DB via ReviewStore's public locked API

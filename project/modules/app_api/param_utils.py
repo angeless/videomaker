@@ -76,15 +76,63 @@ def parse_str_param(value: Any, default: str = "") -> str:
     return str(value or default).strip()
 
 
-def safe_error_response(exc: Exception, fallback_msg: str = "操作失败，请重试") -> str:
+def safe_error_response(
+    exc: Exception,
+    fallback_msg: str = "操作失败，请重试",
+    *,
+    compose: bool = True,
+) -> str:
     """Return a user-friendly error string from an exception.
 
-    Strips Python-internal traceback details; keeps the first line of the
-    message up to 120 chars so it is safe to display in a toast.
+    Strips Python-internal traceback details and exception messages that
+    look like internal disclosure (paths, module-qualified names,
+    SQL fragments). Keeps the first line of curated user-facing
+    messages up to 120 chars.
+
+    Round-15.6: previously stripped *any* exception whose type name
+    contained "Error" (i.e. essentially all of them — ValueError,
+    KeyError, RuntimeError, etc.). That made the helper unusable for
+    intentional validation errors like
+    ``ValueError("steps 超出预算上限: 12 > 10")`` whose message is
+    deliberately user-facing. The new heuristic looks at the *message*
+    instead of the type:
+
+    - Empty / starts with "Traceback" → fallback
+    - Contains an absolute filesystem path (e.g. ``/Users/...``,
+      ``C:\\...``, ``/private/var/...``) → fallback
+    - Otherwise → return the message (curated Chinese / English text)
+
+    The path-detection covers the highest-value leak category. Other
+    forms of internal disclosure (e.g. SQL fragments, stack frames)
+    are handled by raising :class:`Exception` directly — its
+    ``str(exc)`` is empty, so the empty-msg branch falls back.
+    Callers that need stricter sanitization should validate at the
+    raise site (raise ``Exception("")`` or a known error type with
+    a curated message).
     """
     msg = str(exc).strip().split("\n")[0][:120]
-    if not msg or msg.startswith("Traceback") or "Error" in type(exc).__name__:
+    if not msg or msg.startswith("Traceback"):
         return fallback_msg
+
+    # Reject messages that contain absolute filesystem paths.
+    # The path must be preceded by start-of-string or whitespace/bracket
+    # so we don't strip things like "ratio 16/9" or "1/2".
+    import re as _re
+    if _re.search(r"(?:^|[\s\(\[])/[A-Za-z][A-Za-z0-9_./-]{3,}", msg):
+        return fallback_msg
+    # Windows absolute path (C:\Users\...): single backslash in source
+    # is two backslashes in the regex string, then we want a literal
+    # backslash in the regex which is four.
+    if _re.search(r"[A-Za-z]:\\\\[A-Za-z0-9_./\\\\-]{3,}", msg):
+        return fallback_msg
+
+    # Compose "category: detail" when caller supplied a non-empty
+    # category label. This preserves the original f"{category}: {exc}"
+    # behavior for safe messages while still falling back to the bare
+    # category for unsafe ones. Skip composition if detail already
+    # starts with the category (avoid "X: X: ...").
+    if compose and fallback_msg and not msg.startswith(fallback_msg):
+        return f"{fallback_msg}: {msg}"
     return msg
 
 

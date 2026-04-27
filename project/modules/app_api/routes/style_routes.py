@@ -28,13 +28,36 @@ def create_style_blueprint(*, project_dir_getter):
     bp = Blueprint("style_api", __name__)
 
     def _styles_dir():
-        return os.path.join(project_dir_getter() or "/tmp", "styles")
+        # Round-15.6: previously fell back to "/tmp/styles" when no
+        # project was loaded. On multi-user Linux /tmp is world-readable
+        # AND world-writable (sticky bit only protects against deletion,
+        # not reads/replacements). Another local user could replace
+        # style YAML files between writes and reads, hijacking this
+        # session's style behavior. Returning None here propagates as
+        # "项目未加载" 400 instead of silently writing to a shared dir.
+        proj = project_dir_getter()
+        if not proj:
+            return None
+        return os.path.join(proj, "styles")
+
+    def _require_project_styles_dir():
+        d = _styles_dir()
+        if d is None:
+            return None, _error_response(
+                "项目未加载，无法访问样式目录",
+                "PROJECT_NOT_LOADED",
+                400,
+            )
+        return d, None
 
     @bp.route("/api/review/styles", methods=["GET"])
     def list_styles():
+        styles_dir, err = _require_project_styles_dir()
+        if err is not None:
+            return err
         try:
             from modules.review_engine.style_skills import list_styles as do_list
-            styles = do_list(_styles_dir())
+            styles = do_list(styles_dir)
             return _ok({
                 "styles": [
                     {
@@ -53,7 +76,12 @@ def create_style_blueprint(*, project_dir_getter):
 
     @bp.route("/api/review/styles", methods=["POST"])
     def save_style():
+        styles_dir, err = _require_project_styles_dir()
+        if err is not None:
+            return err
         data = request.get_json(silent=True) or {}
+        if not isinstance(data, dict):
+            data = {}
         name = data.get("name")
         if not name:
             return _error_response("name required", "MISSING_PARAM", 400)
@@ -71,7 +99,7 @@ def create_style_blueprint(*, project_dir_getter):
                 pacing=data.get("pacing", "medium"),
                 bgm_volume_db=data.get("bgm_volume_db", -12.0),
             )
-            path = do_save(style, _styles_dir())
+            path = do_save(style, styles_dir)
             return _ok({"style_id": name, "path": path}, 201)
         except ReviewEngineError as e:
             return _error_response(str(e), "STYLE_SAVE_FAILED", 500)

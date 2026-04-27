@@ -57,7 +57,7 @@ def create_agent_task_run_blueprint(
                     default_timeout_seconds=normalize_skill_timeout_seconds(payload.get("timeout_seconds", 120), default=120.0),
                 )
             except Exception as exc:
-                return jsonify({"error": f"skills 解析失败: {exc}"}), 400
+                return jsonify({"error": safe_error_response(exc, "skills 解析失败")}), 400
             try:
                 governance_applied = apply_governance_to_skill_flow(
                     actor_id=str(request_ctx.get("actor_id", "") or ""),
@@ -67,7 +67,7 @@ def create_agent_task_run_blueprint(
                     explicit_max_parallel=explicit_max_parallel,
                 )
             except Exception as exc:
-                return jsonify({"error": f"治理校验失败: {exc}"}), 400
+                return jsonify({"error": safe_error_response(exc, "治理校验失败")}), 400
             max_parallel = parse_int_param(governance_applied.get("max_parallel", 1), default=1, min_val=1, max_val=8)
             budget_limit = governance_applied.get("budget_limit", {}) if isinstance(governance_applied.get("budget_limit"), dict) else {}
             governance = governance_applied.get("governance", {}) if isinstance(governance_applied.get("governance"), dict) else {}
@@ -172,7 +172,7 @@ def create_agent_task_run_blueprint(
                     ),
                 )
             except Exception as exc:
-                return jsonify({"error": f"skills 解析失败: {exc}"}), 400
+                return jsonify({"error": safe_error_response(exc, "skills 解析失败")}), 400
             try:
                 governance_applied = apply_governance_to_skill_flow(
                     actor_id=str(request_ctx.get("actor_id", "") or ""),
@@ -182,7 +182,7 @@ def create_agent_task_run_blueprint(
                     explicit_max_parallel=explicit_max_parallel,
                 )
             except Exception as exc:
-                return jsonify({"error": f"治理校验失败: {exc}"}), 400
+                return jsonify({"error": safe_error_response(exc, "治理校验失败")}), 400
             max_parallel = parse_int_param(governance_applied.get("max_parallel", 1), default=1, min_val=1, max_val=8)
             budget_limit = governance_applied.get("budget_limit", {}) if isinstance(governance_applied.get("budget_limit"), dict) else {}
             governance = governance_applied.get("governance", {}) if isinstance(governance_applied.get("governance"), dict) else {}

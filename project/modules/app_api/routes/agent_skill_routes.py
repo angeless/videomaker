@@ -29,7 +29,13 @@ def create_agent_skill_blueprint(
 
     @bp.route("/api/agent/skills/invoke", methods=["POST"])
     def api_agent_skills_invoke():
-        payload = request.json or {}
+        # Round-15.6: dict-type guard. A JSON array body would crash on
+        # payload.get(); a JSON null becomes {} via the legacy `or {}`,
+        # but other shapes (string/number) still passed through. Treat
+        # any non-dict body as empty.
+        payload = request.json
+        if not isinstance(payload, dict):
+            payload = {}
         request_ctx = parse_request_context()
         skill_id = parse_str_param(payload.get("skill_id", ""))
         if not skill_id:
@@ -66,18 +72,29 @@ def create_agent_skill_blueprint(
         jobs = jobs_getter()
 
         def _do_invoke():
-            jobs[job_id]["progress"] = 8
-            jobs[job_id]["log"].append(f"[AgentSkill] invoke_id={invoke_id} skill_id={skill_id}")
-            jobs[job_id]["log"].append(f"[AgentSkill] 调用 {method} {endpoint}")
+            # Round-15.6: defensive setdefault — if run_in_bg's contract
+            # changes such that the worker fires before the jobs[job_id]
+            # slot is initialized, a raw assignment to jobs[job_id]["progress"]
+            # would 500 the worker (no slot yet) and corrupt the job log.
+            # setdefault guarantees a sane starting record either way.
+            slot = jobs.setdefault(
+                job_id,
+                {"status": "running", "progress": 0, "log": [], "kind": "agent_skill"},
+            )
+            slot.setdefault("log", []).append(
+                f"[AgentSkill] invoke_id={invoke_id} skill_id={skill_id}"
+            )
+            slot["log"].append(f"[AgentSkill] 调用 {method} {endpoint}")
+            slot["progress"] = 8
             ret = execute_agent_skill(
                 skill_id=skill_id,
                 input_payload=input_payload,
                 retry_policy=retry_policy,
                 timeout_seconds=timeout_seconds,
                 request_context=request_ctx,
-                logger=lambda msg: jobs[job_id]["log"].append(f"[AgentSkill] {msg}"),
+                logger=lambda msg: slot["log"].append(f"[AgentSkill] {msg}"),
             )
-            jobs[job_id]["progress"] = 95
+            slot["progress"] = 95
             ret["invoke_id"] = invoke_id
             return ret
 

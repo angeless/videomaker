@@ -8,7 +8,7 @@ from typing import Any, Callable, Dict
 
 from flask import Blueprint, jsonify, request
 
-from modules.app_api.param_utils import parse_str_param
+from modules.app_api.param_utils import parse_str_param, safe_error_response
 
 
 def create_agent_template_blueprint(
@@ -61,7 +61,12 @@ def create_agent_template_blueprint(
     def api_agent_templates_upsert():
         if project_dir_getter() is None:
             return jsonify({"error": "项目未加载"}), 400
-        payload = request.json or {}
+        # Round-15.6: dict-type guard — a JSON array body would later
+        # crash on payload.get(). Same defense applied to all routes
+        # that take request.json without an explicit type check.
+        payload = request.json
+        if not isinstance(payload, dict):
+            payload = {}
         ctx = parse_request_context()
         default_scope = parse_str_param(payload.get("scope", "")).lower()
         if not default_scope:
@@ -73,7 +78,9 @@ def create_agent_template_blueprint(
                 actor_id_default=ctx.get("actor_id", ""),
             )
         except Exception as exc:
-            return jsonify({"error": f"模板保存失败: {exc}"}), 400
+            # Round-15.6: route through safe_error_response so normalizer
+            # internals (key paths, type names) don't leak to clients.
+            return jsonify({"error": safe_error_response(exc, "模板保存失败")}), 400
 
         scope = str(tmpl.get("scope", "")).lower()
         if scope == "system":

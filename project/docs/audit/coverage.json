@@ -1463,12 +1463,12 @@
     },
     "modules/app_api/routes/agent_skill_routes.py": {
       "priority": "other",
-      "status": "scanned",
+      "status": "audited_fixed",
       "rounds": [
         15
       ],
       "commits": [],
-      "note": "R15: swept, no new HIGH/MED findings"
+      "note": "R15.6: route hardening + artifact TOCTOU fix"
     },
     "modules/app_api/routes/agent_task_query_routes.py": {
       "priority": "other",
@@ -1481,21 +1481,21 @@
     },
     "modules/app_api/routes/agent_task_run_routes.py": {
       "priority": "other",
-      "status": "scanned",
+      "status": "audited_fixed",
       "rounds": [
         15
       ],
       "commits": [],
-      "note": "R15: swept, no new HIGH/MED findings"
+      "note": "R15.6: route hardening + artifact TOCTOU fix"
     },
     "modules/app_api/routes/agent_template_routes.py": {
       "priority": "other",
-      "status": "scanned",
+      "status": "audited_fixed",
       "rounds": [
         15
       ],
       "commits": [],
-      "note": "R15: swept, no new HIGH/MED findings"
+      "note": "R15.6: route hardening + artifact TOCTOU fix"
     },
     "modules/app_api/routes/capability_audio_voice_routes.py": {
       "priority": "other",
@@ -1634,12 +1634,12 @@
     },
     "modules/app_api/routes/style_routes.py": {
       "priority": "other",
-      "status": "scanned",
+      "status": "audited_fixed",
       "rounds": [
         15
       ],
       "commits": [],
-      "note": "R15: swept, no new HIGH/MED findings"
+      "note": "R15.6: route hardening + artifact TOCTOU fix"
     },
     "modules/app_api/routes/system_routes.py": {
       "priority": "other",
@@ -2602,12 +2602,12 @@
     },
     "modules/review_engine/artifact_store.py": {
       "priority": "P2",
-      "status": "scanned",
+      "status": "audited_fixed",
       "rounds": [
         15
       ],
       "commits": [],
-      "note": "R15: swept, no new HIGH/MED findings"
+      "note": "R15.6: route hardening + artifact TOCTOU fix"
     },
     "modules/review_engine/audio_enhancer.py": {
       "priority": "P2",
@@ -3199,5 +3199,5 @@
       "note": "R15.5: real audit findings fixed"
     }
   },
-  "last_updated": "2026-04-17T07:53:47+00:00"
+  "last_updated": "2026-04-27T18:59:50+00:00"
 }
