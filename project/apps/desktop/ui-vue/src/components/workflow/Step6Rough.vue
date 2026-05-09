@@ -39,7 +39,7 @@
     <div v-if="workflow.roughUrl" class="card">
       <div class="card-header" style="display: flex; align-items: center; justify-content: space-between">
         <span>{{ isDone ? '✅ 粗剪已通过审核' : '粗剪预览' }}</span>
-        <button v-if="isDone" class="btn btn-sm btn-next" @click="router.push('/create/workflow/7')">继续下一步 →</button>
+        <button v-if="isDone" class="btn btn-sm btn-next" @click="router.push('/create/guide/7')">继续下一步 →</button>
       </div>
       <video :src="workflow.roughUrl" controls style="width: 100%; border-radius: 6px"></video>
     </div>

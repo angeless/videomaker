@@ -65,7 +65,18 @@
 
         <!-- 标签 -->
         <div v-if="allTags.length > 0" class="detail-tags">
-          <div class="meta-label" style="margin-bottom: 8px">语义标签</div>
+          <div class="tags-header" style="margin-bottom: 8px">
+            <span class="meta-label">语义标签</span>
+            <!-- v0.19 M1: 标签来源徽章（heuristic / openai / claude / llava） -->
+            <span
+              v-if="tagSourceBadge"
+              class="tag-source-badge"
+              :class="`tag-source-${tagSourceBadge.provider}`"
+              :title="tagSourceBadge.tooltip"
+            >
+              {{ tagSourceBadge.label }}
+            </span>
+          </div>
           <div class="tags-wrap">
             <span v-for="tag in allTags" :key="tag" class="tag">{{ tag }}</span>
           </div>
@@ -145,6 +156,41 @@ function formatSize(bytes) {
   if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`
   return `${(b / (1024 * 1024)).toFixed(1)} MB`
 }
+
+// v0.19 M1: 标签来源徽章 — 从 _meta.provider (L6 字段) 派生
+// provider ∈ heuristic / openai / claude / llava / unknown
+// 老素材（L6 前入库）没有 provider 字段 → 不渲染徽章（不打扰）
+const tagSourceBadge = computed(() => {
+  const meta = props.asset.semantic?._meta
+  if (!meta || !meta.provider) return null
+  const provider = meta.provider
+  const model = meta.model_version || ''
+
+  const variants = {
+    heuristic: {
+      label: '规则推断',
+      tooltip: `本素材标签由颜色/边缘/运动统计规则生成（${model || 'heuristic_only'}），未调用 AI 模型。配置 OpenAI 或 Anthropic Key 后将自动升级。`,
+    },
+    openai: {
+      label: `AI · ${model}`,
+      tooltip: `本素材标签由 OpenAI ${model} 生成`,
+    },
+    claude: {
+      label: `AI · ${model}`,
+      tooltip: `本素材标签由 Anthropic ${model} 生成`,
+    },
+    llava: {
+      label: `本地 AI · ${model}`,
+      tooltip: `本素材标签由本地 LLaVA 模型 (${model}) 生成`,
+    },
+    unknown: {
+      label: '来源未知',
+      tooltip: `model_version=${model || '空'}，无法识别来源`,
+    },
+  }
+  const variant = variants[provider] || variants.unknown
+  return { provider, ...variant }
+})
 
 const allTags = computed(() => {
   const semantic = props.asset.semantic
@@ -307,6 +353,57 @@ const allTags = computed(() => {
 .detail-tags {
   padding: 16px 20px;
   border-bottom: 1px solid var(--border, #333);
+}
+
+/* v0.19 M1: 标签来源徽章 + 标签头部布局 */
+.tags-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tag-source-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  letter-spacing: 0.02em;
+  cursor: help;
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tag-source-heuristic {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.tag-source-openai {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+.tag-source-claude {
+  background: rgba(167, 139, 250, 0.15);
+  color: #a78bfa;
+  border: 1px solid rgba(167, 139, 250, 0.35);
+}
+
+.tag-source-llava {
+  background: rgba(96, 165, 250, 0.15);
+  color: #60a5fa;
+  border: 1px solid rgba(96, 165, 250, 0.35);
+}
+
+.tag-source-unknown {
+  background: rgba(156, 163, 175, 0.15);
+  color: #9ca3af;
+  border: 1px solid rgba(156, 163, 175, 0.35);
 }
 
 .tags-wrap {

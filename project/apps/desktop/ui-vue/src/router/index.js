@@ -19,16 +19,25 @@ const routes = [
     name: 'create',
     component: () => import('../views/CreateView.vue'),
     children: [
-      // 引导流程
+      // 引导流程 (v0.19 N5: 'workflow' → 'guide' 消除与 /workflows 命名碰撞)
       {
-        path: 'workflow',
+        path: 'guide',
         name: 'workflow',
         component: () => import('../components/workflow/WorkflowPanel.vue'),
       },
       {
-        path: 'workflow/:step',
+        path: 'guide/:step',
         name: 'workflow-step',
         component: () => import('../components/workflow/WorkflowPanel.vue'),
+      },
+      // v0.19 N5: 兼容旧路径 — 子路由级 redirect
+      {
+        path: 'workflow',
+        redirect: { name: 'workflow' },
+      },
+      {
+        path: 'workflow/:step',
+        redirect: to => ({ name: 'workflow-step', params: { step: to.params.step } }),
       },
       {
         path: 'ideate',
@@ -114,11 +123,11 @@ const routes = [
   },
   {
     path: '/production/workflow',
-    redirect: '/create/workflow',
+    redirect: '/create/guide',
   },
   {
     path: '/production/workflow/:step',
-    redirect: to => `/create/workflow/${to.params.step}`,
+    redirect: to => `/create/guide/${to.params.step}`,
   },
   {
     path: '/production/tools',

@@ -9,7 +9,21 @@ source: claude-code
 > 更新于 2026-05-08
 
 ## 当前版本：v0.18.0 — 四大基础设施升级 ✅ 完成
-## 当前状态：v0.19.0 计划已经 plan-audit 三维度审计 + Critical 修正完成；准备进 Wave 1
+## 当前状态：v0.19.0 Wave 1 全部完成；准备进 Wave 2
+
+### Wave 1 完成进度
+
+| 任务 | Commit | 状态 |
+|---|---|---|
+| plan-audit 三维度 + 5 Critical 修正 | 109cf0e | ✅ |
+| M2 (Library AI 未启用横幅) + M9 anchor | 109cf0e | ✅ |
+| M8 (LibraryHealthPanel 概念区分 — 最小) | 109cf0e | ✅ |
+| N6 (孤儿 ProductionView + redirect 注释) | 109cf0e | ✅ |
+| **L6** (_meta.provider 分类，17 单测) | 待 commit | ✅ |
+| **M1** (AssetDetailPanel 来源徽章 5 provider) | 待 commit | ✅ |
+| **M3** (OnboardingModal API key step) | 待 commit | ✅ |
+| **N5** (`/create/workflow` → `/create/guide` 5 步验收) | 待 commit | ✅ |
+| **基线** | — | 1690 passed, 5 skipped (v0.18 末 1626 + 64 新增) |
 
 ### 审计修订摘要（2026-05-08）
 - 5 Critical 全部修正（详见 `docs/audit/2026-05-08-plan-audit-report-v0.19.0.md`）
@@ -29,29 +43,40 @@ source: claude-code
 | v0.18.0 | MCP + VLM 流 + 多轨 + GPU 渲染 | 27 | `docs/dev-plans/dev-plan-v0.18.0.md` | **Done** |
 
 ## 上次停在
-- 分支：`main`，commit 4106ced
-- 六轮独立交叉审查完成，69个问题全部修复
-- 测试：1626 passed, 5 skipped（+10 新增回归测试）
-- 第六轮发现 3 个 CRITICAL：review/roughcut store _fetch 签名不匹配 + 缺 auth header
-  → Comment Export / TTS / BGM / transition / reframe 自 v0.15.0 起从未工作过
+- 分支：`claude/funny-mestorf-142ff5`（worktree），第二次 Wave 1 commit 待 push
+- v0.19.0 Wave 1 **全部完成**（M2 / M9 / M8 / N6 + L6 / M1 / M3 / N5）
+- 测试：1690 passed (基线), 0 failed; +29 新增 TDD 测试 (M2-T/E + L6 _classify_provider)
+- **下次会话起点**：Wave 2 — L1+L8（接受 Anthropic key + env var 桥接）作为最高 P0 起点
 
-## 下一步（Wave 1 启动）
+## 历史里程碑
+- 2026-04-14 commit 4106ced：v0.18.0 六轮独立交叉审查完成，69 个问题全部修复（1626 passed, 5 skipped）
+- 自 v0.15.0 起从未工作过的 dead code（Comment Export / TTS / BGM / transition / reframe）已修复
 
-### Wave 1 任务清单（含 audit 后新增）
-**用户头牌问题立即缓解**：M2 + M8 + N6 → **0.5-1 天可见效果**
-- **M2** Library "AI 未启用"横幅（含 Settings 链接）— TDD 起点
-- **M8** 指纹/标签概念区分（HealthPanel 拆两块）
-- **N6** 删除 `/production` redirect（零风险清理，跑 grep + redirect 测试）
+## 下一步（Wave 1 续做 — 新会话起点）
 
-**信任修复地基**：M1 + M3 + M9 + L6
-- **M1** AssetDetailPanel 标签来源徽章
-- **M3** OnboardingModal 加 API key 引导 step
-- **M9** Library 横幅 → Settings AI section 一键直达
-- **L6** `_meta.model_version` 反映真实 provider（前移以满足 M1 依赖）
+### 推荐顺序（依赖驱动）
+1. **L6** `_meta.model_version` 反映真实 provider — M1 的依赖前置，1-2 小时
+   - core_mixin.py:3863-3865 已部分实现（OpenAI 写 model_version）
+   - 任务：补 Claude/Llava/heuristic 三种 provider 的写入路径
+   - 测试：3 种 provider 下 `_meta.model_version` 字段不同
 
-**复杂任务（Wave 1 末）**：N5 改名 + 影响面 5 步验收
+2. **M1** AssetDetailPanel 标签来源徽章 — 依赖 L6 完成
+   - 文件：`apps/desktop/ui-vue/src/components/library/AssetDetailPanel.vue`
+   - 任务：读 `asset.semantic._meta.model_version`，渲染 badge：
+     `heuristic` (灰) / `llm:gpt-*` (蓝) / `llm:claude-*` (橙)
+   - 测试：mock 3 种 model_version，断言 badge 正确
 
-**已规划（按原 v0.19 计划）**：E1-E4 + F1-F3
+3. **M3** OnboardingModal API key 引导 step — UI 独立，可与 M1 并行
+   - 文件：`apps/desktop/ui-vue/src/components/onboarding/OnboardingModal.vue`（328 行）
+   - 任务：在现有结构里**加**一步（不重写步骤数），含跳过选项
+   - 边界：跳过后由 MissingKeyBanner（M2 已上线）兜底
+
+4. **N5** `/create/workflow` → `/create/guide` + 5 步验收 — Wave 1 末，影响面最大
+   - 影响面：14 个 .vue/.js + 20+ 处硬编码 + i18n labels.js + 路由 + 测试 fixture
+   - 验收：① grep `/create/workflow` = 0（除 redirect）② i18n 同步 ③ Vue 硬编码扫描 ④ 旧路径 301 ⑤ E2E 通过
+
+### 已规划（按原 v0.19 计划）
+- E1-E4（dead-stub 清理）+ F1-F3（错误显现）— 与上述 M/L 同 Wave 1 但独立线
 
 ## v0.19.0 新增 Feature（2026-05-08 用户报告驱动）
 

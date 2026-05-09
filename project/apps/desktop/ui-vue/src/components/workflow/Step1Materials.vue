@@ -7,7 +7,7 @@
       <span>素材分析已完成
         <span v-if="workflow.selectedAssets.length > 0">— {{ workflow.selectedAssets.length }} 个素材已就绪</span>
       </span>
-      <button class="btn btn-sm btn-next" @click="router.push('/create/workflow/2')">继续下一步 →</button>
+      <button class="btn btn-sm btn-next" @click="router.push('/create/guide/2')">继续下一步 →</button>
     </div>
 
     <!-- 未完成：素材准备面板 -->
@@ -301,7 +301,7 @@ async function createFromLibrary() {
   toast.show(`项目已创建，${data.selected_count || pickerSelected.value.length} 个素材就绪`, 'success')
   await projectStore.fetchStatus()
   await workflow.loadStepData()
-  router.push('/create/workflow/2')
+  router.push('/create/guide/2')
 }
 
 // ── 选择文件夹 ──
@@ -400,7 +400,7 @@ async function importAndCreate() {
     await projectStore.fetchStatus()
     await workflow.loadStepData()
     if (stepDone.value || appStore.currentStep > 1) {
-      router.push('/create/workflow/2')
+      router.push('/create/guide/2')
     }
     return
   }
@@ -451,7 +451,7 @@ async function importAndCreate() {
   await projectStore.fetchStatus()
   await workflow.loadStepData()
   if (stepDone.value || appStore.currentStep > 1) {
-    router.push('/create/workflow/2')
+    router.push('/create/guide/2')
   }
 }
 

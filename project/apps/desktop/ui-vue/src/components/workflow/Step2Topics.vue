@@ -4,7 +4,7 @@
 
     <div v-if="stepDone" class="step-done-banner">
       <span>✅ 选题已确定<span v-if="selectedTitle"> — {{ selectedTitle }}</span></span>
-      <button class="btn btn-sm btn-next" @click="router.push('/create/workflow/3')">继续下一步 →</button>
+      <button class="btn btn-sm btn-next" @click="router.push('/create/guide/3')">继续下一步 →</button>
     </div>
 
     <p class="text-muted" style="margin-bottom: 16px">

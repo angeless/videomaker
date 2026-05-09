@@ -4,7 +4,7 @@
 
     <div v-if="stepDone" class="step-done-banner">
       <span>✅ 素材匹配已完成</span>
-      <button class="btn btn-sm btn-next" @click="router.push('/create/workflow/5')">继续下一步 →</button>
+      <button class="btn btn-sm btn-next" @click="router.push('/create/guide/5')">继续下一步 →</button>
     </div>
 
     <p class="text-muted" style="margin-bottom: 16px">

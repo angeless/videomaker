@@ -4,7 +4,7 @@
 
     <div v-if="stepDone" class="step-done-banner">
       <span>✅ 脚本已确认<span v-if="workflow.scriptClips.length > 0"> — {{ workflow.scriptClips.length }} 个分镜</span></span>
-      <button class="btn btn-sm btn-next" @click="router.push('/create/workflow/4')">继续下一步 →</button>
+      <button class="btn btn-sm btn-next" @click="router.push('/create/guide/4')">继续下一步 →</button>
     </div>
 
     <p class="text-muted" style="margin-bottom: 16px">

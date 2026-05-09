@@ -83,7 +83,7 @@ function importToWorkflow() {
   workflow.selectedTopic = topic
   workflow.topicCustom = ''
   capStore.setMessage('已导入到工作流选题', 'success')
-  router.push('/create/workflow/2')
+  router.push('/create/guide/2')
 }
 
 async function generate() {

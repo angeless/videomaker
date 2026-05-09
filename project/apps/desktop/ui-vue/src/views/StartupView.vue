@@ -118,7 +118,7 @@ async function runStartup() {
   await new Promise(r => setTimeout(r, 400))
 
   if (appStore.hasProject) {
-    router.replace('/create/workflow')
+    router.replace('/create/guide')
   } else {
     router.replace('/library')
   }
@@ -133,7 +133,7 @@ async function retry() {
 function acknowledgeAndContinue() {
   appStore.preflightAcknowledged = true
   if (appStore.hasProject) {
-    router.replace('/create/workflow')
+    router.replace('/create/guide')
   } else {
     router.replace('/library')
   }

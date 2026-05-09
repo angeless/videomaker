@@ -178,7 +178,7 @@ function isActive(key) {
 
 function go(key) {
   const pathMap = {
-    workflow: '/create/workflow',
+    workflow: '/create/guide',
     ideate: '/create/ideate',
     organize: '/create/organize',
     refine: '/create/refine',
@@ -227,7 +227,7 @@ onMounted(() => {
   appStore.loadRecentProjects()
   // B-26: 有项目时自动进入 7 步工作流，避免空状态
   if (appStore.projectDir && !hasChildRoute.value) {
-    router.replace('/create/workflow')
+    router.replace('/create/guide')
   }
 })
 </script>

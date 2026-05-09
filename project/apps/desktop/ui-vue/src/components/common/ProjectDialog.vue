@@ -144,7 +144,7 @@ async function submit() {
     ok = await appStore.openProject(appStore.initOpenDir)
   }
   if (ok) {
-    router.push('/create/workflow')
+    router.push('/create/guide')
   }
 }
 </script>

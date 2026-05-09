@@ -3,7 +3,7 @@
     <router-link to="/library" class="nav-link" :class="{ active: isActive('library') }">
       {{ labels.nav.library }}
     </router-link>
-    <router-link to="/create/workflow" class="nav-link" :class="{ active: isActive('create') }">
+    <router-link to="/create/guide" class="nav-link" :class="{ active: isActive('create') }">
       {{ labels.nav.create }}
     </router-link>
     <router-link to="/workflows" class="nav-link" :class="{ active: isActive('workflows') }">

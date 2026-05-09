@@ -202,6 +202,33 @@ class CoreMixin:
         return bool(str(os.environ.get("OPENAI_API_KEY", "")).strip())
 
     @staticmethod
+    def _classify_provider(model_version: Any) -> str:
+        """Classify a model_version string into a stable provider tag.
+
+        v0.19 Wave 1 Task L6 (dev-plan-v0.19.0.md). M1 (badge UI) reads
+        `_meta.provider` to render provider-specific styling. Wave 2 (L2)
+        populates real Claude/LLaVA model_versions; this classifier
+        already routes them correctly so the field shape is stable.
+
+        Returns one of: ``heuristic`` | ``openai`` | ``claude`` | ``llava`` |
+        ``unknown``.
+        """
+        if not isinstance(model_version, str):
+            return "unknown"
+        s = model_version.strip().lower()
+        if not s:
+            return "unknown"
+        if s.startswith("heuristic"):
+            return "heuristic"
+        if s.startswith("gpt-") or s.startswith("openai/") or s.startswith("openai-"):
+            return "openai"
+        if s.startswith("claude") or s.startswith("anthropic/") or s.startswith("anthropic-"):
+            return "claude"
+        if "llava" in s:
+            return "llava"
+        return "unknown"
+
+    @staticmethod
     def _llm_tagging_status() -> Dict[str, Any]:
         """Status for LLM-powered semantic tagging — drives M2 banner UI.
 
@@ -3901,11 +3928,17 @@ class CoreMixin:
             "extraction_time": self._now(),
             "tag_library_version": "chatgpt_v1_2124",
         }
-        # Model/prompt version injected by _llm_structured_tags if LLM was used
+        # Model/prompt version injected by _llm_structured_tags if LLM was used.
+        # v0.19 L6: also classify into stable provider tag for M1 badge UI.
         if structured_tag_schema and isinstance(structured_tag_schema, dict):
-            semantic["_meta"]["model_version"] = structured_tag_schema.get(
-                "_model", "heuristic_only"
-            )
+            model_version = structured_tag_schema.get("_model", "heuristic_only")
+            semantic["_meta"]["model_version"] = model_version
+            semantic["_meta"]["provider"] = self._classify_provider(model_version)
+            semantic["_meta"]["prompt_version"] = "v3.0_25cat"
+        else:
+            # Defensive default for edge cases (no structured tag schema at all)
+            semantic["_meta"]["model_version"] = "heuristic_only"
+            semantic["_meta"]["provider"] = "heuristic"
             semantic["_meta"]["prompt_version"] = "v3.0_25cat"
 
         return {

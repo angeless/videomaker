@@ -4,7 +4,7 @@
 
     <div v-if="stepDone" class="step-done-banner">
       <span>✅ 帧预览已确认<span v-if="workflow.frames.length > 0"> — {{ workflow.frames.length }} 个关键帧</span></span>
-      <button class="btn btn-sm btn-next" @click="router.push('/create/workflow/6')">继续下一步 →</button>
+      <button class="btn btn-sm btn-next" @click="router.push('/create/guide/6')">继续下一步 →</button>
     </div>
 
     <p class="text-muted" style="margin-bottom: 16px">

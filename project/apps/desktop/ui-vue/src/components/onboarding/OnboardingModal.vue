@@ -4,10 +4,10 @@
       <div class="modal" style="min-width: 480px">
         <div class="modal-title">{{ L.onboarding.title }}</div>
 
-        <!-- 步骤指示 -->
+        <!-- 步骤指示 (v0.19 M3: 4 step now — welcome / ai-key / ingest / create) -->
         <div class="onboarding-steps">
           <div
-            v-for="i in 3"
+            v-for="i in 4"
             :key="i"
             class="onboarding-dot"
             :class="{ active: step === i - 1, done: step > i - 1 }"
@@ -25,8 +25,29 @@
           </div>
         </div>
 
-        <!-- Step 1: 导入素材 -->
+        <!-- Step 1: 配置 AI 标签 (v0.19 M3 — 可选；跳过则用颜色规则) -->
         <div v-if="step === 1" class="onboarding-content">
+          <h3>配置 AI 标签 <span class="onboarding-optional">（可选）</span></h3>
+          <p>
+            配置 OpenAI 或 Anthropic API Key 后，素材标签由 AI 视觉模型生成，
+            准确度比颜色规则推断**显著提升**。未配置不影响其它功能（指纹去重、转录等）。
+          </p>
+          <div class="ai-key-cta">
+            <div class="ai-key-status" :class="aiKeyStatusClass">
+              <span class="ai-key-icon">{{ aiKeyConfigured ? '✓' : '○' }}</span>
+              <span>{{ aiKeyConfigured ? `已配置 ${aiKeyProvider}` : '尚未配置任何 Provider' }}</span>
+            </div>
+            <button class="btn btn-primary" @click="goToSettingsAi">
+              {{ aiKeyConfigured ? '修改配置' : '去 Settings 配置' }}
+            </button>
+          </div>
+          <div class="ai-key-hint">
+            提示：配置完成后回到此页可点"下一步"继续；不配置请点"稍后再说"。
+          </div>
+        </div>
+
+        <!-- Step 2: 导入素材 -->
+        <div v-if="step === 2" class="onboarding-content">
           <h3>{{ L.onboarding.step2Title }}</h3>
           <p>{{ L.onboarding.step2Desc }}</p>
 
@@ -54,8 +75,8 @@
           </div>
         </div>
 
-        <!-- Step 2: 开始创作 -->
-        <div v-if="step === 2" class="onboarding-content">
+        <!-- Step 3: 开始创作 (was step 2 before M3) -->
+        <div v-if="step === 3" class="onboarding-content">
           <h3>{{ L.onboarding.step3Title }}</h3>
           <p>{{ L.onboarding.step3Desc }}</p>
           <div class="onboarding-action-area finish-actions">
@@ -76,7 +97,10 @@
           <button v-if="step === 0" class="btn btn-primary" @click="nextStep">
             {{ L.onboarding.start }}
           </button>
-          <button v-else-if="step === 1" class="btn btn-primary" @click="nextStep" :disabled="!canAdvanceFromStep1">
+          <button v-else-if="step === 1" class="btn btn-primary" @click="nextStep">
+            {{ aiKeyConfigured ? '下一步' : '稍后再说' }}
+          </button>
+          <button v-else-if="step === 2" class="btn btn-primary" @click="nextStep" :disabled="!canAdvanceFromStep1">
             {{ L.onboarding.next }}
           </button>
           <button v-else class="btn btn-success" @click="finish">
@@ -100,13 +124,48 @@ const appStore = useAppStore()
 const prefs = usePreferencesStore()
 const apiStore = useApiStore()
 
-// Resume from persisted step (but never beyond step 2)
-const step = ref(Math.min(prefs.uiSettings.onboarding_step || 0, 2))
+// v0.19 M3: 4 steps now (welcome / ai-key / ingest / create)
+// Resume from persisted step (but never beyond step 3)
+const step = ref(Math.min(prefs.uiSettings.onboarding_step || 0, 3))
 
 const selectedFolder = ref('')
 const ingestStarted = ref(false)
 const ingestDone = ref(false)
 const ingestJobId = ref('')
+
+// v0.19 M3: AI key configuration state — refreshed on step entry & after Settings return
+const aiKeyConfigured = ref(false)
+const aiKeyProvider = ref('')
+
+const aiKeyStatusClass = computed(() =>
+  aiKeyConfigured.value ? 'ai-key-status-ready' : 'ai-key-status-pending'
+)
+
+async function refreshAiKeyStatus() {
+  try {
+    const data = await apiStore.api('GET', '/api/library/llm-status')
+    aiKeyConfigured.value = !!data?.enabled
+    if (data?.providers?.openai) aiKeyProvider.value = 'OpenAI'
+    else if (data?.providers?.anthropic) aiKeyProvider.value = 'Anthropic'
+    else aiKeyProvider.value = ''
+  } catch {
+    // Endpoint failure → treat as not configured (banner / step still works)
+    aiKeyConfigured.value = false
+    aiKeyProvider.value = ''
+  }
+}
+
+function goToSettingsAi() {
+  // Dismiss the modal so user can configure; banner in Library will reappear
+  // until they configure (M2). M9 anchor gets us straight to AI card.
+  appStore.dismissOnboarding(true)
+  window.location.hash = '#/settings'
+  // Hash change to anchor needs a tick — use setTimeout to scroll after route mount
+  setTimeout(() => {
+    const el = document.getElementById('ai-config')
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, 200)
+}
 
 const canAdvanceFromStep1 = computed(() => {
   // User can advance if they selected a folder (ingest is optional)
@@ -119,9 +178,10 @@ function persistStep(s) {
 }
 
 function nextStep() {
-  if (step.value < 2) {
+  if (step.value < 3) {
     step.value++
     persistStep(step.value)
+    if (step.value === 1) refreshAiKeyStatus()
   }
 }
 
@@ -135,7 +195,11 @@ function prevStep() {
 function onEscKey(e) {
   if (e.key === 'Escape') skip()
 }
-onMounted(() => window.addEventListener('keydown', onEscKey))
+onMounted(() => {
+  window.addEventListener('keydown', onEscKey)
+  // v0.19 M3: refresh AI key status if user resumed onboarding at step 1
+  if (step.value === 1) refreshAiKeyStatus()
+})
 onUnmounted(() => {
   window.removeEventListener('keydown', onEscKey)
   // Stop the ingest job poll chain (Round-14).
@@ -158,7 +222,7 @@ function goLibrary() {
 
 function goCreate() {
   appStore.dismissOnboarding(true)
-  window.location.hash = '#/create/workflow'
+  window.location.hash = '#/create/guide'
 }
 
 async function pickFolder() {
@@ -266,6 +330,48 @@ function shortenPath(p) {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* v0.19 M3: AI Key configuration step styles */
+.onboarding-optional {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-muted, #888);
+  margin-left: 6px;
+}
+
+.ai-key-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  margin-top: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  border-radius: 8px;
+}
+
+.ai-key-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.ai-key-status-ready { color: #10b981; }
+.ai-key-status-pending { color: var(--text-muted, #888); }
+
+.ai-key-icon {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.ai-key-hint {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-muted, #888);
+  line-height: 1.5;
 }
 
 .feature-icon {

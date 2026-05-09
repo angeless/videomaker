@@ -108,7 +108,7 @@ const formattedLog = computed(() => {
 })
 
 function goToStep(stepNum) {
-  router.push(`/create/workflow/${stepNum}`)
+  router.push(`/create/guide/${stepNum}`)
 }
 
 // 进入工作流时加载步骤数据（roughUrl / finalUrl / stageFiles 等）
