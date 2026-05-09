@@ -119,6 +119,22 @@ def create_library_blueprint(
     def api_library_stats():
         return jsonify(_library().stats())
 
+    @bp.route("/api/library/llm-status")
+    def api_library_llm_status():
+        """LLM tagging runtime status — drives M2 banner UI.
+
+        v0.19 Wave 1 Task M2 (dev-plan-v0.19.0.md). Lightweight endpoint
+        the LibraryView polls on mount + on Settings change to decide
+        whether to render the "AI 标签未启用" banner.
+
+        no-store cache: status reflects env state which can change
+        any time the user saves new settings.
+        """
+        payload = _library()._llm_tagging_status()
+        rsp = jsonify(payload)
+        rsp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        return rsp
+
     @bp.route("/api/library/search")
     def api_library_search():
         query = (request.args.get("q", "") or "").strip()

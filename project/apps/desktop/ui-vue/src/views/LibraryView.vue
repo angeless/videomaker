@@ -8,6 +8,9 @@
   <div class="main">
     <div class="content">
       <div class="content-narrow">
+        <!-- v0.19 M2: AI 标签未启用横幅（未配 OpenAI/Anthropic key 时可见，session 可关闭） -->
+        <MissingKeyBanner />
+
         <!-- 搜索栏 -->
         <div class="library-toolbar" :class="{ 'toolbar-muted': isLibraryEmpty }">
           <SearchAutocomplete
@@ -195,6 +198,7 @@ import labels from '../i18n/labels.js'
 import AppNav from '../components/layout/AppNav.vue'
 import ProjectTitle from '../components/common/ProjectTitle.vue'
 import IngestPanel from '../components/library/IngestPanel.vue'
+import MissingKeyBanner from '../components/library/MissingKeyBanner.vue'
 import LibraryAssetCard from '../components/library/LibraryAssetCard.vue'
 import LibraryAssetRow from '../components/library/LibraryAssetRow.vue'
 import SearchAutocomplete from '../components/library/SearchAutocomplete.vue'

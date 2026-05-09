@@ -103,7 +103,11 @@ const routes = [
     name: 'settings',
     component: () => import('../views/SettingsView.vue'),
   },
-  // ── 旧路由重定向 ──
+  // ── 旧路由重定向（v0.18 迁移遗留）──
+  // v0.19 N6: ProductionView.vue 孤儿组件已删除（无 import）。
+  // redirect 保留 6 个版本周期（至 v0.24）以保护用户深链 / 书签——
+  // 删除前需先在用户环境观测无 /production 流量再行动（plan-audit-risk-N）。
+  // 删除时同步移除：本块 + tests/test_router_legacy_redirects.js（若存在）。
   {
     path: '/production',
     redirect: '/create',

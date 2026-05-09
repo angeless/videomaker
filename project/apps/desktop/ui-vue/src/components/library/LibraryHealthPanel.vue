@@ -27,13 +27,19 @@
               <div class="lhp-stat-value">{{ health.asset_coverage.total_assets }}</div>
               <div class="lhp-stat-label">总素材数</div>
             </div>
-            <div class="lhp-stat-card accent">
+            <div
+              class="lhp-stat-card accent"
+              title="AI 语义标签覆盖率：通过 LLM/规则推断生成的语义标签覆盖了多少素材。这与"指纹"不同——指纹用于去重检测，标签用于内容理解。"
+            >
               <div class="lhp-stat-value">{{ health.asset_coverage.tag_coverage_pct }}%</div>
-              <div class="lhp-stat-label">标签覆盖率</div>
+              <div class="lhp-stat-label">AI 标签覆盖率</div>
             </div>
-            <div class="lhp-stat-card">
+            <div
+              class="lhp-stat-card"
+              title="已生成 AI 语义标签的素材数（用于内容搜索/分类，与去重指纹不同）"
+            >
               <div class="lhp-stat-value">{{ health.asset_coverage.with_tags }}</div>
-              <div class="lhp-stat-label">已标签</div>
+              <div class="lhp-stat-label">已打标签</div>
             </div>
             <div class="lhp-stat-card">
               <div class="lhp-stat-value">{{ health.asset_coverage.with_evidence }}</div>

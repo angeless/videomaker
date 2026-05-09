@@ -10,8 +10,8 @@
       <div class="content-narrow">
         <h2 style="margin-bottom: 24px">{{ labels.settings.title }}</h2>
 
-        <!-- AI 配置 -->
-        <div class="card">
+        <!-- AI 配置 — id="ai-config" 是 M9 anchor，MissingKeyBanner 跳转到此 -->
+        <div id="ai-config" class="card">
           <div class="card-header">🤖 {{ labels.settings.ai.title }}</div>
 
           <div class="form-group">

@@ -201,6 +201,49 @@ class CoreMixin:
             return False
         return bool(str(os.environ.get("OPENAI_API_KEY", "")).strip())
 
+    @staticmethod
+    def _llm_tagging_status() -> Dict[str, Any]:
+        """Status for LLM-powered semantic tagging — drives M2 banner UI.
+
+        v0.19 Wave 1 Task M2 (dev-plan-v0.19.0.md). Detects whether **any**
+        provider key is configured (OpenAI or Anthropic) so the banner can
+        guide users to Settings before they discover degraded tags.
+
+        Note: this method is a *detection helper* for UI; it does NOT change
+        the gate semantics of `_llm_tagging_enabled()` (which still routes
+        through OpenAI only — that flip happens in L1, Wave 2).
+
+        Returns:
+            {enabled, reason, message, providers}
+            reason ∈ {"ready", "missing_api_key", "disabled"}
+        """
+        has_openai = bool(str(os.environ.get("OPENAI_API_KEY", "")).strip())
+        has_anthropic = bool(str(os.environ.get("ANTHROPIC_API_KEY", "")).strip())
+        providers = {"openai": has_openai, "anthropic": has_anthropic}
+
+        if str(os.environ.get("VIDEOEDITOR_DISABLE_SEMANTIC_LLM", "")).strip() == "1":
+            return {
+                "enabled": False,
+                "reason": "disabled",
+                "message": "AI 标签已通过 VIDEOEDITOR_DISABLE_SEMANTIC_LLM 显式禁用",
+                "providers": providers,
+            }
+
+        if not (has_openai or has_anthropic):
+            return {
+                "enabled": False,
+                "reason": "missing_api_key",
+                "message": "未配置 OpenAI 或 Anthropic API Key — 素材标签将退回到颜色规则推断",
+                "providers": providers,
+            }
+
+        return {
+            "enabled": True,
+            "reason": "ready",
+            "message": "AI 标签已就绪",
+            "providers": providers,
+        }
+
     # ------------------------------------------------------------------
     # Thumbnail generation
 
