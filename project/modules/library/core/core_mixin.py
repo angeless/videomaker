@@ -208,6 +208,51 @@ class CoreMixin:
         has_anthropic = bool(str(os.environ.get("ANTHROPIC_API_KEY", "")).strip())
         return has_openai or has_anthropic
 
+    # v0.19 L4: classify SDK exceptions (by class name, no SDK import needed)
+    # to a stable reason vocab consumed by L7 health endpoint + M2 banner.
+    _LLM_ERROR_BY_NAME: Dict[str, str] = {
+        # Anthropic SDK
+        "AuthenticationError": "auth_failed",
+        "PermissionDeniedError": "auth_failed",
+        "RateLimitError": "rate_limited",
+        "APITimeoutError": "timeout",
+        "APIConnectionError": "network",
+        # OpenAI SDK
+        "BadRequestError": "bad_request",
+        # Generic / stdlib
+        "TimeoutError": "timeout",
+        "ConnectionError": "network",
+        "JSONDecodeError": "parse",
+    }
+
+    @classmethod
+    def _classify_llm_exception(cls, exc: BaseException) -> str:
+        """Map an exception to a stable reason tag for L7 health surface.
+
+        Uses **class name string match** (not isinstance) so this works
+        regardless of which provider SDK is installed at import time.
+        Falls back to 'unknown' for unrecognized errors.
+        """
+        return cls._LLM_ERROR_BY_NAME.get(type(exc).__name__, "unknown")
+
+    def _record_llm_error(self, reason: str, message: str, provider: str = "") -> None:
+        """Record the most recent LLM call failure for L7 surface.
+
+        v0.19 L4: instance-level last-error registry. Replaces the
+        silent `except Exception: return {}` pattern. Subsequent
+        successful call clears it via `_clear_llm_error`.
+        """
+        self._llm_last_error = {
+            "reason": reason,
+            "message": str(message)[:500],  # cap to keep payload compact
+            "provider": provider,
+            "timestamp": self._now(),
+        }
+
+    def _clear_llm_error(self) -> None:
+        """Reset error state — called on successful LLM round-trip."""
+        self._llm_last_error = None
+
     @staticmethod
     def _classify_provider(model_version: Any) -> str:
         """Classify a model_version string into a stable provider tag.
@@ -235,25 +280,24 @@ class CoreMixin:
             return "llava"
         return "unknown"
 
-    @staticmethod
-    def _llm_tagging_status() -> Dict[str, Any]:
+    def _llm_tagging_status(self) -> Dict[str, Any]:
         """Status for LLM-powered semantic tagging — drives M2 banner UI.
 
-        v0.19 Wave 1 Task M2 (dev-plan-v0.19.0.md). Detects whether **any**
-        provider key is configured (OpenAI or Anthropic) so the banner can
-        guide users to Settings before they discover degraded tags.
-
-        Note: this method is a *detection helper* for UI; it does NOT change
-        the gate semantics of `_llm_tagging_enabled()` (which still routes
-        through OpenAI only — that flip happens in L1, Wave 2).
+        v0.19 Wave 1 Task M2 + Wave 2 Task L7 extension.
+        - Detects whether **any** provider key is configured.
+        - Surfaces the most recent provider-call failure (L7) so UI can
+          show *why* tagging degraded — not just "missing key".
 
         Returns:
-            {enabled, reason, message, providers}
+            {enabled, reason, message, providers, last_error}
             reason ∈ {"ready", "missing_api_key", "disabled"}
+            last_error: dict (most recent classified error) or None
         """
         has_openai = bool(str(os.environ.get("OPENAI_API_KEY", "")).strip())
         has_anthropic = bool(str(os.environ.get("ANTHROPIC_API_KEY", "")).strip())
         providers = {"openai": has_openai, "anthropic": has_anthropic}
+        # L7: surface last classified failure (None if never failed or just cleared)
+        last_error = getattr(self, "_llm_last_error", None)
 
         if str(os.environ.get("VIDEOEDITOR_DISABLE_SEMANTIC_LLM", "")).strip() == "1":
             return {
@@ -261,6 +305,7 @@ class CoreMixin:
                 "reason": "disabled",
                 "message": "AI 标签已通过 VIDEOEDITOR_DISABLE_SEMANTIC_LLM 显式禁用",
                 "providers": providers,
+                "last_error": last_error,
             }
 
         if not (has_openai or has_anthropic):
@@ -269,6 +314,7 @@ class CoreMixin:
                 "reason": "missing_api_key",
                 "message": "未配置 OpenAI 或 Anthropic API Key — 素材标签将退回到颜色规则推断",
                 "providers": providers,
+                "last_error": last_error,
             }
 
         return {
@@ -276,6 +322,7 @@ class CoreMixin:
             "reason": "ready",
             "message": "AI 标签已就绪",
             "providers": providers,
+            "last_error": last_error,
         }
 
     # ------------------------------------------------------------------
@@ -952,8 +999,9 @@ class CoreMixin:
             return None
 
     def _call_openai_json(self, messages: List[Dict[str, Any]], max_tokens: int = 1200, temperature: float = 0.15) -> Dict[str, Any]:
-        # v0.19 L2: now injects _model into result so dispatcher's contract
+        # v0.19 L2: injects _model into result so dispatcher's contract
         # is consistent with _call_anthropic_json (upstream stops overwriting).
+        # v0.19 L4: classify exceptions + record for L7 health surface.
         client = self._openai_client()
         if client is None:
             return {}
@@ -973,8 +1021,12 @@ class CoreMixin:
             result = self._safe_json_object_from_text(content) or {}
             if result and "_model" not in result:
                 result["_model"] = model
+            self._clear_llm_error()
             return result
-        except Exception:
+        except Exception as exc:
+            reason = self._classify_llm_exception(exc)
+            self._record_llm_error(reason, str(exc), "openai")
+            logger.warning("openai json call failed: reason=%s err=%s", reason, exc)
             return {}
 
     def _call_anthropic_json(self, messages: List[Dict[str, Any]], max_tokens: int = 1200, temperature: float = 0.15) -> Dict[str, Any]:
@@ -1063,8 +1115,12 @@ class CoreMixin:
                 # Prefer the model name returned by API (more accurate than env);
                 # fall back to our requested model name.
                 result.setdefault("_model", getattr(rsp, "model", model) or model)
+            self._clear_llm_error()
             return result
-        except Exception:
+        except Exception as exc:
+            reason = self._classify_llm_exception(exc)
+            self._record_llm_error(reason, str(exc), "anthropic")
+            logger.warning("anthropic json call failed: reason=%s err=%s", reason, exc)
             return {}
 
     def _call_vlm_json(self, messages: List[Dict[str, Any]], max_tokens: int = 1200, temperature: float = 0.15) -> Dict[str, Any]:
@@ -1087,6 +1143,7 @@ class CoreMixin:
         return {}
 
     def _call_openai_text(self, messages: List[Dict[str, Any]], max_tokens: int = 1200, temperature: float = 0.15) -> str:
+        # v0.19 L4: classify + record errors for L7 surface.
         client = self._openai_client()
         if client is None:
             return ""
@@ -1102,8 +1159,13 @@ class CoreMixin:
                 max_tokens=max_tokens,
                 temperature=temperature,
             )
-            return str(rsp.choices[0].message.content or "").strip()
-        except Exception:
+            text = str(rsp.choices[0].message.content or "").strip()
+            self._clear_llm_error()
+            return text
+        except Exception as exc:
+            reason = self._classify_llm_exception(exc)
+            self._record_llm_error(reason, str(exc), "openai")
+            logger.warning("openai text call failed: reason=%s err=%s", reason, exc)
             return ""
 
     def _call_anthropic_text(self, messages: List[Dict[str, Any]], max_tokens: int = 1200, temperature: float = 0.15) -> str:
@@ -1178,8 +1240,13 @@ class CoreMixin:
             for block in (rsp.content or []):
                 if hasattr(block, "text") and block.text:
                     text_parts.append(block.text)
-            return "".join(text_parts).strip()
-        except Exception:
+            text = "".join(text_parts).strip()
+            self._clear_llm_error()
+            return text
+        except Exception as exc:
+            reason = self._classify_llm_exception(exc)
+            self._record_llm_error(reason, str(exc), "anthropic")
+            logger.warning("anthropic text call failed: reason=%s err=%s", reason, exc)
             return ""
 
     def _call_vlm_text(self, messages: List[Dict[str, Any]], max_tokens: int = 1200, temperature: float = 0.15) -> str:
