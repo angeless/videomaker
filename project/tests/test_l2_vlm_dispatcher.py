@@ -14,12 +14,22 @@ populated by the call, never overwritten by upstream.
 
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from modules.library.global_media_library import GlobalMediaLibrary
+
+# Mark tests that require `patch("anthropic.Anthropic", ...)` — the SDK
+# must be importable for unittest.mock to find the target. In production,
+# missing SDK → silent {} return (tested separately via dispatcher mocks).
+_HAS_ANTHROPIC = importlib.util.find_spec("anthropic") is not None
+requires_anthropic_sdk = pytest.mark.skipif(
+    not _HAS_ANTHROPIC,
+    reason="anthropic SDK not installed in this Python env",
+)
 
 
 @pytest.fixture
@@ -81,6 +91,7 @@ def test_call_anthropic_json_no_key(library, monkeypatch):
 # ── L2-T5: _call_anthropic_json injects _model from response ──────────────
 
 
+@requires_anthropic_sdk
 def test_call_anthropic_json_injects_model(library, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
 
@@ -103,6 +114,7 @@ def test_call_anthropic_json_injects_model(library, monkeypatch):
 # ── L2-T6: _call_anthropic_json converts OpenAI image_url to Anthropic format ─
 
 
+@requires_anthropic_sdk
 def test_call_anthropic_json_converts_image_url(library, monkeypatch):
     """OpenAI format: {type: image_url, image_url: {url: data:image/jpeg;base64,XXX}}
     Anthropic format: {type: image, source: {type: base64, media_type: image/jpeg, data: XXX}}
@@ -143,6 +155,7 @@ def test_call_anthropic_json_converts_image_url(library, monkeypatch):
 # ── L2-T7: _call_anthropic_json swallows exceptions to {} ─────────────────
 
 
+@requires_anthropic_sdk
 def test_call_anthropic_json_handles_exception(library, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
 

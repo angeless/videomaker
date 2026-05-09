@@ -1106,6 +1106,96 @@ class CoreMixin:
         except Exception:
             return ""
 
+    def _call_anthropic_text(self, messages: List[Dict[str, Any]], max_tokens: int = 1200, temperature: float = 0.15) -> str:
+        """Anthropic text-only mirror of _call_openai_text — v0.19 L3.
+
+        Same OpenAI→Anthropic message conversion as _call_anthropic_json,
+        but returns plain string (concatenated text blocks) instead of
+        parsed JSON. Returns "" on any failure (matches _call_openai_text
+        contract).
+        """
+        api_key = str(os.environ.get("ANTHROPIC_API_KEY", "")).strip()
+        if not api_key:
+            return ""
+        try:
+            import anthropic
+        except Exception:
+            return ""
+
+        model = (
+            str(os.environ.get("ANTHROPIC_MODEL", "")).strip()
+            or str(os.environ.get("CLAUDE_MODEL", "")).strip()
+            or "claude-sonnet-4-20250514"
+        )
+
+        # Same conversion as _call_anthropic_json (system kwarg + image format)
+        system_text = ""
+        user_messages: List[Dict[str, Any]] = []
+        for m in messages:
+            role = m.get("role")
+            content = m.get("content")
+            if role == "system":
+                if isinstance(content, str):
+                    system_text = content
+                elif isinstance(content, list):
+                    system_text = "\n".join(
+                        c.get("text", "") for c in content if c.get("type") == "text"
+                    )
+                continue
+            if isinstance(content, list):
+                converted = []
+                for part in content:
+                    if part.get("type") == "text":
+                        converted.append({"type": "text", "text": part.get("text", "")})
+                    elif part.get("type") == "image_url":
+                        url = (part.get("image_url") or {}).get("url", "")
+                        if isinstance(url, str) and url.startswith("data:image/") and ";base64," in url:
+                            mime, b64 = url.split(";base64,", 1)
+                            converted.append({
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": mime.replace("data:", ""),
+                                    "data": b64,
+                                },
+                            })
+                user_messages.append({"role": role, "content": converted})
+            else:
+                user_messages.append({"role": role, "content": content})
+
+        try:
+            client = anthropic.Anthropic(api_key=api_key)
+            kwargs: Dict[str, Any] = {
+                "model": model,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "messages": user_messages,
+            }
+            if system_text:
+                kwargs["system"] = system_text
+            rsp = client.messages.create(**kwargs)
+            text_parts = []
+            for block in (rsp.content or []):
+                if hasattr(block, "text") and block.text:
+                    text_parts.append(block.text)
+            return "".join(text_parts).strip()
+        except Exception:
+            return ""
+
+    def _call_vlm_text(self, messages: List[Dict[str, Any]], max_tokens: int = 1200, temperature: float = 0.15) -> str:
+        """Provider-aware text dispatcher — v0.19 L3.
+
+        Mirror of _call_vlm_json for plain-text responses. Same provider
+        priority rule (OpenAI when both, Anthropic-only fallback).
+        """
+        has_openai = bool(str(os.environ.get("OPENAI_API_KEY", "")).strip())
+        has_anthropic = bool(str(os.environ.get("ANTHROPIC_API_KEY", "")).strip())
+        if has_openai:
+            return self._call_openai_text(messages, max_tokens, temperature)
+        if has_anthropic:
+            return self._call_anthropic_text(messages, max_tokens, temperature)
+        return ""
+
     @staticmethod
     def _has_openai_sdk() -> bool:
         try:
@@ -2318,7 +2408,8 @@ class CoreMixin:
             "5) ensure [TECH_META] has orientation + resolution, and no tech terms appear in [CORE]/[SECONDARY]\n"
             "Return only in the required plain text format."
         )
-        output = self._call_openai_text(
+        # v0.19 L3: route through dispatcher (OpenAI or Anthropic)
+        output = self._call_vlm_text(
             messages=[
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": user_msg},
