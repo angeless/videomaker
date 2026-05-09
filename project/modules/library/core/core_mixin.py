@@ -197,9 +197,16 @@ class CoreMixin:
 
     @staticmethod
     def _llm_tagging_enabled() -> bool:
+        # v0.19 L1: accept OpenAI **or** Anthropic key (was OpenAI only).
+        # The actual provider routing happens in L2 (Wave 2 — vlm_adapter
+        # integration). Until L2 lands, _call_openai_json still hits OpenAI
+        # only; with Anthropic-only key set, it returns {} and falls back
+        # to heuristic — but at least the gate now matches user intent.
         if str(os.environ.get("VIDEOEDITOR_DISABLE_SEMANTIC_LLM", "")).strip() == "1":
             return False
-        return bool(str(os.environ.get("OPENAI_API_KEY", "")).strip())
+        has_openai = bool(str(os.environ.get("OPENAI_API_KEY", "")).strip())
+        has_anthropic = bool(str(os.environ.get("ANTHROPIC_API_KEY", "")).strip())
+        return has_openai or has_anthropic
 
     @staticmethod
     def _classify_provider(model_version: Any) -> str:

@@ -1,6 +1,8 @@
 """Claude Vision adapter.
 
-Requires VIDEOEDITOR_CLAUDE_API_KEY env variable.
+v0.19 L8: reads `ANTHROPIC_API_KEY` (Anthropic SDK standard, what Settings
+UI writes) preferentially; falls back to legacy `VIDEOEDITOR_CLAUDE_API_KEY`
+for backward compatibility (kept 6 version cycles per audit risk-N).
 """
 
 import base64
@@ -16,7 +18,18 @@ from modules.adapters.vlm_adapter import VLMResponse
 
 logger = logging.getLogger(__name__)
 
-API_KEY_ENV = "VIDEOEDITOR_CLAUDE_API_KEY"
+# v0.19 L8: standard env var (matches official Anthropic SDK)
+API_KEY_ENV = "ANTHROPIC_API_KEY"
+# Legacy env var — kept for backward compat. Will be removed in v0.24+.
+LEGACY_API_KEY_ENV = "VIDEOEDITOR_CLAUDE_API_KEY"
+
+
+def _resolve_api_key() -> str:
+    """Resolve Claude API key from primary or legacy env var."""
+    return (
+        os.environ.get(API_KEY_ENV, "").strip()
+        or os.environ.get(LEGACY_API_KEY_ENV, "").strip()
+    )
 DEFAULT_MODEL = "claude-sonnet-4-20250514"
 API_URL = "https://api.anthropic.com/v1/messages"
 TIMEOUT_S = 30
@@ -31,7 +44,7 @@ class ClaudeVisionAdapter:
         self._model = model or DEFAULT_MODEL
 
     def is_available(self) -> bool:
-        return bool(os.environ.get(API_KEY_ENV))
+        return bool(_resolve_api_key())
 
     def describe_image(
         self,
@@ -79,7 +92,7 @@ class ClaudeVisionAdapter:
 
     def _call_api(self, b64_image: str, prompt: str, max_tokens: int) -> Dict:
         """Make the HTTP call. Separated for easy mocking."""
-        api_key = os.environ.get(API_KEY_ENV, "")
+        api_key = _resolve_api_key()
         payload = {
             "model": self._model,
             "max_tokens": max_tokens,

@@ -43,10 +43,11 @@ source: claude-code
 | v0.18.0 | MCP + VLM 流 + 多轨 + GPU 渲染 | 27 | `docs/dev-plans/dev-plan-v0.18.0.md` | **Done** |
 
 ## 上次停在
-- 分支：`claude/funny-mestorf-142ff5`（worktree），第二次 Wave 1 commit 待 push
-- v0.19.0 Wave 1 **全部完成**（M2 / M9 / M8 / N6 + L6 / M1 / M3 / N5）
-- 测试：1690 passed (基线), 0 failed; +29 新增 TDD 测试 (M2-T/E + L6 _classify_provider)
-- **下次会话起点**：Wave 2 — L1+L8（接受 Anthropic key + env var 桥接）作为最高 P0 起点
+- 分支：`claude/funny-mestorf-142ff5`（已 push 远端），3 个 commit 待续
+- v0.19.0 Wave 1 **全部完成** (109cf0e, c1c9c31)
+- v0.19.0 Wave 2 **L1+L8+H3 完成** （Anthropic key 真正驱动 LLM）
+- 测试：305 passed/0 failed (Wave 2 增量 + 全 Wave 1 + library/adapter 全域)
+- **下次会话起点**：Wave 2 剩余 — L2（vlm_adapter 路由）+ L3（_call_vlm_text）+ L4（异常分类）+ L7（health 端点）+ L9/L10（vision_enrich + embedding）
 
 ## 历史里程碑
 - 2026-04-14 commit 4106ced：v0.18.0 六轮独立交叉审查完成，69 个问题全部修复（1626 passed, 5 skipped）

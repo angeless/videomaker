@@ -1,6 +1,8 @@
 """OpenAI GPT-4o Vision adapter.
 
-Requires VIDEOEDITOR_OPENAI_API_KEY env variable.
+v0.19 H3: reads `OPENAI_API_KEY` (OpenAI SDK standard, what Settings UI
+writes) preferentially; falls back to legacy `VIDEOEDITOR_OPENAI_API_KEY`
+for backward compatibility (kept 6 version cycles per audit risk-N).
 """
 
 import base64
@@ -17,7 +19,18 @@ from modules.adapters.vlm_adapter import VLMResponse
 
 logger = logging.getLogger(__name__)
 
-API_KEY_ENV = "VIDEOEDITOR_OPENAI_API_KEY"
+# v0.19 H3: standard env var (matches official OpenAI SDK)
+API_KEY_ENV = "OPENAI_API_KEY"
+# Legacy env var — kept for backward compat. Will be removed in v0.24+.
+LEGACY_API_KEY_ENV = "VIDEOEDITOR_OPENAI_API_KEY"
+
+
+def _resolve_api_key() -> str:
+    """Resolve OpenAI API key from primary or legacy env var."""
+    return (
+        os.environ.get(API_KEY_ENV, "").strip()
+        or os.environ.get(LEGACY_API_KEY_ENV, "").strip()
+    )
 DEFAULT_MODEL = "gpt-4o"
 API_URL = "https://api.openai.com/v1/chat/completions"
 TIMEOUT_S = 30
@@ -35,7 +48,7 @@ class OpenAIVisionAdapter:
         self._model = model or DEFAULT_MODEL
 
     def is_available(self) -> bool:
-        return bool(os.environ.get(API_KEY_ENV))
+        return bool(_resolve_api_key())
 
     def describe_image(
         self,
@@ -83,7 +96,7 @@ class OpenAIVisionAdapter:
 
     def _call_api(self, b64_image: str, prompt: str, max_tokens: int) -> Dict:
         """Make the HTTP call. Separated for easy mocking."""
-        api_key = os.environ.get(API_KEY_ENV, "")
+        api_key = _resolve_api_key()
         payload = {
             "model": self._model,
             "max_tokens": max_tokens,
