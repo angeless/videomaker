@@ -952,6 +952,8 @@ class CoreMixin:
             return None
 
     def _call_openai_json(self, messages: List[Dict[str, Any]], max_tokens: int = 1200, temperature: float = 0.15) -> Dict[str, Any]:
+        # v0.19 L2: now injects _model into result so dispatcher's contract
+        # is consistent with _call_anthropic_json (upstream stops overwriting).
         client = self._openai_client()
         if client is None:
             return {}
@@ -968,9 +970,121 @@ class CoreMixin:
                 temperature=temperature,
             )
             content = (rsp.choices[0].message.content or "").strip()
-            return self._safe_json_object_from_text(content)
+            result = self._safe_json_object_from_text(content) or {}
+            if result and "_model" not in result:
+                result["_model"] = model
+            return result
         except Exception:
             return {}
+
+    def _call_anthropic_json(self, messages: List[Dict[str, Any]], max_tokens: int = 1200, temperature: float = 0.15) -> Dict[str, Any]:
+        """Anthropic SDK mirror of _call_openai_json — v0.19 L2.
+
+        Accepts OpenAI chat-completion message format (system + user with
+        optional image_url parts) and converts to Anthropic SDK schema:
+        - `system` becomes a top-level kwarg
+        - `image_url` content type becomes `image` with base64 source
+
+        Returns parsed JSON dict on success (with `_model` injected),
+        empty dict on any failure or when key/SDK missing.
+        """
+        api_key = str(os.environ.get("ANTHROPIC_API_KEY", "")).strip()
+        if not api_key:
+            return {}
+        try:
+            import anthropic
+        except Exception:
+            return {}
+
+        model = (
+            str(os.environ.get("ANTHROPIC_MODEL", "")).strip()
+            or str(os.environ.get("CLAUDE_MODEL", "")).strip()
+            or "claude-sonnet-4-20250514"
+        )
+
+        # ── Convert OpenAI → Anthropic message format ──
+        system_text = ""
+        user_messages: List[Dict[str, Any]] = []
+        for m in messages:
+            role = m.get("role")
+            content = m.get("content")
+            if role == "system":
+                # Anthropic system is a top-level kwarg, not a message
+                if isinstance(content, str):
+                    system_text = content
+                elif isinstance(content, list):
+                    system_text = "\n".join(
+                        c.get("text", "") for c in content if c.get("type") == "text"
+                    )
+                continue
+            if isinstance(content, list):
+                converted = []
+                for part in content:
+                    if part.get("type") == "text":
+                        converted.append({"type": "text", "text": part.get("text", "")})
+                    elif part.get("type") == "image_url":
+                        url = (part.get("image_url") or {}).get("url", "")
+                        # Only base64 data URLs supported (URL form requires
+                        # Anthropic to fetch — extra surface area we avoid).
+                        if isinstance(url, str) and url.startswith("data:image/") and ";base64," in url:
+                            mime, b64 = url.split(";base64,", 1)
+                            media_type = mime.replace("data:", "")
+                            converted.append({
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": media_type,
+                                    "data": b64,
+                                },
+                            })
+                user_messages.append({"role": role, "content": converted})
+            else:
+                user_messages.append({"role": role, "content": content})
+
+        try:
+            client = anthropic.Anthropic(api_key=api_key)
+            kwargs: Dict[str, Any] = {
+                "model": model,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "messages": user_messages,
+            }
+            if system_text:
+                kwargs["system"] = system_text
+            rsp = client.messages.create(**kwargs)
+            # Aggregate text parts from response
+            text_parts = []
+            for block in (rsp.content or []):
+                if hasattr(block, "text") and block.text:
+                    text_parts.append(block.text)
+            content_str = "".join(text_parts).strip()
+            result = self._safe_json_object_from_text(content_str) or {}
+            if result:
+                # Prefer the model name returned by API (more accurate than env);
+                # fall back to our requested model name.
+                result.setdefault("_model", getattr(rsp, "model", model) or model)
+            return result
+        except Exception:
+            return {}
+
+    def _call_vlm_json(self, messages: List[Dict[str, Any]], max_tokens: int = 1200, temperature: float = 0.15) -> Dict[str, Any]:
+        """Provider-aware dispatcher — v0.19 L2.
+
+        Selects backend based on configured env keys. Prefers OpenAI when
+        both are set (least-surprise for existing OpenAI users). Falls back
+        to Anthropic when only Anthropic key is present.
+
+        Returns dict with `_model` populated by the actual backend, or {}
+        when neither provider is available / call failed. M1 badge UI
+        consumes `_meta.provider` derived from `_model` via L6 classifier.
+        """
+        has_openai = bool(str(os.environ.get("OPENAI_API_KEY", "")).strip())
+        has_anthropic = bool(str(os.environ.get("ANTHROPIC_API_KEY", "")).strip())
+        if has_openai:
+            return self._call_openai_json(messages, max_tokens, temperature)
+        if has_anthropic:
+            return self._call_anthropic_json(messages, max_tokens, temperature)
+        return {}
 
     def _call_openai_text(self, messages: List[Dict[str, Any]], max_tokens: int = 1200, temperature: float = 0.15) -> str:
         client = self._openai_client()
@@ -1576,7 +1690,9 @@ class CoreMixin:
         for url in keyframes[:3]:
             user_content.append({"type": "image_url", "image_url": {"url": url, "detail": "low"}})
 
-        primary = self._call_openai_json(
+        # v0.19 L2: route through dispatcher (OpenAI or Anthropic).
+        # _model is now injected by the call functions; no overwrite here.
+        primary = self._call_vlm_json(
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content},
@@ -1597,7 +1713,7 @@ class CoreMixin:
             "- do not invent specifics not supported by evidence\n"
             "Return JSON in the same schema, replacing the draft."
         )
-        refined = self._call_openai_json(
+        refined = self._call_vlm_json(
             messages=[
                 {"role": "system", "content": "Return JSON only."},
                 {
@@ -1614,16 +1730,9 @@ class CoreMixin:
             max_tokens=2000,
             temperature=0.08,
         )
-        result = refined if refined else primary
-        # Inject model name for _meta tracking
-        if result and isinstance(result, dict):
-            model_name = (
-                str(os.environ.get("OPENAI_MODEL", "")).strip()
-                or str(os.environ.get("OPENAI_VISION_MODEL", "")).strip()
-                or "gpt-4o-mini"
-            )
-            result["_model"] = model_name
-        return result
+        # Pick refined if non-empty; primary otherwise. _model already on
+        # whichever the dispatcher returned.
+        return refined if refined else primary
 
     @staticmethod
     def _canonical_tag_catalog() -> Dict[str, Dict[str, str]]:

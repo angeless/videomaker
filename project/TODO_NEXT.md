@@ -45,9 +45,9 @@ source: claude-code
 ## 上次停在
 - 分支：`claude/funny-mestorf-142ff5`（已 push 远端），3 个 commit 待续
 - v0.19.0 Wave 1 **全部完成** (109cf0e, c1c9c31)
-- v0.19.0 Wave 2 **L1+L8+H3 完成** （Anthropic key 真正驱动 LLM）
-- 测试：305 passed/0 failed (Wave 2 增量 + 全 Wave 1 + library/adapter 全域)
-- **下次会话起点**：Wave 2 剩余 — L2（vlm_adapter 路由）+ L3（_call_vlm_text）+ L4（异常分类）+ L7（health 端点）+ L9/L10（vision_enrich + embedding）
+- v0.19.0 Wave 2 **L1+L8+H3 + L2 完成** （Anthropic-only 用户素材标签真正走 Claude）
+- 测试：334 passed/0 failed (Wave 2 全增量 + 库/适配器全域)
+- **下次会话起点**：Wave 2 剩余 — L3（_call_vlm_text）+ L4（异常分类）+ L7（health 端点）+ L9/L10（vision_enrich + embedding）
 
 ## 历史里程碑
 - 2026-04-14 commit 4106ced：v0.18.0 六轮独立交叉审查完成，69 个问题全部修复（1626 passed, 5 skipped）
