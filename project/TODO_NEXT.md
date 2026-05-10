@@ -45,9 +45,12 @@ source: claude-code
 ## 上次停在
 - 分支：`claude/funny-mestorf-142ff5`（已 push 远端），3 个 commit 待续
 - v0.19.0 Wave 1 **全部完成** (109cf0e, c1c9c31)
-- v0.19.0 Wave 2 **L1+L8+H3 + L2 + L3 + L4 + L7 + L9 完成** （Anthropic-only 全后端通路 + 错误现身 + 图片素材）
-- 测试：本次 L9 specific 8/8；广回归因磁盘满未跑（ENOSPC 临时阻塞）
-- **下次会话起点**：磁盘清理后跑全量回归托底；Wave 2 剩余 — L10（embedding via Voyage SDK，需调研）；Wave 3 起点 — F1+F2（review VLM 错误显现，复用 L4 错误枚举）
+- v0.19.0 Wave 2 **全部完成** （L1+L8+H3 + L2 + L3 + L4 + L7 + L9 + L10 + audit fix）
+- 测试：1771 passed, 9 skipped, **0 failed** ✅（含 L10 specific 12/12，4 voyage SDK 路径自动 skip）
+- L10 audit fix 包含 2 处加固：
+  1. **Bug 1 修复**：`_embedding_runtime_status` 优先级重排——SDK 缺失诊断在 Anthropic-only 引导前面，避免误导用户
+  2. **Bug A 修复**：Voyage `input_type` 参数透传（query/document）→ 5-10% 检索质量提升
+- **下次会话起点**：Wave 3 起点 — F1+F2（review VLM 错误显现，复用 L4 错误枚举）
 
 ## 历史里程碑
 - 2026-04-14 commit 4106ced：v0.18.0 六轮独立交叉审查完成，69 个问题全部修复（1626 passed, 5 skipped）

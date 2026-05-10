@@ -1266,31 +1266,72 @@ class CoreMixin:
             return False
 
     def _embedding_runtime_status(self) -> Dict[str, Any]:
-        has_key = bool(str(os.environ.get("OPENAI_API_KEY", "")).strip())
-        has_sdk = self._has_openai_sdk()
+        # v0.19 L10: also recognizes Voyage as Anthropic-side embedding option.
+        # Priority: OpenAI > Voyage > disabled (matches _call_vlm_embedding).
+        has_openai_key = bool(str(os.environ.get("OPENAI_API_KEY", "")).strip())
+        has_openai_sdk = self._has_openai_sdk()
+        has_voyage_key = bool(str(os.environ.get("VOYAGE_API_KEY", "")).strip())
+        has_voyage_sdk = self._has_voyage_sdk()
+        has_anthropic_key = bool(str(os.environ.get("ANTHROPIC_API_KEY", "")).strip())
         has_numpy = np is not None
-        if not has_key:
-            return {
-                "enabled": False,
-                "reason": "missing_api_key",
-                "message": "未配置 OpenAI API Key",
-            }
-        if not has_sdk:
-            return {
-                "enabled": False,
-                "reason": "missing_openai_sdk",
-                "message": "未安装 openai SDK",
-            }
+
         if not has_numpy:
             return {
                 "enabled": False,
                 "reason": "missing_numpy",
                 "message": "未安装 numpy",
             }
+
+        # OpenAI path ready
+        if has_openai_key and has_openai_sdk:
+            return {
+                "enabled": True,
+                "reason": "ready",
+                "message": "向量能力已启用 (OpenAI)",
+                "provider": "openai",
+            }
+
+        # Voyage path ready
+        if has_voyage_key and has_voyage_sdk:
+            return {
+                "enabled": True,
+                "reason": "ready",
+                "message": "向量能力已启用 (Voyage AI)",
+                "provider": "voyage",
+            }
+
+        # SDK-missing diagnostics (more specific root cause — emit before
+        # the generic Anthropic-only nudge so users don't chase the wrong fix).
+        if has_openai_key and not has_openai_sdk:
+            return {
+                "enabled": False,
+                "reason": "missing_openai_sdk",
+                "message": "未安装 openai SDK",
+            }
+
+        if has_voyage_key and not has_voyage_sdk:
+            return {
+                "enabled": False,
+                "reason": "missing_voyage_sdk",
+                "message": "未安装 voyageai SDK (`pip install voyageai`)",
+            }
+
+        # Pure Anthropic-only user: nudge to install Voyage AI for embeddings.
+        # Tightened condition (v0.19 L10 audit fix): only fires when neither
+        # OpenAI nor Voyage key is configured — prevents misleading the user
+        # when they have an OpenAI key but missing SDK (real cause caught above).
+        if has_anthropic_key and not has_openai_key and not has_voyage_key:
+            return {
+                "enabled": False,
+                "reason": "missing_voyage_key",
+                "message": "向量搜索需 Voyage AI Key (Anthropic 官方推荐)。运行 `pip install voyageai` 并配置 VOYAGE_API_KEY 后启用。",
+                "provider": None,
+            }
+
         return {
-            "enabled": True,
-            "reason": "ready",
-            "message": "向量能力已启用",
+            "enabled": False,
+            "reason": "missing_api_key",
+            "message": "未配置 OpenAI / Voyage API Key — 向量搜索不可用，将退到关键词搜索",
         }
 
     @staticmethod
@@ -1364,6 +1405,7 @@ class CoreMixin:
         return compact
 
     def _call_openai_embedding(self, text: str) -> List[float]:
+        # v0.19 L10: now also classifies + records errors (matches L4 pattern)
         query = str(text or "").strip()
         if not query:
             return []
@@ -1381,9 +1423,125 @@ class CoreMixin:
             vec = getattr(data[0], "embedding", None)
             if not isinstance(vec, list):
                 return []
+            self._clear_llm_error()
             return [float(x) for x in vec]
-        except Exception:
+        except Exception as exc:
+            reason = self._classify_llm_exception(exc)
+            self._record_llm_error(reason, str(exc), "openai")
+            logger.warning("openai embedding call failed: reason=%s err=%s", reason, exc)
             return []
+
+    @staticmethod
+    def _has_voyage_sdk() -> bool:
+        """v0.19 L10: detect Voyage AI SDK (Anthropic-recommended embedding)."""
+        try:
+            import voyageai  # noqa: F401
+            return True
+        except Exception:
+            return False
+
+    @staticmethod
+    def _voyage_embedding_model() -> str:
+        """v0.19 L10: Voyage embedding model name (overridable via env)."""
+        return (
+            str(os.environ.get("VOYAGE_EMBEDDING_MODEL", "")).strip()
+            or str(os.environ.get("VOYAGE_MODEL", "")).strip()
+            or "voyage-3"
+        )
+
+    def _call_voyage_embedding(
+        self,
+        text: str,
+        input_type: Optional[str] = None,
+    ) -> List[float]:
+        """Anthropic-recommended embedding via Voyage AI SDK — v0.19 L10.
+
+        Anthropic does not provide first-party text embeddings. Voyage AI
+        is their recommended partner (https://docs.anthropic.com/en/docs/
+        build-with-claude/embeddings). Users wanting semantic search on
+        Anthropic-only setup need:
+        - `pip install voyageai`
+        - Set `VOYAGE_API_KEY` env var
+
+        Args:
+            text: input text to embed.
+            input_type: Voyage-specific retrieval optimization hint.
+                "query" — for search queries (improves retrieval recall)
+                "document" — for indexed assets (improves retrieval precision)
+                None — generic embedding without retrieval optimization
+                Per Voyage docs (https://docs.voyageai.com/docs/embeddings),
+                passing this hint can improve search quality 5-10% on
+                retrieval tasks. Ignored by OpenAI path (parity contract).
+
+        Returns embedding vector or [] on any failure (matches contract
+        of _call_openai_embedding). Errors are classified + recorded
+        per L4 pattern.
+        """
+        query = str(text or "").strip()
+        if not query:
+            return []
+        api_key = str(os.environ.get("VOYAGE_API_KEY", "")).strip()
+        if not api_key:
+            return []
+        if not self._has_voyage_sdk():
+            return []
+        try:
+            import voyageai
+            client = voyageai.Client(api_key=api_key)
+            kwargs: Dict[str, Any] = {
+                "model": self._voyage_embedding_model(),
+            }
+            if input_type in ("query", "document"):
+                kwargs["input_type"] = input_type
+            rsp = client.embed([query], **kwargs)
+            embeddings = getattr(rsp, "embeddings", None) or []
+            if not embeddings:
+                return []
+            vec = embeddings[0]
+            if not isinstance(vec, list):
+                return []
+            self._clear_llm_error()
+            return [float(x) for x in vec]
+        except Exception as exc:
+            reason = self._classify_llm_exception(exc)
+            self._record_llm_error(reason, str(exc), "voyage")
+            logger.warning("voyage embedding call failed: reason=%s err=%s", reason, exc)
+            return []
+
+    def _call_vlm_embedding(
+        self,
+        text: str,
+        input_type: Optional[str] = None,
+    ) -> List[float]:
+        """Provider-aware embedding dispatcher — v0.19 L10.
+
+        Priority order:
+        1. OpenAI (least surprise — original implementation, most users)
+        2. Voyage AI (Anthropic-recommended; needs voyageai SDK + VOYAGE_API_KEY)
+        3. [] (semantic search degrades to keyword-only; M2 banner can warn)
+
+        Args:
+            text: input text to embed.
+            input_type: retrieval-optimization hint for Voyage path.
+                Pass "query" from search code paths and "document" from
+                asset-indexing paths to gain 5-10% retrieval quality on
+                Voyage. Silently ignored by OpenAI (parity contract —
+                OpenAI's embedding API has no equivalent parameter).
+
+        Note: Anthropic-only setup without VOYAGE_API_KEY → empty vec →
+        keyword search fallback. This is documented degradation, not a
+        silent bug. _embedding_runtime_status() will report
+        reason="missing_voyage_key" so UI can surface the choice.
+        """
+        has_openai = bool(str(os.environ.get("OPENAI_API_KEY", "")).strip())
+        has_voyage = bool(str(os.environ.get("VOYAGE_API_KEY", "")).strip())
+        if has_openai:
+            # OpenAI's embedding API doesn't accept input_type; we ignore it
+            # to keep the dispatcher contract uniform.
+            return self._call_openai_embedding(text)
+        if has_voyage:
+            return self._call_voyage_embedding(text, input_type=input_type)
+        return []
 
     def _get_query_embedding(self, query: str) -> List[float]:
         q = str(query or "").strip().lower()
@@ -1394,7 +1552,10 @@ class CoreMixin:
             cached_vec = self._embedding_cache.get(q)
             if cached_vec:
                 return cached_vec
-            vec = self._call_openai_embedding(q)
+            # v0.19 L10: dispatcher (OpenAI > Voyage > []) with retrieval hint.
+            # input_type="query" tells Voyage this is a search query (not an
+            # indexed doc) → improves retrieval recall on Voyage; ignored by OpenAI.
+            vec = self._call_vlm_embedding(q, input_type="query")
             if vec:
                 self._embedding_cache.put(q, vec)
             return vec
@@ -1406,7 +1567,8 @@ class CoreMixin:
                 vec_c = cached.get("vec")
                 if isinstance(vec_c, list) and vec_c:
                     return vec_c
-            vec = self._call_openai_embedding(q)
+            # v0.19 L10: dispatcher with input_type="query"
+            vec = self._call_vlm_embedding(q, input_type="query")
             if vec:
                 self._query_embedding_cache[q] = {"ts": now_ts, "vec": vec}
                 if len(self._query_embedding_cache) > 128:
@@ -1551,7 +1713,10 @@ class CoreMixin:
         ):
             return False
 
-        vec = self._call_openai_embedding(source)
+        # v0.19 L10: dispatcher with input_type="document" (asset indexing).
+        # Voyage uses this to optimize for retrieval precision on indexed
+        # corpus; ignored by OpenAI which has no equivalent parameter.
+        vec = self._call_vlm_embedding(source, input_type="document")
         if not vec:
             return False
 
