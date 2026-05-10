@@ -191,9 +191,14 @@ class CoreMixin:
 
     @staticmethod
     def _vision_enrich_enabled() -> bool:
+        # v0.19 L9: accept OpenAI **or** Anthropic key (mirrors L1 fix
+        # for _llm_tagging_enabled). Image-only ingestion path now works
+        # for Anthropic-only users.
         if str(os.environ.get("VIDEOEDITOR_DISABLE_VISION_ENRICH", "")).strip() == "1":
             return False
-        return bool(str(os.environ.get("OPENAI_API_KEY", "")).strip())
+        has_openai = bool(str(os.environ.get("OPENAI_API_KEY", "")).strip())
+        has_anthropic = bool(str(os.environ.get("ANTHROPIC_API_KEY", "")).strip())
+        return has_openai or has_anthropic
 
     @staticmethod
     def _llm_tagging_enabled() -> bool:
@@ -474,48 +479,37 @@ class CoreMixin:
         return f"data:image/jpeg;base64,{b64}"
 
     def _vision_enrich_tags(self, path: Path) -> Dict:
+        # v0.19 L9: route through _call_vlm_json dispatcher (provider-aware,
+        # error-classifying, _model-injecting). Replaces previous direct-OpenAI
+        # call so Anthropic-only users now get image enrichment too.
         if not self._vision_enrich_enabled():
             return {}
         data_url = self._extract_keyframe_data_url(path)
         if not data_url:
             return {}
-        try:
-            import openai
-            client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-            model = os.environ.get("OPENAI_VISION_MODEL") or os.environ.get("OPENAI_MODEL") or "gpt-4o-mini"
-            prompt = (
-                "你是素材语义标注器（图片/视频均可）。请识别画面里的建筑类型、地标线索、桥梁类型和场景要素。"
-                "只返回 JSON，不要解释。格式："
-                "{\"scene\":\"\",\"keywords\":[],\"landmarks\":[],\"architecture_style\":[]}"
-                "关键词尽量中英混合，最多12个。"
-            )
-            rsp = client.chat.completions.create(
-                model=model,
-                max_tokens=280,
-                temperature=0.1,
-                messages=[
-                    {"role": "system", "content": "你是严格 JSON 输出助手。"},
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {"type": "image_url", "image_url": {"url": data_url, "detail": "low"}},
-                        ],
-                    },
-                ],
-            )
-            raw = (rsp.choices[0].message.content or "").strip()
-            if not raw:
-                return {}
-            raw = raw.strip("` \n")
-            if raw.startswith("json"):
-                raw = raw[4:].strip()
-            parsed = json.loads(raw)
-            if not isinstance(parsed, dict):
-                return {}
-            return parsed
-        except Exception:
+        prompt = (
+            "你是素材语义标注器（图片/视频均可）。请识别画面里的建筑类型、地标线索、桥梁类型和场景要素。"
+            "只返回 JSON，不要解释。格式："
+            "{\"scene\":\"\",\"keywords\":[],\"landmarks\":[],\"architecture_style\":[]}"
+            "关键词尽量中英混合，最多12个。"
+        )
+        result = self._call_vlm_json(
+            messages=[
+                {"role": "system", "content": "你是严格 JSON 输出助手。"},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {"url": data_url, "detail": "low"}},
+                    ],
+                },
+            ],
+            max_tokens=280,
+            temperature=0.1,
+        )
+        if not isinstance(result, dict):
             return {}
+        return result
 
     @staticmethod
     def _safe_json_loads(raw: Optional[str], default):
